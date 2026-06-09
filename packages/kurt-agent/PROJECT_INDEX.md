@@ -47,6 +47,7 @@ and the loop continues.
 | `src/sandbox/` | Subprocess isolation behind `SandboxProvider` | `SeatbeltSandbox`, `DirectSandbox`, `buildProfile`; `run-process.ts` (spawn+timeout+cap+abort) | — |
 | `src/session/` | Per-session scratch dir lifecycle | `SessionWorkspace` (`.root`, `.dir()`, `.dispose()`) | — |
 | `src/search/` | Pluggable web-search backend | `SearchProvider`, `DuckDuckGoSearch` | — |
+| `src/permission/` | Approval seam for sensitive commands | `PermissionProvider`/`PermissionDecision`/`PermissionRequest`, `classifyCommand` (pure rules → key+explanation+risk), `allowAll`/`denyAll`. ShellTool consults it; the front-end supplies the prompt/whitelist | — (pure) |
 | `src/modes/` | Modal layer + reusable orchestration helpers | `runStdoutMode` (`stdout.ts`); `messagesFromEvents` (`history.ts`); `compactHistory`/`compactionSplit`/`serializeForSummary` (`compaction.ts`, cuts only at user boundaries → preserves tool pairing) | engine types |
 | `src/lib.ts` | **Public API barrel** (what kurt-tui imports via `"kurt-agent"`) | re-exports the above | all |
 | `src/demos/` | Runnable scenarios | `abort.ts`, `error.ts`, `sandbox.ts` | everything |
@@ -57,6 +58,7 @@ and the loop continues.
 - **Add a tool** → create `src/tools/<name>.ts` implementing `Tool` (mirror `shell.ts`); export from `src/tools/index.ts`. Side effects go here, never in engine.
 - **Add a model vendor** → `src/providers/<vendor>.ts` implementing `ModelProvider`; digest wire/stream/token differences inside it. Reference impl: `openai-compat.ts` (any OpenAI-compatible endpoint). Auth/keys stay in the composition root (e.g. `chat.ts`), never in the engine.
 - **Add a sandbox backend** → `src/sandbox/<name>.ts` implementing `SandboxProvider`; only `seatbelt.ts` may reference `sandbox-exec`.
+- **Gate a new risky command** → add a rule in `src/permission/classify.ts` (key+explanation+risk). The front-end (kurt-tui) renders the prompt + persists the allowlist.
 - **Front-end / TUI** → lives in the sibling package **`packages/kurt-tui`** (Ink), which consumes this lib. A minimal in-repo mode lives at `src/modes/stdout.ts` (clone its shape for new built-in modes).
 - **Compaction** (Phase 3) → implement `CompactionPolicy`; the seam is already wired in `loop.ts` (engine decides *when* via `thresholdTokens`, policy decides *how* via `compact`).
 - **Sub-agents** (Phase 7) → a `SubAgentTool` that runs its own `runLoop` and bubbles events via `ToolContext.emit`; no engine change.

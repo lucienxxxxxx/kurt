@@ -4,7 +4,15 @@
 
 ---
 
-## 第N期 · 权限 + 沙盒工作路径 — 🚧 进行中
+## 第N期 · 权限 + 沙盒工作路径 — ✅ 完成
+
+**Step 2:命令权限/授权系统 — ✅ (2026-06-09)**
+- `kurt-agent`:`src/permission/`(`PermissionProvider` 接口 + `classifyCommand` 纯规则:rm/sudo/disk/pipe-to-shell/power/chmod/kill/git-destruct/fork-bomb,各带 key+解释+风险 + allowAll/denyAll);`ShellTool` 加可选 `permission`,敏感命令先分类→请求授权(deny=不执行返回干净错误;安全命令不拦截)。tool 层,引擎未动;`lib.ts` 导出。
+- `kurt-tui`:`allowlist.ts`(项目本地 `<ws>/.kurt/allowlist.json`,按 rule key);`tui/permission.ts` `PermissionBridge`(把工具 loop 内的 `request()` 桥接到 TUI 提示,`useSyncExternalStore`;"always"→写 allowlist 并以后自动放行);`tui/approval.tsx` 黄框提示(命令/解释/风险 + [y]/[a]/[n]);App 在 pending 时拦截按键并渲染提示;stdout chat 用 stdin 提示;`--yes`/`-y` 自动放行。
+- 验收:kurt-agent 40 / kurt-tui 35 测试;端到端探针:`rm` 触发提示→deny 不执行、always 执行并写入 allowlist、之后自动放行。
+- **踩坑(教训)**:`resolveWorkspace` 默认在 cwd 建 `import/`/`export/`;助手在 repo 内误把一个用户在 `export/` 生成的文件当"残留"`rm` 掉(不可恢复)。已将 `import/`/`export/` 加入 `.gitignore` 并明确这些是运行时用户数据、绝不自动删除。
+
+**Step 1:沙盒工作路径 — ✅ (2026-06-09)**
 
 **Step 1:沙盒工作路径 — ✅ (2026-06-09)**
 - 决策(用户确认):WORKSPACE/IMPORT/EXPORT 为工作区子目录;`--workspace`/`--workplace` 设工作路径(默认 cwd);白名单走项目本地 `.kurt/`(Step 2);分两步推进。

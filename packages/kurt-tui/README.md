@@ -52,6 +52,14 @@ The sandbox **blocks writes outside the workspace** — open extra dirs with
 `--allow-write <path>` (repeatable). "Path protocol over discovery": the agent
 acts on these injected paths instead of exploring the filesystem.
 
+### Command approval
+
+Sensitive commands (`rm`, `sudo`, disk writes, `curl … | sh`, force-push, …) pause
+for approval — **[y] allow once · [a] always allow · [n/esc] deny** — with the
+command, a short explanation, and the risk shown. "Always allow" is remembered per
+project in `<workspace>/.kurt/allowlist.json` (commit it to share with your team).
+`--yes`/`-y` auto-approves; non-interactive runs default to deny.
+
 ### Remembered settings
 
 What you pick in the TUI (`/model`, `/effort`, `/think`, `/mode`) is saved to

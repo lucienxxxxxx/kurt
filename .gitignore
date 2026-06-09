@@ -9,5 +9,8 @@ bun.lockb
 .DS_Store
 *.log
 
-# session scratch
+# session scratch + agent workspace artifacts (created at runtime in the working dir;
+# they hold user/agent-generated data — never commit, never auto-delete).
 .kurt/
+import/
+export/
