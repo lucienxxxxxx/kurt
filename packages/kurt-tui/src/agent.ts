@@ -13,6 +13,7 @@ import {
   ShellTool,
   CodeTool,
   WebSearchTool,
+  RequestWriteAccessTool,
   DuckDuckGoSearch,
   type SandboxProvider,
   type Tool,
@@ -111,8 +112,10 @@ export function systemPrompt(ws: Workspace): string {
     "",
     "Path protocol over path discovery: the sandbox only allows writing inside WORKSPACE_DIR.",
     "Do NOT explore or write elsewhere; always act on these injected paths. Use relative paths",
-    "or the env vars (e.g. $EXPORT_DIR). Prefer doing real work with the tools over guessing.",
-    "Keep answers short.",
+    "or the env vars (e.g. $EXPORT_DIR).",
+    "If you genuinely need to write OUTSIDE the workspace (e.g. ~/Downloads), call",
+    "request_write_access with that directory — the user will be asked to approve — then retry the write.",
+    "Prefer doing real work with the tools over guessing. Keep answers short.",
   ].join("\n");
 }
 
@@ -158,15 +161,20 @@ export function makeTools(
   allowWrite: string[] = [],
   permission?: PermissionProvider,
 ): Tool[] {
+  // Shared, mutable writable-roots — request_write_access pushes to this and the
+  // file/exec tools (which read it live) immediately see the new dir.
   const writable = [ws.root, ...allowWrite];
   const env = workspaceEnv(ws);
-  return [
+  const tools: Tool[] = [
     new ReadFileTool({ cwd: ws.root }),
     new WriteFileTool({ roots: writable }),
     new ShellTool(sandbox, { cwd: ws.root, writablePaths: writable, env, permission }),
     new CodeTool(sandbox, codeTemp, { writablePaths: writable, env }),
     new WebSearchTool(new DuckDuckGoSearch()),
   ];
+  // The escalation tool only makes sense when there's an approver to ask.
+  if (permission) tools.push(new RequestWriteAccessTool(writable, permission));
+  return tools;
 }
 
 function num(v: string | undefined): number | undefined {
