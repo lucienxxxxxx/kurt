@@ -25,10 +25,12 @@ Usage:
 Options (for kurt / kurt chat):
   --workspace <path>        Working dir for the agent (default: current dir). Alias: --workplace
   --allow-write <path>      Extra writable dir beyond the workspace (repeatable)
+  --yes, -y                 Auto-approve sensitive commands (skip approval prompts)
 
 The agent works inside the workspace: WORKSPACE_DIR (writable), IMPORT_DIR
 (inputs, read-only), EXPORT_DIR (deliverables). The sandbox blocks writes
-elsewhere unless --allow-write opens them.
+elsewhere unless --allow-write opens them. Sensitive commands (rm/sudo/…) ask
+for approval; "always allow" is remembered in <workspace>/.kurt/allowlist.json.
 
 Env: DEEPSEEK_API_KEY (required), DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DEEPSEEK_CONTEXT.
 Settings you change in the TUI (/model, /effort, /think, /mode) are remembered in

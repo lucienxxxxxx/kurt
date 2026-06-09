@@ -10,6 +10,8 @@ import { compactHistory, serializeForSummary } from "kurt-agent";
 import { App, bannerString, type Compactor, type EngineRunner, type SessionState } from "./tui/index.ts";
 import { resolveConfig, makeSandbox, makeTools, modelFor, resolveWorkspace, systemPrompt, type LaunchOptions } from "./agent.ts";
 import { saveConfig } from "./config.ts";
+import { Allowlist } from "./allowlist.ts";
+import { PermissionBridge } from "./tui/permission.ts";
 
 export async function runTui(opts: LaunchOptions = {}): Promise<void> {
   if (!process.stdin.isTTY) {
@@ -25,13 +27,14 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
 
   const ws = resolveWorkspace(opts.workspacePath);
   const allowWrite = opts.allowWrite ?? [];
+  const permission = new PermissionBridge(await Allowlist.load(ws.root));
   const sandbox = makeSandbox();
   let codeTemp = new SessionWorkspace({ sessionId: "tui" });
-  let tools = makeTools(sandbox, codeTemp, ws, allowWrite);
+  let tools = makeTools(sandbox, codeTemp, ws, allowWrite, permission);
   const newSession = (): void => {
     codeTemp.dispose();
     codeTemp = new SessionWorkspace({ sessionId: "tui" });
-    tools = makeTools(sandbox, codeTemp, ws, allowWrite);
+    tools = makeTools(sandbox, codeTemp, ws, allowWrite, permission);
   };
 
   const system = systemPrompt(ws);
@@ -68,6 +71,7 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
       models={cfg.models}
       onNewSession={newSession}
       onConfigChange={(patch) => void saveConfig(patch)}
+      permission={permission}
       config={{ model: cfg.modelId, contextLimit: cfg.contextLimit, effort: cfg.effort, thinking: cfg.thinking, mode: cfg.mode }}
     />,
   );

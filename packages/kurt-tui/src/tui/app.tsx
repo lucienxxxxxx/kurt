@@ -1,11 +1,16 @@
 import { Box, Static, Text, useApp, useInput, useStdout } from "ink";
-import { useEffect, useRef, useState } from "react";
-import { messagesFromEvents, type Event, type Message } from "kurt-agent";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { messagesFromEvents, type Event, type Message, type PermissionRequest } from "kurt-agent";
 import { applyEvent, type Entry } from "./entries.ts";
 import { COMMANDS, filterCommands, isCommand, parseCommand } from "./commands.ts";
 import { EntryView } from "./conversation.tsx";
 import { StatusBar, type ChatMode, type Status } from "./status-bar.tsx";
 import { Welcome } from "./welcome.tsx";
+import { Approval } from "./approval.tsx";
+import type { PermissionBridge } from "./permission.ts";
+
+const NO_SUBSCRIBE = (): (() => void) => () => {};
+const NO_PENDING = (): PermissionRequest | null => null;
 
 export interface SessionState {
   modelId: string;
@@ -32,15 +37,20 @@ export interface AppProps {
   onNewSession?: () => void;
   /** Persist changed settings (model/effort/thinking/mode) across launches. */
   onConfigChange?: (patch: { model: string; effort: string; thinking: boolean; mode: ChatMode }) => void;
+  /** Bridge for sensitive-command approval prompts (when gating is enabled). */
+  permission?: PermissionBridge;
 }
 
 const MODES: ChatMode[] = ["ask", "agent", "plan"];
 const EFFORTS = ["low", "medium", "high"];
 const PALETTE_MAX = 8;
 
-export function App({ run, compact, models, config, onNewSession, onConfigChange }: AppProps) {
+export function App({ run, compact, models, config, onNewSession, onConfigChange, permission }: AppProps) {
   const { stdout } = useStdout();
   const { exit } = useApp();
+
+  // Current pending approval (null when none). Drives the prompt + key handling.
+  const approval = useSyncExternalStore(permission?.subscribe ?? NO_SUBSCRIBE, permission?.getSnapshot ?? NO_PENDING);
 
   const [cols, setCols] = useState(stdout.columns || 80);
   useEffect(() => {
@@ -202,6 +212,13 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
   const sel = Math.min(selected, Math.max(0, cmdItems.length - 1));
 
   useInput((char, key) => {
+    // While an approval is pending, keys only answer the prompt.
+    if (approval && permission) {
+      if (char === "y") permission.decide("allow");
+      else if (char === "a") permission.decide("always");
+      else if (char === "n" || key.escape || (key.ctrl && char === "c")) permission.decide("deny");
+      return;
+    }
     if (key.ctrl && char === "c") {
       if (running && abortRef.current) abortRef.current.abort();
       else exit();
@@ -279,11 +296,15 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
           </Box>
         )}
 
-        <Box marginTop={1}>
-          <Text color="green">{"› "}</Text>
-          <Text>{input}</Text>
-          <Text dimColor>{running ? " (running… Esc to interrupt)" : "▌"}</Text>
-        </Box>
+        {approval ? (
+          <Approval req={approval} />
+        ) : (
+          <Box marginTop={1}>
+            <Text color="green">{"› "}</Text>
+            <Text>{input}</Text>
+            <Text dimColor>{running ? " (running… Esc to interrupt)" : "▌"}</Text>
+          </Box>
+        )}
         <StatusBar status={status} width={cols} />
       </Box>
     </>

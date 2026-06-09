@@ -16,6 +16,7 @@ import {
   DuckDuckGoSearch,
   type SandboxProvider,
   type Tool,
+  type PermissionProvider,
 } from "kurt-agent";
 import type { SessionWorkspace } from "kurt-agent";
 import { mkdirSync } from "node:fs";
@@ -54,13 +55,16 @@ export interface LaunchOptions {
   workspacePath?: string;
   /** --allow-write <path> (repeatable): extra writable dirs beyond the workspace. */
   allowWrite?: string[];
+  /** --yes / -y: auto-approve sensitive commands (skip prompts). */
+  yes?: boolean;
 }
 
-/** Pull --workspace/--workplace and --allow-write out of argv; rest is positional. */
+/** Pull launch flags out of argv; the rest is positional (command + args). */
 export function parseLaunchFlags(argv: string[]): { options: LaunchOptions; positional: string[] } {
   const positional: string[] = [];
   const allowWrite: string[] = [];
   let workspacePath: string | undefined;
+  let yes = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     const eq = arg.indexOf("=");
@@ -70,9 +74,13 @@ export function parseLaunchFlags(argv: string[]): { options: LaunchOptions; posi
     else if (name === "allow-write") {
       const v = value();
       if (v) allowWrite.push(v);
-    } else positional.push(arg);
+    } else if (name === "yes" || arg === "-y") yes = true;
+    else positional.push(arg);
   }
-  return { options: { workspacePath, allowWrite: allowWrite.length ? allowWrite : undefined }, positional };
+  return {
+    options: { workspacePath, allowWrite: allowWrite.length ? allowWrite : undefined, yes: yes || undefined },
+    positional,
+  };
 }
 
 export interface Settings {
@@ -148,13 +156,14 @@ export function makeTools(
   codeTemp: SessionWorkspace,
   ws: Workspace,
   allowWrite: string[] = [],
+  permission?: PermissionProvider,
 ): Tool[] {
   const writable = [ws.root, ...allowWrite];
   const env = workspaceEnv(ws);
   return [
     new ReadFileTool({ cwd: ws.root }),
     new WriteFileTool({ roots: writable }),
-    new ShellTool(sandbox, { cwd: ws.root, writablePaths: writable, env }),
+    new ShellTool(sandbox, { cwd: ws.root, writablePaths: writable, env, permission }),
     new CodeTool(sandbox, codeTemp, { writablePaths: writable, env }),
     new WebSearchTool(new DuckDuckGoSearch()),
   ];

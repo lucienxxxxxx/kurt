@@ -3,8 +3,35 @@
  * TUI (shares config + tools). `kurt chat` or `kurt chat "prompt"`.
  */
 
-import { runLoop, runStdoutMode, messagesFromEvents, SessionWorkspace, type Event, type Message } from "kurt-agent";
+import {
+  runLoop,
+  runStdoutMode,
+  messagesFromEvents,
+  SessionWorkspace,
+  type Event,
+  type Message,
+  type PermissionProvider,
+} from "kurt-agent";
 import { resolveConfig, makeSandbox, makeTools, modelFor, resolveWorkspace, systemPrompt, type LaunchOptions } from "./agent.ts";
+import { Allowlist } from "./allowlist.ts";
+
+/** stdin-prompt approval for the stdout chat; --yes auto-allows. */
+function cliPermission(allowlist: Allowlist, yes: boolean): PermissionProvider {
+  return {
+    async request(req) {
+      if (yes || allowlist.has(req.key)) return "allow";
+      process.stdout.write(
+        `\n⚠ Permission needed — ${req.title}\n  $ ${req.command}\n  ${req.explanation}\n  risk: ${req.risk}\n`,
+      );
+      const ans = (prompt("  allow? [y]es / [a]lways / [N]o:") ?? "").trim().toLowerCase();
+      if (ans === "a") {
+        await allowlist.add(req.key);
+        return "allow";
+      }
+      return ans === "y" ? "allow" : "deny";
+    },
+  };
+}
 
 export async function runChat(args: string[], opts: LaunchOptions = {}): Promise<void> {
   const cfg = await resolveConfig();
@@ -14,9 +41,10 @@ export async function runChat(args: string[], opts: LaunchOptions = {}): Promise
   }
 
   const ws = resolveWorkspace(opts.workspacePath);
+  const permission = cliPermission(await Allowlist.load(ws.root), opts.yes ?? false);
   const sandbox = makeSandbox();
   const codeTemp = new SessionWorkspace({ sessionId: "chat" });
-  const tools = makeTools(sandbox, codeTemp, ws, opts.allowWrite ?? []);
+  const tools = makeTools(sandbox, codeTemp, ws, opts.allowWrite ?? [], permission);
   const model = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey);
   const system = systemPrompt(ws);
   const messages: Message[] = [];
