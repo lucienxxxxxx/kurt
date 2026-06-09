@@ -38,16 +38,18 @@ export function EntryView({ entry, width, live }: { entry: Entry; width: number;
         </Box>
       );
     case "tool": {
-      const out = entry.result !== undefined ? clip(entry.result, 12, 800) : null;
+      const done = entry.result !== undefined;
+      // Finished → the formatted result (head); still running → live stream tail.
+      const out = done ? clip(entry.result!, 12, 800) : entry.stream ? tail(entry.stream, 10) : null;
       return (
         <Box flexDirection="column" marginTop={1}>
           <Text color="yellow" bold>
-            {`⚙ ${toolLabel(entry.name)}`}
+            {`⚙ ${toolLabel(entry.name)}${done ? "" : " ⠿"}`}
           </Text>
           <Text dimColor>{labeled("IN: ", formatToolInput(entry.name, entry.input))}</Text>
           {out && (
             <Text color={entry.isError ? "red" : undefined} dimColor={!entry.isError}>
-              {labeled(entry.isError ? "ERR:" : "OUT:", out.text)}
+              {labeled(done && entry.isError ? "ERR:" : "OUT:", out.text)}
               {out.clipped ? "\n     … (truncated)" : ""}
             </Text>
           )}
@@ -62,4 +64,10 @@ export function EntryView({ entry, width, live }: { entry: Entry; width: number;
         </Text>
       );
   }
+}
+
+/** Last `maxLines` of streaming output (the live tail is what matters). */
+function tail(text: string, maxLines: number): { text: string; clipped: boolean } {
+  const lines = text.replace(/\s+$/, "").split("\n");
+  return { text: lines.length <= maxLines ? lines.join("\n") : lines.slice(-maxLines).join("\n"), clipped: false };
 }

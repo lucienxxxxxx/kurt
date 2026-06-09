@@ -59,6 +59,18 @@ describe("entries reducer", () => {
     }
   });
 
+  test("tool_output streams into the matching tool entry before its result", () => {
+    let e: Entry[] = [];
+    e = applyEvent(e, { type: "tool_call", id: "c1", name: "shell", input: { command: "x" } });
+    e = applyEvent(e, { type: "tool_output", id: "c1", text: "line1\n" });
+    e = applyEvent(e, { type: "tool_output", id: "c1", text: "line2\n" });
+    const live = e[0]!;
+    expect(live.kind === "tool" && live.stream).toBe("line1\nline2\n");
+    e = applyEvent(e, { type: "tool_result", id: "c1", content: "exit 0", isError: false });
+    const done = e[0]!;
+    expect(done.kind === "tool" && done.result).toBe("exit 0");
+  });
+
   test("error/aborted become notices", () => {
     let e: Entry[] = [];
     e = applyEvent(e, { type: "error", message: "boom", fatal: true });

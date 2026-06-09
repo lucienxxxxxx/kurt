@@ -10,7 +10,7 @@ export type Entry =
   | { kind: "user"; text: string }
   | { kind: "assistant"; text: string }
   | { kind: "thinking"; text: string }
-  | { kind: "tool"; id: string; name: string; input: unknown; result?: string; isError?: boolean }
+  | { kind: "tool"; id: string; name: string; input: unknown; stream?: string; result?: string; isError?: boolean }
   | { kind: "notice"; level: "info" | "warn" | "error"; text: string };
 
 /** Append a user message (the front-end does this before running the loop). */
@@ -27,6 +27,10 @@ export function applyEvent(entries: Entry[], event: Event): Entry[] {
       return appendText(entries, "thinking", event.text);
     case "tool_call":
       return [...entries, { kind: "tool", id: event.id, name: event.name, input: event.input }];
+    case "tool_output":
+      return entries.map((e) =>
+        e.kind === "tool" && e.id === event.id ? { ...e, stream: (e.stream ?? "") + event.text } : e,
+      );
     case "tool_result":
       return entries.map((e) =>
         e.kind === "tool" && e.id === event.id && e.result === undefined
