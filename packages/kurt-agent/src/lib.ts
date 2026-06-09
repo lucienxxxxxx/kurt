@@ -10,6 +10,7 @@ export * from "./tools/index.ts";
 export * from "./sandbox/index.ts";
 export * from "./session/index.ts";
 export * from "./search/index.ts";
+export * from "./permission/index.ts";
 
 export { messagesFromEvents } from "./modes/history.ts";
 export { compactHistory, compactionSplit, serializeForSummary } from "./modes/compaction.ts";

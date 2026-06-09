@@ -10,6 +10,8 @@
 
 import type { Tool, ToolContext, ToolResult, ToolSpec } from "../engine/index.ts";
 import type { SandboxProvider } from "../sandbox/index.ts";
+import { classifyCommand } from "../permission/classify.ts";
+import type { PermissionProvider } from "../permission/types.ts";
 
 export interface ShellToolOptions {
   /** Working directory for commands. Default: process.cwd(). */
@@ -24,6 +26,8 @@ export interface ShellToolOptions {
   maxOutputBytes?: number;
   /** Absolute path to bash. Default: /bin/bash. */
   bashPath?: string;
+  /** Gate sensitive commands (rm/sudo/…) for approval. If unset, no gating. */
+  permission?: PermissionProvider;
 }
 
 export class ShellTool implements Tool {
@@ -56,6 +60,21 @@ export class ShellTool implements Tool {
     const command = (input as { command?: unknown })?.command;
     if (typeof command !== "string" || command.trim().length === 0) {
       return { content: 'Invalid input: "command" must be a non-empty string.', isError: true };
+    }
+
+    // Gate sensitive commands behind approval (the provider may whitelist/prompt).
+    const risk = classifyCommand(command);
+    if (risk && this.#opts.permission) {
+      const decision = await this.#opts.permission.request({
+        key: risk.key,
+        title: risk.title,
+        command,
+        explanation: risk.explanation,
+        risk: risk.risk,
+      });
+      if (decision === "deny") {
+        return { content: `Denied by user: ${risk.title} — command not run.`, isError: true };
+      }
     }
 
     const result = await this.#sandbox.exec(

@@ -162,6 +162,47 @@ describe("ShellTool env option", () => {
   });
 });
 
+describe("ShellTool permission gating", () => {
+  test("denied sensitive command is not run", async () => {
+    const marker = join(tmpdir(), `kurt-deny-${Date.now()}.txt`);
+    const deny = { request: async () => "deny" as const };
+    const tool = new ShellTool(new DirectSandbox(), { permission: deny });
+    const res = await tool.execute({ command: `rm -f /nope && touch ${marker}` }, ctx());
+    expect(res.isError).toBe(true);
+    expect(res.content).toContain("Denied by user");
+    expect(existsSync(marker)).toBe(false); // command never executed
+  });
+
+  test("allowed sensitive command runs", async () => {
+    let asked = 0;
+    const allow = {
+      request: async () => {
+        asked++;
+        return "allow" as const;
+      },
+    };
+    const res = await new ShellTool(new DirectSandbox(), { permission: allow }).execute(
+      { command: "rm -f /tmp/kurt-nonexistent-xyz && echo ok" },
+      ctx(),
+    );
+    expect(asked).toBe(1);
+    expect(res.content).toContain("ok");
+  });
+
+  test("non-sensitive command is not gated (provider untouched)", async () => {
+    const provider = {
+      request: async () => {
+        throw new Error("should not be asked for a safe command");
+      },
+    };
+    const res = await new ShellTool(new DirectSandbox(), { permission: provider }).execute(
+      { command: "echo safe" },
+      ctx(),
+    );
+    expect(res.content).toContain("safe");
+  });
+});
+
 function ctx() {
   return { signal: new AbortController().signal, emit: () => {} };
 }
