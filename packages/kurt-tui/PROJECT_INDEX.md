@@ -1,7 +1,7 @@
 # PROJECT_INDEX — kurt-tui
 
 > Cached architecture map. Read this first; scan only what it points to.
-> Last synced: 2026-06-09, after the command-approval system (per-project allowlist + --yes).
+> Last synced: 2026-06-10, after live tool-output streaming + running indicator.
 
 ## 1. Overview
 Ink terminal UI for `kurt-agent`. A front-end consumer: subscribes to the engine
@@ -41,7 +41,7 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 | `src/agent.ts` | Shared runtime: `resolveSettings`/`resolveConfig`, `resolveWorkspace`+`workspaceEnv` (WORKSPACE/IMPORT/EXPORT), `systemPrompt(ws)`, `makeSandbox`/`makeTools(sandbox,codeTemp,ws,allowWrite)`/`modelFor`, `parseLaunchFlags` (`LaunchOptions`) | (those) | `kurt-agent`, `./config` |
 | `src/config.ts` | Persisted user settings at `~/.kurt/config.json`: `loadConfig`/`saveConfig`/`configPath`/`sanitize` | (those) | — |
 | `src/tui/app.tsx` | Root Ink component: `committed` (→ `<Static>` scrollback) + `live` (current turn) + session state, command palette, drives the loop, `/compact`, `/new`, `/clear` | `App`, `EngineRunner`, `Compactor`, `SessionState` | ink, react, kurt-agent, sibling files |
-| `src/tui/conversation.tsx` | Renders one entry: user (divider+plain), kurt (markdown when final), thinking, tool cards (IN:/OUT:, clipped), notices | `EntryView` | ink, `./markdown`, `./tool-format`, `./entries` |
+| `src/tui/conversation.tsx` | Renders one entry: user (divider+plain), kurt (markdown when final), thinking, tool cards (IN:/OUT:, live stream tail + ⠿ while running, clipped), notices | `EntryView` | ink, `./markdown`, `./tool-format`, `./entries` |
 | `src/tui/status-bar.tsx` | Bottom bar: model · ctx + scarcity dot · effort · think · mode | `StatusBar`, `Status`, `ChatMode` | ink, `./theme` |
 | `src/tui/banner.ts` | Startup banner (printed once at launch; scrolls with history) | `bannerString` | — |
 | `src/tui/entries.ts` | View-model: `Entry`, `applyEvent` reducer, `safeJson` | `applyEvent`,`pushUser`,`safeJson` | `kurt-agent` (types) |

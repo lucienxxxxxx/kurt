@@ -3,8 +3,8 @@
 > Cached architecture map. **Read this first**; scan the tree only for the files
 > this map points you to. Keep it fresh: update on every structural change.
 > Maintained via the `project-module-workflow` skill (see CLAUDE.md §3).
-> Last synced: 2026-06-09, after consolidating into the single `kurt` repo
-> (`packages/*`) and pushing to GitHub.
+> Last synced: 2026-06-10, after sandbox timeouts (idle+cap) + live output
+> streaming + subprocess group-kill.
 
 ## 1. Overview
 A protocol-agnostic, **zero-I/O** AI agent engine (a **library**) in TypeScript on Bun.
@@ -31,8 +31,8 @@ Three layers, three iron rules (full text in `CLAUDE.md` §2 — do not break th
 
 Event contract (locked by `src/engine/loop.test.ts`):
 `turn_start → llm_delta* → (tool_call, tool_result)* → turn_end`, repeated per loop;
-abnormal end = `aborted`/`error`. Also display-only `thinking` + `usage` events
-(forwarded from provider reasoning/usage). Invariant: every `tool_call` is paired with
+abnormal end = `aborted`/`error`. Also display-only `thinking` + `usage` events, and `tool_output` (live tool
+output streamed via `ctx.emit`, tagged with `ToolContext.toolCallId`). Invariant: every `tool_call` is paired with
 exactly one `tool_result` (even on abort/throw); a throwing tool → `tool_result(isError)`
 and the loop continues.
 
@@ -44,7 +44,7 @@ and the loop continues.
 | `src/engine/async-queue.ts` | Single-consumer channel powering `ToolContext.emit` | `AsyncEventQueue` | — |
 | `src/providers/` | `ModelProvider` impls | `MockModel` (scripted, no deps); `OpenAICompatModel` (DeepSeek/OpenAI Chat Completions over SSE, key injected) | engine types |
 | `src/tools/` | `Tool` impls — **all side effects live here** | `ReadFileTool`, `WriteFileTool`, `ShellTool`, `CodeTool`, `WebSearchTool`, `RequestWriteAccessTool`. Shell/Code take `cwd`/`writablePaths`/`env`/`allowNetwork`; `writablePaths`/WriteFile `roots` are read live (a shared mutable array) so `request_write_access` grants take effect immediately | engine, sandbox, session, search, permission |
-| `src/sandbox/` | Subprocess isolation behind `SandboxProvider` | `SeatbeltSandbox`, `DirectSandbox`, `buildProfile`; `run-process.ts` (spawn+timeout+cap+abort) | — |
+| `src/sandbox/` | Subprocess isolation behind `SandboxProvider` | `SeatbeltSandbox`, `DirectSandbox`, `buildProfile`; `run-process.ts` (detached spawn → group-kill; idle-timeout 90s + hard cap 10min; output cap; live `onOutput` streaming; abort) | — |
 | `src/session/` | Per-session scratch dir lifecycle | `SessionWorkspace` (`.root`, `.dir()`, `.dispose()`) | — |
 | `src/search/` | Pluggable web-search backend | `SearchProvider`, `DuckDuckGoSearch` | — |
 | `src/permission/` | Approval seam for sensitive commands | `PermissionProvider`/`PermissionDecision`/`PermissionRequest`, `classifyCommand` (pure rules → key+explanation+risk), `allowAll`/`denyAll`. ShellTool consults it; the front-end supplies the prompt/whitelist | — (pure) |

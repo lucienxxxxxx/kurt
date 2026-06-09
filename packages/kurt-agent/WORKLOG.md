@@ -4,6 +4,18 @@
 
 ---
 
+## 超时 + 实时输出 + 中断修复 — ✅ (2026-06-10)
+
+**起因(用户反馈)**:跑 `npm install` 时按 Esc 无反应、且固定 30s 超时会砍掉长命令。
+
+- **中断修复(fix)**:旧代码只 SIGKILL bash 父进程,子进程(npm)存活并撑着管道 → `runProcess` 卡在读流 → 工具不返回 → UI 假死。现改为**子进程独立进程组启动(`detached`)+ 杀整组(`process.kill(-pid)`)**,管道关闭、立即返回。回归测试:后台子进程不再拖住 abort(<2s)。
+- **超时模型(用户选:空闲+硬上限)**:`runProcess` 改为**空闲超时(默认 90s 无输出即杀)+ 硬上限(默认 10min)**;有输出的长命令不被砍。`SandboxResult.timeoutReason` 区分 idle/cap。`shell`/`run_code` 增加每命令 `timeout`(秒)入参抬高硬上限。
+- **实时输出(用户选:+实时输出)**:引擎加 `tool_output` 事件 + `ToolContext.toolCallId`;`run-process` 的 `onOutput` 流式回调 → 工具 `ctx.emit({type:"tool_output",id,text})`;TUI 在工具卡片实时显示输出尾部(`⠿` 运行中标记),结束后显示最终结果。chat(stdout)忽略 `tool_output` 以免重复打印。
+- **running 指示**:TUI 输入行运行时显示 `⠙ running 12s · press Esc to interrupt`(每秒 ticker)。
+- 验收:kurt-agent **46** / kurt-tui **36** 通过;探针确认流式 3 段、idle 杀安静命令、活跃命令不被误杀、abort 即时。
+
+---
+
 ## 第N期 · 权限 + 沙盒工作路径 — ✅ 完成
 
 **Step 2b:沙盒写权限提权 — ✅ (2026-06-09)**
