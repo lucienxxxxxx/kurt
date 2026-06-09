@@ -101,4 +101,18 @@ describe("DirectSandbox", () => {
     expect(r.exitCode).toBe(0);
     expect(r.stdout.trim()).toBe("direct-ok");
   });
+
+  test("abort kills the whole process group and returns promptly", async () => {
+    // A backgrounded child would (without group-kill) keep the stdout pipe open
+    // and hang the read until it exits ~5s later. Group-kill must end it fast.
+    const ac = new AbortController();
+    const start = Date.now();
+    const p = new DirectSandbox().exec(
+      { cmd: ["/bin/bash", "-c", "sleep 5 & sleep 5; wait"], policy: { writablePaths: [], allowNetwork: false }, timeoutMs: 10_000 },
+      ac.signal,
+    );
+    setTimeout(() => ac.abort(), 100);
+    await expect(p).rejects.toThrow(/abort/i);
+    expect(Date.now() - start).toBeLessThan(2000);
+  });
 });

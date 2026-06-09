@@ -43,6 +43,9 @@ export async function runProcess(opts: RawRunOptions, signal: AbortSignal): Prom
       stdin: opts.stdin != null ? new Blob([opts.stdin]) : "ignore",
       stdout: "pipe",
       stderr: "pipe",
+      // Own process group, so we can kill the whole subtree (e.g. `npm install`
+      // spawns children that would otherwise survive and hold the pipes open).
+      detached: true,
     });
   } catch (err) {
     return {
@@ -57,10 +60,16 @@ export async function runProcess(opts: RawRunOptions, signal: AbortSignal): Prom
   let timedOut = false;
   let truncated = false;
   const kill = (): void => {
+    // Kill the whole process group (negative pid) so children die too and the
+    // stdout/stderr pipes actually close; fall back to the single process.
     try {
-      proc.kill("SIGKILL");
+      process.kill(-proc.pid, "SIGKILL");
     } catch {
-      // already gone
+      try {
+        proc.kill("SIGKILL");
+      } catch {
+        // already gone
+      }
     }
   };
 
