@@ -4,6 +4,17 @@
 
 ---
 
+## 第N期 · 权限 + 沙盒工作路径 — 🚧 进行中
+
+**Step 1:沙盒工作路径 — ✅ (2026-06-09)**
+- 决策(用户确认):WORKSPACE/IMPORT/EXPORT 为工作区子目录;`--workspace`/`--workplace` 设工作路径(默认 cwd);白名单走项目本地 `.kurt/`(Step 2);分两步推进。
+- 交付:`kurt-agent` 的 `ShellTool`/`CodeTool` 增加 `env` + `writablePaths` 选项(additive,引擎未动);`kurt-tui` 的 `agent.ts` 加 `resolveWorkspace`/`workspaceEnv`/`systemPrompt(ws)`/`parseLaunchFlags`,`makeTools` 改为 `(sandbox, codeTemp, ws, allowWrite)`;`cli.ts` 解析 `--workspace`/`--workplace`/`--allow-write`;run-tui/run-chat 接 LaunchOptions。
+- 行为:agent 默认在工作路径(可写),`WORKSPACE_DIR/IMPORT_DIR/EXPORT_DIR` 注入 system prompt + 子进程 env;沙盒只允许写工作区(+ allowWrite),其余被拒。"路径协议优先于路径发现"写进 system prompt。
+- 验收:kurt-agent 34 / kurt-tui 30 测试通过;端到端探针确认 `$EXPORT_DIR` 可写、工作区外写入被沙盒拒绝。
+- **Step 2(待做):命令权限/授权系统**(rm/sudo/提权等需授权,accept/reject/always-allow→项目本地 `.kurt/allowlist.json`,提示带解释+风险)。
+
+---
+
 ## 拆分:TUI → 兄弟项目 kurt-tui(monorepo)— ✅ (2026-06-09)
 
 **动机**:TUI 是引擎的前端消费者(铁律 #2),与引擎核心解耦。用户要求把 TUI 独立成与 kurt-agent 平级的项目 `kurt-tui`。

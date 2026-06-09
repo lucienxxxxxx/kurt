@@ -1,7 +1,7 @@
 # PROJECT_INDEX — kurt-tui
 
 > Cached architecture map. Read this first; scan only what it points to.
-> Last synced: 2026-06-09, after consolidating into the single `kurt` repo (`packages/*`).
+> Last synced: 2026-06-09, after the sandbox working-path feature (--workspace + WORKSPACE/IMPORT/EXPORT).
 
 ## 1. Overview
 Ink terminal UI for `kurt-agent`. A front-end consumer: subscribes to the engine
@@ -14,8 +14,10 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 - Install once at the repo root (`kurt/`, two levels up): `cd ../.. && bun install`.
 - `bun run tui` / `bun run chat` (need `DEEPSEEK_API_KEY`) · `bun test` · `bun run typecheck`.
 - Global launcher: `kurt` (a `~/.bun/bin/kurt` wrapper → `src/cli.ts`). Subcommands: `kurt` (TUI), `kurt chat`, `kurt config [set|path]`, `kurt help`.
+- Flags (tui/chat): `--workspace`/`--workplace <path>` (working dir, default cwd) · `--allow-write <path>` (repeatable, extra writable dir).
+- **Working paths**: the agent works inside the workspace — `WORKSPACE_DIR` (writable), `IMPORT_DIR=<ws>/import` (inputs, read-only by convention), `EXPORT_DIR=<ws>/export` (deliverables). Injected into the system prompt AND as env to shell/run_code. Sandbox blocks writes outside the workspace (+ `--allow-write` dirs).
 - Settings (`model/effort/thinking/mode`) persist to `~/.kurt/config.json` (override path with `KURT_CONFIG_PATH`). Precedence: persisted > env > default. API key is env-only.
-- Gate before merge: **`bun run typecheck && bun test`** (currently 26 tests, offline).
+- Gate before merge: **`bun run typecheck && bun test`** (currently 30 tests, offline).
 
 ## 3. Architecture
 - Depends on `kurt-agent` only through its public API (`"kurt-agent"` → its `src/lib.ts`):
@@ -34,7 +36,7 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 | `src/cli.ts` | **CLI entry / bin `kurt`**: dispatches `tui` (default) / `chat` / `config` / `help` | — | `./run-tui`, `./run-chat`, `./config` |
 | `src/run-tui.tsx` | Launch the TUI: prints banner once, wires runner+compactor+newSession, mounts `<App>` (normal screen), persists settings on change | `runTui` | `kurt-agent`, `./agent`, `./config`, `./tui` |
 | `src/run-chat.ts` | Stdout REPL/one-shot using the same runtime as the TUI | `runChat` | `kurt-agent`, `./agent` |
-| `src/agent.ts` | Shared runtime: `resolveSettings` (pure precedence) / `resolveConfig`, `makeSandbox`/`makeTools`/`modelFor`, `SYSTEM` | (those) | `kurt-agent`, `./config` |
+| `src/agent.ts` | Shared runtime: `resolveSettings`/`resolveConfig`, `resolveWorkspace`+`workspaceEnv` (WORKSPACE/IMPORT/EXPORT), `systemPrompt(ws)`, `makeSandbox`/`makeTools(sandbox,codeTemp,ws,allowWrite)`/`modelFor`, `parseLaunchFlags` (`LaunchOptions`) | (those) | `kurt-agent`, `./config` |
 | `src/config.ts` | Persisted user settings at `~/.kurt/config.json`: `loadConfig`/`saveConfig`/`configPath`/`sanitize` | (those) | — |
 | `src/tui/app.tsx` | Root Ink component: `committed` (→ `<Static>` scrollback) + `live` (current turn) + session state, command palette, drives the loop, `/compact`, `/new`, `/clear` | `App`, `EngineRunner`, `Compactor`, `SessionState` | ink, react, kurt-agent, sibling files |
 | `src/tui/conversation.tsx` | Renders one entry: user (divider+plain), kurt (markdown when final), thinking, tool cards (IN:/OUT:, clipped), notices | `EntryView` | ink, `./markdown`, `./tool-format`, `./entries` |
@@ -54,6 +56,7 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 - **Status-bar content** → `status-bar.tsx` + `theme.ts`.
 - **Add a CLI subcommand** → `cli.ts` (dispatch) + a `run-*.ts`.
 - **Change settings/precedence or persistence** → `agent.ts` (`resolveSettings`) + `config.ts`.
+- **Change working paths / sandbox writable dirs / system prompt** → `agent.ts` (`resolveWorkspace`, `makeTools`, `systemPrompt`); CLI flags in `cli.ts` (`parseLaunchFlags`).
 - **New engine capability needed** → implement in `kurt-agent`, export from its `src/lib.ts`, then consume here.
 - Tests: `src/tui/*.test.ts(x)` (entries/commands/markdown/tool-format + an Ink render of `App`).
 

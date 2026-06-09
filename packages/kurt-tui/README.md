@@ -31,12 +31,26 @@ chmod +x "$HOME/.bun/bin/kurt"      # ~/.bun/bin is already on PATH
 Then from anywhere:
 
 ```bash
-kurt                    # launch the TUI
+kurt                    # launch the TUI (works on the current directory)
+kurt --workspace ~/proj # set the agent's working dir explicitly (alias: --workplace)
 kurt chat [prompt]      # stdout chat
 kurt config             # show saved settings + path
-kurt config set model deepseek-v4-pro
 kurt help
 ```
+
+### Working directory & sandbox
+
+The agent works **inside a workspace** (default: the dir you run `kurt` in, or
+`--workspace <path>`):
+
+- `WORKSPACE_DIR` — writable working dir (do all work here).
+- `IMPORT_DIR` (`<ws>/import`) — inputs you drop in; read-only by convention.
+- `EXPORT_DIR` (`<ws>/export`) — where the agent writes deliverables.
+
+These are injected into the system prompt **and** as env vars for `shell`/`run_code`.
+The sandbox **blocks writes outside the workspace** — open extra dirs with
+`--allow-write <path>` (repeatable). "Path protocol over discovery": the agent
+acts on these injected paths instead of exploring the filesystem.
 
 ### Remembered settings
 

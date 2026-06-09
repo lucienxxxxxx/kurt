@@ -43,7 +43,7 @@ and the loop continues.
 | `src/engine/loop.ts` | Agentic loop; pairs tool_call/result; abort handling | `runLoop`, `RunLoopOptions` | types, tool, model, compaction, async-queue |
 | `src/engine/async-queue.ts` | Single-consumer channel powering `ToolContext.emit` | `AsyncEventQueue` | — |
 | `src/providers/` | `ModelProvider` impls | `MockModel` (scripted, no deps); `OpenAICompatModel` (DeepSeek/OpenAI Chat Completions over SSE, key injected) | engine types |
-| `src/tools/` | `Tool` impls — **all side effects live here** | `ReadFileTool`, `WriteFileTool`, `ShellTool`, `CodeTool`, `WebSearchTool` | engine, sandbox, session, search |
+| `src/tools/` | `Tool` impls — **all side effects live here** | `ReadFileTool`, `WriteFileTool`, `ShellTool`, `CodeTool`, `WebSearchTool`. Shell/Code take `cwd`/`writablePaths`/`env`/`allowNetwork` (workspace + env injection wired by the front-end) | engine, sandbox, session, search |
 | `src/sandbox/` | Subprocess isolation behind `SandboxProvider` | `SeatbeltSandbox`, `DirectSandbox`, `buildProfile`; `run-process.ts` (spawn+timeout+cap+abort) | — |
 | `src/session/` | Per-session scratch dir lifecycle | `SessionWorkspace` (`.root`, `.dir()`, `.dispose()`) | — |
 | `src/search/` | Pluggable web-search backend | `SearchProvider`, `DuckDuckGoSearch` | — |
