@@ -18,7 +18,62 @@ import {
   type Tool,
 } from "kurt-agent";
 import type { SessionWorkspace } from "kurt-agent";
+import { mkdirSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { loadConfig, type PersistedConfig } from "./config.ts";
+
+/**
+ * The agent's working area. "Path protocol over path discovery": the sandbox
+ * only lets the agent write inside WORKSPACE_DIR (+ explicitly allowed dirs);
+ * the agent acts on these injected paths rather than exploring the filesystem.
+ */
+export interface Workspace {
+  root: string; // WORKSPACE_DIR — writable working dir
+  importDir: string; // IMPORT_DIR — inputs (read-only by convention)
+  exportDir: string; // EXPORT_DIR — deliverables (writable)
+}
+
+/** Resolve the working dir (default: cwd) and ensure import/ + export/ exist. */
+export function resolveWorkspace(workspacePath?: string): Workspace {
+  const root = resolve(workspacePath ?? process.cwd());
+  const importDir = join(root, "import");
+  const exportDir = join(root, "export");
+  mkdirSync(importDir, { recursive: true });
+  mkdirSync(exportDir, { recursive: true });
+  return { root, importDir, exportDir };
+}
+
+/** Env vars injected into sandboxed subprocesses so scripts can use the paths. */
+export function workspaceEnv(ws: Workspace): Record<string, string> {
+  return { WORKSPACE_DIR: ws.root, IMPORT_DIR: ws.importDir, EXPORT_DIR: ws.exportDir };
+}
+
+/** Per-invocation launch options (parsed from CLI flags). */
+export interface LaunchOptions {
+  /** --workspace / --workplace <path>; default = cwd. */
+  workspacePath?: string;
+  /** --allow-write <path> (repeatable): extra writable dirs beyond the workspace. */
+  allowWrite?: string[];
+}
+
+/** Pull --workspace/--workplace and --allow-write out of argv; rest is positional. */
+export function parseLaunchFlags(argv: string[]): { options: LaunchOptions; positional: string[] } {
+  const positional: string[] = [];
+  const allowWrite: string[] = [];
+  let workspacePath: string | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    const eq = arg.indexOf("=");
+    const name = arg.startsWith("--") ? (eq >= 0 ? arg.slice(2, eq) : arg.slice(2)) : null;
+    const value = (): string | undefined => (eq >= 0 ? arg.slice(eq + 1) : argv[++i]);
+    if (name === "workspace" || name === "workplace") workspacePath = value();
+    else if (name === "allow-write") {
+      const v = value();
+      if (v) allowWrite.push(v);
+    } else positional.push(arg);
+  }
+  return { options: { workspacePath, allowWrite: allowWrite.length ? allowWrite : undefined }, positional };
+}
 
 export interface Settings {
   modelId: string;
@@ -34,13 +89,24 @@ export interface ResolvedConfig extends Settings {
   models: string[];
 }
 
-export const SYSTEM = [
-  "You are kurt-agent, a concise coding assistant running locally.",
-  "You have tools: read_file, write_file, shell, run_code, web_search.",
-  "shell and run_code are sandboxed (filesystem read-only except a private temp",
-  "workspace, no network). web_search is the only networked tool.",
-  "Prefer doing real work with the tools over guessing. Keep answers short.",
-].join(" ");
+/** System prompt with the framework-injected working paths. */
+export function systemPrompt(ws: Workspace): string {
+  return [
+    "You are kurt-agent, a concise coding assistant running locally.",
+    "Tools: read_file, write_file, shell, run_code, web_search.",
+    "shell and run_code are sandboxed and have no network; web_search is the only networked tool.",
+    "",
+    "Working paths (also exported as env vars to shell/run_code):",
+    `- WORKSPACE_DIR = ${ws.root} — your writable working directory. Do all work here.`,
+    `- IMPORT_DIR = ${ws.importDir} — inputs the user provides; READ ONLY, do not modify.`,
+    `- EXPORT_DIR = ${ws.exportDir} — put deliverables/outputs here.`,
+    "",
+    "Path protocol over path discovery: the sandbox only allows writing inside WORKSPACE_DIR.",
+    "Do NOT explore or write elsewhere; always act on these injected paths. Use relative paths",
+    "or the env vars (e.g. $EXPORT_DIR). Prefer doing real work with the tools over guessing.",
+    "Keep answers short.",
+  ].join("\n");
+}
 
 /** Pure precedence: persisted config wins, then env, then defaults. */
 export function resolveSettings(persisted: PersistedConfig, env: Record<string, string | undefined>): Settings {
@@ -71,12 +137,25 @@ export function makeSandbox(): SandboxProvider {
   return process.platform === "darwin" ? new SeatbeltSandbox() : new DirectSandbox();
 }
 
-export function makeTools(sandbox: SandboxProvider, workspace: SessionWorkspace): Tool[] {
+/**
+ * Build the sandboxed tool set rooted at the workspace.
+ * @param codeTemp  ephemeral SessionWorkspace for run_code scripts (kept out of the user's dir)
+ * @param ws        the agent's working area (WORKSPACE_DIR + import/export)
+ * @param allowWrite extra writable dirs beyond the workspace (explicit escalation)
+ */
+export function makeTools(
+  sandbox: SandboxProvider,
+  codeTemp: SessionWorkspace,
+  ws: Workspace,
+  allowWrite: string[] = [],
+): Tool[] {
+  const writable = [ws.root, ...allowWrite];
+  const env = workspaceEnv(ws);
   return [
-    new ReadFileTool(),
-    new WriteFileTool({ roots: [workspace.root] }),
-    new ShellTool(sandbox, { cwd: process.cwd(), writablePaths: [workspace.root] }),
-    new CodeTool(sandbox, workspace),
+    new ReadFileTool({ cwd: ws.root }),
+    new WriteFileTool({ roots: writable }),
+    new ShellTool(sandbox, { cwd: ws.root, writablePaths: writable, env }),
+    new CodeTool(sandbox, codeTemp, { writablePaths: writable, env }),
     new WebSearchTool(new DuckDuckGoSearch()),
   ];
 }

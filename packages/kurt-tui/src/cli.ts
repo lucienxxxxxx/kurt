@@ -10,6 +10,7 @@
 import { runTui } from "./run-tui.tsx";
 import { runChat } from "./run-chat.ts";
 import { configPath, loadConfig, saveConfig, type PersistedConfig } from "./config.ts";
+import { parseLaunchFlags } from "./agent.ts";
 
 const USAGE = `kurt — terminal agent
 
@@ -20,6 +21,14 @@ Usage:
   kurt config set <k> <v>   Set a setting (model | baseURL | context | effort | thinking | mode)
   kurt config path          Print the config file path
   kurt help                 Show this help
+
+Options (for kurt / kurt chat):
+  --workspace <path>        Working dir for the agent (default: current dir). Alias: --workplace
+  --allow-write <path>      Extra writable dir beyond the workspace (repeatable)
+
+The agent works inside the workspace: WORKSPACE_DIR (writable), IMPORT_DIR
+(inputs, read-only), EXPORT_DIR (deliverables). The sandbox blocks writes
+elsewhere unless --allow-write opens them.
 
 Env: DEEPSEEK_API_KEY (required), DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DEEPSEEK_CONTEXT.
 Settings you change in the TUI (/model, /effort, /think, /mode) are remembered in
@@ -69,14 +78,15 @@ function coerce(key: string, value: string): PersistedConfig | null {
   }
 }
 
-const [cmd, ...rest] = process.argv.slice(2);
+const { options, positional } = parseLaunchFlags(process.argv.slice(2));
+const [cmd, ...rest] = positional;
 switch (cmd) {
   case undefined:
   case "tui":
-    await runTui();
+    await runTui(options);
     break;
   case "chat":
-    await runChat(rest);
+    await runChat(rest, options);
     break;
   case "config":
     await runConfig(rest);

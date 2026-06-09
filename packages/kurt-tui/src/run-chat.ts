@@ -4,19 +4,21 @@
  */
 
 import { runLoop, runStdoutMode, messagesFromEvents, SessionWorkspace, type Event, type Message } from "kurt-agent";
-import { resolveConfig, makeSandbox, makeTools, modelFor, SYSTEM } from "./agent.ts";
+import { resolveConfig, makeSandbox, makeTools, modelFor, resolveWorkspace, systemPrompt, type LaunchOptions } from "./agent.ts";
 
-export async function runChat(args: string[]): Promise<void> {
+export async function runChat(args: string[], opts: LaunchOptions = {}): Promise<void> {
   const cfg = await resolveConfig();
   if (!cfg.apiKey) {
     console.error("Missing API key. Set DEEPSEEK_API_KEY, then run `kurt chat`.");
     process.exit(1);
   }
 
+  const ws = resolveWorkspace(opts.workspacePath);
   const sandbox = makeSandbox();
-  const workspace = new SessionWorkspace({ sessionId: "chat" });
-  const tools = makeTools(sandbox, workspace);
+  const codeTemp = new SessionWorkspace({ sessionId: "chat" });
+  const tools = makeTools(sandbox, codeTemp, ws, opts.allowWrite ?? []);
   const model = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey);
+  const system = systemPrompt(ws);
   const messages: Message[] = [];
 
   async function turn(text: string): Promise<void> {
@@ -28,13 +30,13 @@ export async function runChat(args: string[]): Promise<void> {
         yield e;
       }
     };
-    await runStdoutMode(tee(runLoop({ system: SYSTEM, messages, tools, model })));
+    await runStdoutMode(tee(runLoop({ system, messages, tools, model })));
     const appended = messagesFromEvents(captured);
     if (appended.length > 0) messages.push(...appended);
     else messages.pop();
   }
 
-  console.log(`kurt · ${model.name}/${cfg.modelId}`);
+  console.log(`kurt · ${model.name}/${cfg.modelId} · ws ${ws.root}`);
   const oneShot = args.join(" ").trim();
   try {
     if (oneShot.length > 0) {
@@ -52,6 +54,6 @@ export async function runChat(args: string[]): Promise<void> {
       }
     }
   } finally {
-    workspace.dispose();
+    codeTemp.dispose();
   }
 }

@@ -1,17 +1,17 @@
 /**
  * runTui — launch the Ink TUI. Natural-flow display (no alt-screen). Resolves
- * settings from persisted config + env, wires the engine + sandboxed tools, and
- * persists any in-app settings change back to ~/.kurt/config.json.
+ * settings from persisted config + env, the working dir from launch options,
+ * wires the engine + sandboxed tools, and persists in-app settings changes.
  */
 
 import { render } from "ink";
 import { runLoop, SessionWorkspace, type Event, type Message } from "kurt-agent";
 import { compactHistory, serializeForSummary } from "kurt-agent";
 import { App, bannerString, type Compactor, type EngineRunner, type SessionState } from "./tui/index.ts";
-import { resolveConfig, makeSandbox, makeTools, modelFor, SYSTEM } from "./agent.ts";
+import { resolveConfig, makeSandbox, makeTools, modelFor, resolveWorkspace, systemPrompt, type LaunchOptions } from "./agent.ts";
 import { saveConfig } from "./config.ts";
 
-export async function runTui(): Promise<void> {
+export async function runTui(opts: LaunchOptions = {}): Promise<void> {
   if (!process.stdin.isTTY) {
     console.error("The TUI needs an interactive terminal. Run `kurt` directly, or use `kurt chat`.");
     process.exit(1);
@@ -23,17 +23,20 @@ export async function runTui(): Promise<void> {
     process.exit(1);
   }
 
+  const ws = resolveWorkspace(opts.workspacePath);
+  const allowWrite = opts.allowWrite ?? [];
   const sandbox = makeSandbox();
-  let workspace = new SessionWorkspace({ sessionId: "tui" });
-  let tools = makeTools(sandbox, workspace);
+  let codeTemp = new SessionWorkspace({ sessionId: "tui" });
+  let tools = makeTools(sandbox, codeTemp, ws, allowWrite);
   const newSession = (): void => {
-    workspace.dispose();
-    workspace = new SessionWorkspace({ sessionId: "tui" });
-    tools = makeTools(sandbox, workspace);
+    codeTemp.dispose();
+    codeTemp = new SessionWorkspace({ sessionId: "tui" });
+    tools = makeTools(sandbox, codeTemp, ws, allowWrite);
   };
 
+  const system = systemPrompt(ws);
   const run: EngineRunner = (messages: Message[], signal: AbortSignal, session: SessionState): AsyncIterable<Event> =>
-    runLoop({ system: SYSTEM, messages, tools, model: modelFor(session.modelId, cfg.baseURL, cfg.apiKey!), signal });
+    runLoop({ system, messages, tools, model: modelFor(session.modelId, cfg.baseURL, cfg.apiKey!), signal });
 
   const compact: Compactor = async (messages, signal) => {
     const model = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey!);
@@ -56,6 +59,7 @@ export async function runTui(): Promise<void> {
 
   // Natural-flow: no alternate screen → native scrollback + mouse wheel work.
   process.stdout.write("\n" + bannerString(process.stdout.columns || 80) + "\n");
+  process.stdout.write(`\x1b[2m  workspace: ${ws.root}${allowWrite.length ? `  (+write: ${allowWrite.join(", ")})` : ""}\x1b[0m\n`);
 
   const app = render(
     <App
@@ -71,6 +75,6 @@ export async function runTui(): Promise<void> {
   try {
     await app.waitUntilExit();
   } finally {
-    workspace.dispose();
+    codeTemp.dispose();
   }
 }
