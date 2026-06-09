@@ -239,5 +239,5 @@ describe("ShellTool permission gating", () => {
 });
 
 function ctx() {
-  return { signal: new AbortController().signal, emit: () => {} };
+  return { signal: new AbortController().signal, toolCallId: "test-call", emit: () => {} };
 }

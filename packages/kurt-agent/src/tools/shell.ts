@@ -22,7 +22,10 @@ export interface ShellToolOptions {
   allowNetwork?: boolean;
   /** Extra env vars for the command (e.g. WORKSPACE_DIR/IMPORT_DIR/EXPORT_DIR). */
   env?: Record<string, string>;
+  /** Hard wall-clock cap (ms); a per-call `timeout` arg overrides it. */
   timeoutMs?: number;
+  /** Idle cap (ms): killed if no output for this long. */
+  idleTimeoutMs?: number;
   maxOutputBytes?: number;
   /** Absolute path to bash. Default: /bin/bash. */
   bashPath?: string;
@@ -44,6 +47,10 @@ export class ShellTool implements Tool {
       type: "object",
       properties: {
         command: { type: "string", description: "The bash command line to execute." },
+        timeout: {
+          type: "number",
+          description: "Optional max seconds for a long command (e.g. installs/builds). Raises the hard cap.",
+        },
       },
       required: ["command"],
     },
@@ -78,6 +85,7 @@ export class ShellTool implements Tool {
       }
     }
 
+    const timeoutSec = (input as { timeout?: unknown })?.timeout;
     const result = await this.#sandbox.exec(
       {
         cmd: [this.#opts.bashPath ?? "/bin/bash", "-c", command],
@@ -87,14 +95,17 @@ export class ShellTool implements Tool {
           writablePaths: this.#opts.writablePaths ?? [],
           allowNetwork: this.#opts.allowNetwork ?? false,
         },
-        timeoutMs: this.#opts.timeoutMs,
+        timeoutMs: typeof timeoutSec === "number" && timeoutSec > 0 ? timeoutSec * 1000 : this.#opts.timeoutMs,
+        idleTimeoutMs: this.#opts.idleTimeoutMs,
         maxOutputBytes: this.#opts.maxOutputBytes,
+        onOutput: (text) => ctx.emit({ type: "tool_output", id: ctx.toolCallId, text }),
       },
       ctx.signal,
     );
 
     const notes: string[] = [];
-    if (result.timedOut) notes.push("(killed: timeout exceeded)");
+    if (result.timedOut)
+      notes.push(result.timeoutReason === "idle" ? "(killed: no output — idle timeout)" : "(killed: max time exceeded)");
     if (result.truncated) notes.push("(output truncated)");
 
     const body = [

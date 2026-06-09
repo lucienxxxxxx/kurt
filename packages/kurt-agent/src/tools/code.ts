@@ -46,6 +46,7 @@ export interface CodeToolOptions {
   /** Extra env vars for the script (e.g. WORKSPACE_DIR/IMPORT_DIR/EXPORT_DIR). */
   env?: Record<string, string>;
   timeoutMs?: number;
+  idleTimeoutMs?: number;
   maxOutputBytes?: number;
 }
 
@@ -110,13 +111,16 @@ export class CodeTool implements Tool {
             allowNetwork: this.#opts.allowNetwork ?? false,
           },
           timeoutMs: this.#opts.timeoutMs,
+          idleTimeoutMs: this.#opts.idleTimeoutMs,
           maxOutputBytes: this.#opts.maxOutputBytes,
+          onOutput: (text) => ctx.emit({ type: "tool_output", id: ctx.toolCallId, text }),
         },
         ctx.signal,
       );
 
       const notes: string[] = [];
-      if (result.timedOut) notes.push("(killed: timeout exceeded)");
+      if (result.timedOut)
+        notes.push(result.timeoutReason === "idle" ? "(killed: no output — idle timeout)" : "(killed: max time exceeded)");
       if (result.truncated) notes.push("(output truncated)");
 
       const body = [
