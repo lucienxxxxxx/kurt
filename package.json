@@ -1,0 +1,7 @@
+{
+  "name": "kurt",
+  "private": true,
+  "version": "0.0.0",
+  "description": "kurt monorepo — kurt-agent (engine) + kurt-tui (Ink front-end). Workspace root.",
+  "workspaces": ["kurt-agent", "kurt-tui"]
+}
