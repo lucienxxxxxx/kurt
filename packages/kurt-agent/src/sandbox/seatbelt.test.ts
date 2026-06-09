@@ -115,4 +115,45 @@ describe("DirectSandbox", () => {
     await expect(p).rejects.toThrow(/abort/i);
     expect(Date.now() - start).toBeLessThan(2000);
   });
+
+  test("idle timeout kills a quiet command (and reports it)", async () => {
+    const start = Date.now();
+    const r = await new DirectSandbox().exec(
+      { cmd: ["/bin/bash", "-c", "sleep 3"], policy: { writablePaths: [], allowNetwork: false }, idleTimeoutMs: 300, timeoutMs: 10_000 },
+      new AbortController().signal,
+    );
+    expect(r.timedOut).toBe(true);
+    expect(r.timeoutReason).toBe("idle");
+    expect(Date.now() - start).toBeLessThan(1500);
+  });
+
+  test("an actively-printing command is NOT idle-killed", async () => {
+    const r = await new DirectSandbox().exec(
+      {
+        cmd: ["/bin/bash", "-c", "for i in 1 2 3 4 5 6; do echo $i; sleep 0.1; done"],
+        policy: { writablePaths: [], allowNetwork: false },
+        idleTimeoutMs: 400,
+        timeoutMs: 10_000,
+      },
+      new AbortController().signal,
+    );
+    expect(r.timedOut).toBe(false);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("6");
+  });
+
+  test("streams output chunks via onOutput", async () => {
+    const chunks: string[] = [];
+    const r = await new DirectSandbox().exec(
+      {
+        cmd: ["/bin/bash", "-c", "echo hello; echo world"],
+        policy: { writablePaths: [], allowNetwork: false },
+        onOutput: (t) => chunks.push(t),
+      },
+      new AbortController().signal,
+    );
+    expect(chunks.join("")).toContain("hello");
+    expect(chunks.join("")).toContain("world");
+    expect(r.stdout).toContain("hello");
+  });
 });

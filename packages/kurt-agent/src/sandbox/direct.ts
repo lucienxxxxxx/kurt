@@ -10,7 +10,8 @@
 import type { SandboxExecOptions, SandboxProvider, SandboxResult } from "./types.ts";
 import { defaultEnv, runProcess } from "./run-process.ts";
 
-const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_TIMEOUT_MS = 600_000; // hard cap: 10 min
+const DEFAULT_IDLE_MS = 90_000; // kill if no output for 90s
 const DEFAULT_MAX_OUTPUT = 100_000;
 
 export class DirectSandbox implements SandboxProvider {
@@ -24,7 +25,9 @@ export class DirectSandbox implements SandboxProvider {
         env: { ...defaultEnv(), ...options.env },
         stdin: options.stdin,
         timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        idleTimeoutMs: options.idleTimeoutMs ?? DEFAULT_IDLE_MS,
         maxOutputBytes: options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT,
+        onOutput: options.onOutput,
       },
       signal,
     );

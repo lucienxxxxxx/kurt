@@ -23,10 +23,14 @@ export interface SandboxExecOptions {
   env?: Record<string, string>;
   /** Data piped to the process's stdin. */
   stdin?: string;
-  /** Wall-clock limit; the process is SIGKILLed past it. Default 30s. */
+  /** Hard wall-clock cap; the process is SIGKILLed past it. */
   timeoutMs?: number;
+  /** Idle cap; killed if no output for this long. 0/undefined disables it. */
+  idleTimeoutMs?: number;
   /** Per-stream capture cap; output past it is clipped. Default 100 KB. */
   maxOutputBytes?: number;
+  /** Called with each decoded output chunk as it streams in (for live display). */
+  onOutput?: (text: string) => void;
   /** Isolation policy. Ignored by implementations that don't isolate (Direct). */
   policy: SandboxPolicy;
 }
@@ -36,8 +40,10 @@ export interface SandboxResult {
   stderr: string;
   /** Exit code, or null if killed by a signal (timeout/abort). */
   exitCode: number | null;
-  /** True if killed for exceeding `timeoutMs`. */
+  /** True if killed for exceeding a timeout. */
   timedOut: boolean;
+  /** Which timeout fired: "idle" (went quiet) or "cap" (hard limit). */
+  timeoutReason?: "idle" | "cap";
   /** True if stdout/stderr was clipped at `maxOutputBytes`. */
   truncated: boolean;
 }
