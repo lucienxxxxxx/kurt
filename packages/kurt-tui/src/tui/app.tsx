@@ -11,6 +11,7 @@ import type { PermissionBridge } from "./permission.ts";
 
 const NO_SUBSCRIBE = (): (() => void) => () => {};
 const NO_PENDING = (): PermissionRequest | null => null;
+const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 export interface SessionState {
   modelId: string;
@@ -77,12 +78,23 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
   const [mode, setMode] = useState<ChatMode>(config.mode ?? "agent");
   const [ctxUsed, setCtxUsed] = useState(0);
   const [selected, setSelected] = useState(0);
+  const [tick, setTick] = useState(0); // drives the running spinner/elapsed clock
 
   const historyRef = useRef<Message[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const liveRef = useRef<Entry[]>([]);
   const thinkingRef = useRef(thinking);
   thinkingRef.current = thinking;
+  const runStartRef = useRef(0);
+
+  // Tick once a second while running, so the indicator shows it's alive + elapsed.
+  useEffect(() => {
+    if (!running) return;
+    runStartRef.current = Date.now();
+    setTick(0);
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [running]);
 
   // Persist settings whenever they change (skip the initial mount).
   const firstRender = useRef(true);
@@ -302,7 +314,13 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
           <Box marginTop={1}>
             <Text color="green">{"› "}</Text>
             <Text>{input}</Text>
-            <Text dimColor>{running ? " (running… Esc to interrupt)" : "▌"}</Text>
+            {running ? (
+              <Text color="yellow">
+                {` ${SPINNER[tick % SPINNER.length]} running ${Math.floor((Date.now() - runStartRef.current) / 1000)}s · press Esc to interrupt`}
+              </Text>
+            ) : (
+              <Text dimColor>▌</Text>
+            )}
           </Box>
         )}
         <StatusBar status={status} width={cols} />
