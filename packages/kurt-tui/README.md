@@ -65,7 +65,8 @@ project in `<workspace>/.kurt/allowlist.json` (commit it to share with your team
 What you pick in the TUI (`/model`, `/effort`, `/think`, `/mode`) is saved to
 `~/.kurt/config.json` and restored next launch — no need to reconfigure each time.
 Precedence: saved config → env var → default. Env (optional): `DEEPSEEK_BASE_URL`,
-`DEEPSEEK_MODEL`, `DEEPSEEK_CONTEXT`, `DEEPSEEK_EFFORT`, `DEEPSEEK_THINKING=1`.
+`DEEPSEEK_MODEL`, `DEEPSEEK_CONTEXT`, `DEEPSEEK_EFFORT`, `DEEPSEEK_THINKING=1`,
+`DEEPSEEK_MAX_TOKENS` (raise for large outputs like writing big files; default 8192).
 The API key is read from the env only — never written to the config file.
 
 ## Layout

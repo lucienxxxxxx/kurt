@@ -32,7 +32,8 @@ The agent works inside the workspace: WORKSPACE_DIR (writable), IMPORT_DIR
 elsewhere unless --allow-write opens them. Sensitive commands (rm/sudo/…) ask
 for approval; "always allow" is remembered in <workspace>/.kurt/allowlist.json.
 
-Env: DEEPSEEK_API_KEY (required), DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DEEPSEEK_CONTEXT.
+Env: DEEPSEEK_API_KEY (required), DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DEEPSEEK_CONTEXT,
+DEEPSEEK_MAX_TOKENS (raise for large outputs, e.g. writing big files).
 Settings you change in the TUI (/model, /effort, /think, /mode) are remembered in
 the config file below.`;
 

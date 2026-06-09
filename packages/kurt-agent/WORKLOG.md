@@ -4,6 +4,18 @@
 
 ---
 
+## 修复:大文件写入失败(tool 参数被截断)— ✅ (2026-06-10)
+
+**现象**:让 agent 写一个大 HTML(PPT)时,`write_file` 报 `Invalid input: "path" must be a non-empty string`,看似参数 bug。
+
+**根因**:模型把整份 HTML 放进 tool-call 的 `content` 参数,**`max_tokens`(默认 4096)在 JSON 参数中途截断** → `JSON.parse` 失败 → `parseArgs` 把残串塞进 `{_raw}` → `write_file` 拿不到 `path`。
+
+**修复**:① 默认 `max_tokens` 4096→**8192**,且可配(`DEEPSEEK_MAX_TOKENS`/env/config,经 `resolveSettings.maxTokens` 注入)。② provider 解析失败时打 `MALFORMED_ARGS` 标记(并在 `finish_reason==="length"` 时标 `truncated`)。③ `write_file`/`shell`/`run_code` 检测到该标记 → 返回**清晰可操作**的错误("参数非法 JSON,常因输出 token 上限被截断;请调高 DEEPSEEK_MAX_TOKENS 或分多次写")。新增 `src/tool-args.ts`。
+
+**验收**:kurt-agent 48 / kurt-tui 37 通过(含 provider 截断标记、write_file 清晰报错、maxTokens 优先级)。
+
+---
+
 ## 超时 + 实时输出 + 中断修复 — ✅ (2026-06-10)
 
 **起因(用户反馈)**:跑 `npm install` 时按 Esc 无反应、且固定 30s 超时会砍掉长命令。
