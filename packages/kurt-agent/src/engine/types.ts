@@ -80,6 +80,9 @@ export type Event =
   // never stored in message history).
   | { type: "thinking"; text: string }
   | { type: "tool_call"; id: string; name: string; input: unknown }
+  // Live output a running tool streams before its final tool_result (e.g. a shell
+  // command's stdout/stderr). `id` matches the tool_call.
+  | { type: "tool_output"; id: string; text: string }
   | { type: "tool_result"; id: string; content: string; isError: boolean }
   // Real token usage from the model API, forwarded for observability (status bars).
   | { type: "usage"; inputTokens: number; outputTokens: number; totalTokens: number }

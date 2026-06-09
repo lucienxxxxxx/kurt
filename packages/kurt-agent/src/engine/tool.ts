@@ -23,6 +23,8 @@ export interface ToolSpec {
 export interface ToolContext {
   /** Cancellation. Tools SHOULD honor this for long-running work. */
   readonly signal: AbortSignal;
+  /** This invocation's tool_call id — tag streamed `tool_output` events with it. */
+  readonly toolCallId: string;
   /**
    * Push an event into the parent engine's stream (Phase 7 sub-agent bubbling).
    * Ordering relative to the engine's own events is preserved (FIFO).

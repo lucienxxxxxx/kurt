@@ -62,7 +62,6 @@ async function drive(
   const maxTurns = options.maxTurns ?? 50;
 
   const emit = (event: Event): void => queue.push(event);
-  const ctx: ToolContext = { signal, emit };
 
   for (let turn = 1; turn <= maxTurns; turn++) {
     if (signal.aborted) return void emit({ type: "aborted", reason: "signal" });
@@ -144,7 +143,7 @@ async function drive(
     // Execute each call, ALWAYS producing exactly one paired tool_result.
     const resultBlocks: ToolResultBlock[] = [];
     for (const call of toolCalls) {
-      const result = await runTool(toolMap.get(call.name), call, ctx, signal);
+      const result = await runTool(toolMap.get(call.name), call, emit, signal);
       emit({ type: "tool_result", id: call.id, content: result.content, isError: result.isError === true });
       resultBlocks.push({
         type: "tool_result",
@@ -169,11 +168,12 @@ async function drive(
 async function runTool(
   tool: Tool | undefined,
   call: ToolUseBlock,
-  ctx: ToolContext,
+  emit: (event: Event) => void,
   signal: AbortSignal,
 ): Promise<ToolResult> {
   if (signal.aborted) return { content: "Aborted before tool execution.", isError: true };
   if (!tool) return { content: `Unknown tool: ${call.name}`, isError: true };
+  const ctx: ToolContext = { signal, emit, toolCallId: call.id };
   try {
     return await tool.execute(call.input, ctx);
   } catch (err) {
