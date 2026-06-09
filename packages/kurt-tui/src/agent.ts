@@ -88,6 +88,7 @@ export interface Settings {
   modelId: string;
   baseURL: string;
   contextLimit: number;
+  maxTokens: number;
   effort: string;
   thinking: boolean;
   mode: "ask" | "agent" | "plan";
@@ -126,6 +127,7 @@ export function resolveSettings(persisted: PersistedConfig, env: Record<string, 
     modelId,
     baseURL: persisted.baseURL ?? env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
     contextLimit: persisted.context ?? num(env.DEEPSEEK_CONTEXT) ?? 128_000,
+    maxTokens: persisted.maxTokens ?? num(env.DEEPSEEK_MAX_TOKENS) ?? 8192,
     effort: persisted.effort ?? env.DEEPSEEK_EFFORT ?? "medium",
     thinking:
       persisted.thinking ?? (env.DEEPSEEK_THINKING != null ? env.DEEPSEEK_THINKING === "1" : /reason|think/i.test(modelId)),
@@ -140,8 +142,8 @@ export async function resolveConfig(): Promise<ResolvedConfig> {
   return { ...settings, apiKey, models };
 }
 
-export function modelFor(id: string, baseURL: string, apiKey: string): OpenAICompatModel {
-  return new OpenAICompatModel({ name: "deepseek", baseURL, model: id, apiKey });
+export function modelFor(id: string, baseURL: string, apiKey: string, maxTokens?: number): OpenAICompatModel {
+  return new OpenAICompatModel({ name: "deepseek", baseURL, model: id, apiKey, maxTokens });
 }
 
 export function makeSandbox(): SandboxProvider {

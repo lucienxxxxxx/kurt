@@ -14,12 +14,13 @@ export interface PersistedConfig {
   model?: string;
   baseURL?: string;
   context?: number;
+  maxTokens?: number;
   effort?: string;
   thinking?: boolean;
   mode?: "ask" | "agent" | "plan";
 }
 
-const PERSIST_KEYS: (keyof PersistedConfig)[] = ["model", "baseURL", "context", "effort", "thinking", "mode"];
+const PERSIST_KEYS: (keyof PersistedConfig)[] = ["model", "baseURL", "context", "maxTokens", "effort", "thinking", "mode"];
 
 export function configPath(): string {
   return process.env.KURT_CONFIG_PATH ?? join(homedir(), ".kurt", "config.json");

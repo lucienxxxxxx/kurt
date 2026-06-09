@@ -33,6 +33,12 @@ describe("resolveSettings precedence (persisted > env > default)", () => {
     expect(s.modelId).toBe("deepseek-v4-flash");
     expect(s.effort).toBe("medium");
     expect(s.mode).toBe("agent");
+    expect(s.maxTokens).toBe(8192);
+  });
+
+  test("maxTokens: env then persisted override the default", () => {
+    expect(resolveSettings({}, { DEEPSEEK_MAX_TOKENS: "16000" }).maxTokens).toBe(16000);
+    expect(resolveSettings({ maxTokens: 4096 }, { DEEPSEEK_MAX_TOKENS: "16000" }).maxTokens).toBe(4096);
   });
 
   test("env overrides default; persisted overrides env", () => {
