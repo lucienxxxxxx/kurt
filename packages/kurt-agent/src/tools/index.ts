@@ -8,3 +8,4 @@ export { CodeTool } from "./code.ts";
 export type { CodeToolOptions } from "./code.ts";
 export { WebSearchTool } from "./web-search.ts";
 export type { WebSearchToolOptions } from "./web-search.ts";
+export { RequestWriteAccessTool } from "./request-write.ts";

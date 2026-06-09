@@ -20,6 +20,7 @@ import { ShellTool } from "./shell.ts";
 import { CodeTool } from "./code.ts";
 import { WriteFileTool } from "./write-file.ts";
 import { WebSearchTool } from "./web-search.ts";
+import { RequestWriteAccessTool } from "./request-write.ts";
 
 const onDarwin = process.platform === "darwin" && existsSync("/usr/bin/sandbox-exec");
 
@@ -159,6 +160,40 @@ describe("ShellTool env option", () => {
     const tool = new ShellTool(new DirectSandbox(), { env: { WORKSPACE_DIR: "/tmp/ws-xyz" } });
     const res = await tool.execute({ command: "echo $WORKSPACE_DIR" }, ctx());
     expect(res.content).toContain("/tmp/ws-xyz");
+  });
+});
+
+describe("RequestWriteAccessTool", () => {
+  test("approved request adds the dir to the shared writable roots; WriteFileTool then allows it", async () => {
+    const extra = mkdtempSync(join(tmpdir(), "kurt-grant-"));
+    try {
+      const writable: string[] = []; // shared, mutable
+      const writeFile = new WriteFileTool({ roots: writable });
+      // Before grant: writing into `extra` is refused (not in roots).
+      const before = await writeFile.execute({ path: join(extra, "a.txt"), content: "x" }, ctx());
+      expect(before.isError).toBe(true);
+      expect(before.content).toContain("request_write_access");
+
+      const allow = { request: async () => "allow" as const };
+      const req = new RequestWriteAccessTool(writable, allow);
+      const grant = await req.execute({ directory: extra, reason: "save output" }, ctx());
+      expect(grant.isError).toBeFalsy();
+      expect(writable).toContain(extra);
+
+      // After grant: the same WriteFileTool now allows it (roots read live).
+      const after = await writeFile.execute({ path: join(extra, "a.txt"), content: "x" }, ctx());
+      expect(after.isError).toBeFalsy();
+    } finally {
+      rmSync(extra, { recursive: true, force: true });
+    }
+  });
+
+  test("denied request does not grant access", async () => {
+    const writable: string[] = [];
+    const deny = { request: async () => "deny" as const };
+    const res = await new RequestWriteAccessTool(writable, deny).execute({ directory: "/tmp/kurt-x" }, ctx());
+    expect(res.isError).toBe(true);
+    expect(writable).toHaveLength(0);
   });
 });
 

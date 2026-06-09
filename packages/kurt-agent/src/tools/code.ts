@@ -55,8 +55,8 @@ export class CodeTool implements Tool {
     description:
       "Execute a short program and return its output. Supported languages: " +
       `${Object.keys(LANGUAGES).join(", ")}. The script runs sandboxed in a ` +
-      "private temp directory (writable); the rest of the filesystem is read-only " +
-      "and network is disabled.",
+      "private temp directory + the workspace (writable); the rest is read-only and " +
+      "network is disabled. To write outside the workspace, first call request_write_access.",
     inputSchema: {
       type: "object",
       properties: {

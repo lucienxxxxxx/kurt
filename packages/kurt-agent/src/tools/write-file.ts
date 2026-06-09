@@ -20,7 +20,8 @@ export class WriteFileTool implements Tool {
     name: "write_file",
     description:
       "Create or overwrite a UTF-8 text file. Parent directories are created as " +
-      "needed. Writes are restricted to the allowed workspace roots.",
+      "needed. Writes are restricted to the workspace; to write elsewhere, first " +
+      "call request_write_access for that directory.",
     inputSchema: {
       type: "object",
       properties: {
@@ -31,10 +32,12 @@ export class WriteFileTool implements Tool {
     },
   };
 
+  // Kept as the (possibly shared, mutable) reference — resolved at execute time
+  // so dirs granted later via request_write_access are picked up live.
   #roots: string[];
 
   constructor(opts: WriteFileToolOptions = {}) {
-    this.#roots = (opts.roots ?? [process.cwd()]).map((r) => resolve(r));
+    this.#roots = opts.roots ?? [process.cwd()];
   }
 
   async execute(input: unknown, _ctx: ToolContext): Promise<ToolResult> {
@@ -46,12 +49,15 @@ export class WriteFileTool implements Tool {
       return { content: 'Invalid input: "content" must be a string.', isError: true };
     }
 
-    const base = this.#roots[0] ?? process.cwd();
+    const roots = this.#roots.map((r) => resolve(r));
+    const base = roots[0] ?? process.cwd();
     const fullPath = isAbsolute(path) ? resolve(path) : resolve(base, path);
 
-    if (!this.#roots.some((root) => isInside(root, fullPath))) {
+    if (!roots.some((root) => isInside(root, fullPath))) {
       return {
-        content: `Refused: ${path} resolves outside the allowed roots (${this.#roots.join(", ")}).`,
+        content:
+          `Refused: ${path} resolves outside the allowed roots (${roots.join(", ")}). ` +
+          `To write here, first call request_write_access with the target directory.`,
         isError: true,
       };
     }

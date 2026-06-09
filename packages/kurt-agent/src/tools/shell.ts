@@ -37,8 +37,9 @@ export class ShellTool implements Tool {
       "Run a bash command line and return its stdout, stderr, and exit code. " +
       "Prefer combining steps with pipes and && into a SINGLE call (e.g. " +
       "`grep -rl TODO src | head` or `cat a.txt | sort | uniq -c`) instead of " +
-      "many calls. Commands run in a sandbox: the filesystem is read-only except " +
-      "the session workspace, and network is disabled.",
+      "many calls. Commands run in a sandbox: writable only inside the workspace, " +
+      "and network is disabled. To write outside the workspace, first call " +
+      "request_write_access for that directory, then re-run.",
     inputSchema: {
       type: "object",
       properties: {
