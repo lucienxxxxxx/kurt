@@ -12,6 +12,7 @@ import { join } from "node:path";
 import type { Tool, ToolContext, ToolResult, ToolSpec } from "../engine/index.ts";
 import type { SandboxProvider } from "../sandbox/index.ts";
 import type { SessionWorkspace } from "../session/index.ts";
+import { malformedArgsError } from "../tool-args.ts";
 
 interface LanguageSpec {
   /** File extension for the script. */
@@ -79,6 +80,8 @@ export class CodeTool implements Tool {
   }
 
   async execute(input: unknown, ctx: ToolContext): Promise<ToolResult> {
+    const badArgs = malformedArgsError(input);
+    if (badArgs) return { content: badArgs, isError: true };
     const { language, code } = (input ?? {}) as { language?: unknown; code?: unknown };
     if (typeof language !== "string") return { content: 'Invalid input: "language" required.', isError: true };
     if (typeof code !== "string" || code.length === 0) {

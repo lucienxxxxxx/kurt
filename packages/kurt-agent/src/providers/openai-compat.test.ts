@@ -6,6 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import { OpenAICompatModel, toOpenAIMessages, toOpenAITool } from "./openai-compat.ts";
 import type { ModelRequest, ModelStreamEvent } from "../engine/index.ts";
+import { MALFORMED_ARGS } from "../tool-args.ts";
 
 function sseResponse(...lines: string[]): Response {
   const enc = new TextEncoder();
@@ -132,6 +133,24 @@ describe("OpenAICompatModel.stream", () => {
       { type: "usage", inputTokens: 120, outputTokens: 30, totalTokens: 150 },
       { type: "done", stopReason: "end_turn" },
     ]);
+  });
+
+  test("truncated tool-call arguments (finish_reason length) surface a malformed-args marker", async () => {
+    const model = new OpenAICompatModel({
+      baseURL: "https://example.test",
+      model: "m",
+      apiKey: "k",
+      fetchImpl: async () =>
+        sseResponse(
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"write_file","arguments":"{\\"path\\":\\"a\\",\\"content\\":\\"<<incomplete"}}]}}]}\n',
+          'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+          "data: [DONE]\n",
+        ),
+    });
+    const events = await drain(model.stream(REQ, new AbortController().signal));
+    const tu = events.find((e) => e.type === "tool_use") as { type: "tool_use"; input: Record<string, unknown> };
+    expect(tu.input[MALFORMED_ARGS]).toBe(true);
+    expect(tu.input.truncated).toBe(true);
   });
 
   test("throws a helpful error on non-2xx", async () => {

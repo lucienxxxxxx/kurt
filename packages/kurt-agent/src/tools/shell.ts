@@ -12,6 +12,7 @@ import type { Tool, ToolContext, ToolResult, ToolSpec } from "../engine/index.ts
 import type { SandboxProvider } from "../sandbox/index.ts";
 import { classifyCommand } from "../permission/classify.ts";
 import type { PermissionProvider } from "../permission/types.ts";
+import { malformedArgsError } from "../tool-args.ts";
 
 export interface ShellToolOptions {
   /** Working directory for commands. Default: process.cwd(). */
@@ -65,6 +66,8 @@ export class ShellTool implements Tool {
   }
 
   async execute(input: unknown, ctx: ToolContext): Promise<ToolResult> {
+    const badArgs = malformedArgsError(input);
+    if (badArgs) return { content: badArgs, isError: true };
     const command = (input as { command?: unknown })?.command;
     if (typeof command !== "string" || command.trim().length === 0) {
       return { content: 'Invalid input: "command" must be a non-empty string.', isError: true };

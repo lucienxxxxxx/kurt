@@ -9,6 +9,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import type { Tool, ToolContext, ToolResult, ToolSpec } from "../engine/index.ts";
+import { malformedArgsError } from "../tool-args.ts";
 
 export interface WriteFileToolOptions {
   /** Allowed write roots. A path must resolve inside one. Default: [cwd]. */
@@ -41,6 +42,8 @@ export class WriteFileTool implements Tool {
   }
 
   async execute(input: unknown, _ctx: ToolContext): Promise<ToolResult> {
+    const badArgs = malformedArgsError(input);
+    if (badArgs) return { content: badArgs, isError: true };
     const { path, content } = (input ?? {}) as { path?: unknown; content?: unknown };
     if (typeof path !== "string" || path.length === 0) {
       return { content: 'Invalid input: "path" must be a non-empty string.', isError: true };

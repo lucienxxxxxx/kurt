@@ -21,6 +21,7 @@ import { CodeTool } from "./code.ts";
 import { WriteFileTool } from "./write-file.ts";
 import { WebSearchTool } from "./web-search.ts";
 import { RequestWriteAccessTool } from "./request-write.ts";
+import { MALFORMED_ARGS } from "../tool-args.ts";
 
 const onDarwin = process.platform === "darwin" && existsSync("/usr/bin/sandbox-exec");
 
@@ -194,6 +195,18 @@ describe("RequestWriteAccessTool", () => {
     const res = await new RequestWriteAccessTool(writable, deny).execute({ directory: "/tmp/kurt-x" }, ctx());
     expect(res.isError).toBe(true);
     expect(writable).toHaveLength(0);
+  });
+});
+
+describe("malformed tool args", () => {
+  test("write_file turns truncated args into a clear, actionable error", async () => {
+    const res = await new WriteFileTool({ roots: ["/tmp"] }).execute(
+      { [MALFORMED_ARGS]: true, truncated: true, raw: '{"path":"a","content":"<<' },
+      ctx(),
+    );
+    expect(res.isError).toBe(true);
+    expect(res.content).toContain("not valid JSON");
+    expect(res.content.toLowerCase()).toContain("token");
   });
 });
 

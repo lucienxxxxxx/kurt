@@ -15,6 +15,7 @@ import type {
   ModelStreamEvent,
   ToolSpec,
 } from "../engine/index.ts";
+import { MALFORMED_ARGS } from "../tool-args.ts";
 
 /** Minimal fetch shape (looser than Bun's `typeof fetch`, so test stubs fit). */
 export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -45,7 +46,7 @@ export class OpenAICompatModel implements ModelProvider {
       model: opts.model,
       apiKey: opts.apiKey,
       temperature: opts.temperature ?? 0.7,
-      maxTokens: opts.maxTokens ?? 4096,
+      maxTokens: opts.maxTokens ?? 8192,
       fetchImpl: opts.fetchImpl ?? fetch,
     };
   }
@@ -132,7 +133,7 @@ export class OpenAICompatModel implements ModelProvider {
         type: "tool_use",
         id: call.id || `call_${call.name}_${Math.random().toString(36).slice(2, 8)}`,
         name: call.name,
-        input: parseArgs(call.args),
+        input: parseArgs(call.args, finishReason),
       };
     }
 
@@ -212,12 +213,14 @@ function textOf(content: Message["content"]): string {
     .join("");
 }
 
-function parseArgs(args: string): unknown {
+function parseArgs(args: string, finishReason: string): unknown {
   if (!args || args.trim().length === 0) return {};
   try {
     return JSON.parse(args);
   } catch {
-    return { _raw: args }; // let the tool's validation report a clear error
+    // Invalid/incomplete JSON — almost always the args were cut off by the output
+    // token limit (finish_reason "length"). Mark it so tools give a clear error.
+    return { [MALFORMED_ARGS]: true, truncated: finishReason === "length", raw: args };
   }
 }
 
