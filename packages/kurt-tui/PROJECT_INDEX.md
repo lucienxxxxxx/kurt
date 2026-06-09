@@ -1,16 +1,17 @@
 # PROJECT_INDEX — kurt-tui
 
 > Cached architecture map. Read this first; scan only what it points to.
-> Last synced: 2026-06-09, after adding the `kurt` CLI + persisted settings.
+> Last synced: 2026-06-09, after consolidating into the single `kurt` repo (`packages/*`).
 
 ## 1. Overview
 Ink terminal UI for `kurt-agent`. A front-end consumer: subscribes to the engine
 event stream → renders; keystrokes → engine commands. All agent logic comes from
-`kurt-agent` (imported via the workspace as `"kurt-agent"`).
+`kurt-agent` (imported via the workspace as `"kurt-agent"`). This package is
+`packages/kurt-tui` in the single-repo **`kurt`** monorepo; the engine is `packages/kurt-agent`.
 
 ## 2. Stack & commands
 - TypeScript on **Bun** + **Ink/React**; markdown via `marked` + `marked-terminal`.
-- Install once at the workspace root: `cd .. && bun install`.
+- Install once at the repo root (`kurt/`, two levels up): `cd ../.. && bun install`.
 - `bun run tui` / `bun run chat` (need `DEEPSEEK_API_KEY`) · `bun test` · `bun run typecheck`.
 - Global launcher: `kurt` (a `~/.bun/bin/kurt` wrapper → `src/cli.ts`). Subcommands: `kurt` (TUI), `kurt chat`, `kurt config [set|path]`, `kurt help`.
 - Settings (`model/effort/thinking/mode`) persist to `~/.kurt/config.json` (override path with `KURT_CONFIG_PATH`). Precedence: persisted > env > default. API key is env-only.

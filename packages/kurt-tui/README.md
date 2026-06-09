@@ -12,7 +12,7 @@ dependency-free.
 ## Run
 
 ```bash
-cd .. && bun install              # once, at the workspace root
+cd ../.. && bun install           # once, at the repo root (kurt/)
 export DEEPSEEK_API_KEY=sk-your-key
 
 bun run tui                       # interactive TUI

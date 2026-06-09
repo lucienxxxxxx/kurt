@@ -3,19 +3,19 @@
 > Cached architecture map. **Read this first**; scan the tree only for the files
 > this map points you to. Keep it fresh: update on every structural change.
 > Maintained via the `project-module-workflow` skill (see CLAUDE.md §3).
-> Last synced: 2026-06-09, after extracting the TUI to sibling **kurt-tui** and
-> landing engine thinking/usage events + manual compaction.
+> Last synced: 2026-06-09, after consolidating into the single `kurt` repo
+> (`packages/*`) and pushing to GitHub.
 
 ## 1. Overview
 A protocol-agnostic, **zero-I/O** AI agent engine (a **library**) in TypeScript on Bun.
 An inner loop drives `model → tools → model → …` and emits an event stream; all side
-effects live behind injected interfaces. Lives in the **`kurt/` bun-workspace monorepo**
-alongside sibling **`kurt-tui`** (the Ink terminal front-end, its own git repo, depends
-on this package). Public API is `src/lib.ts`.
+effects live behind injected interfaces. This package is `packages/kurt-agent` in the
+single-repo **`kurt`** bun-workspace monorepo; the sibling `packages/kurt-tui` (Ink
+front-end + `kurt` CLI) consumes it. Public API is `src/lib.ts`.
 
 ## 2. Stack & commands
 - Language / runtime: TypeScript on **Bun**. Engine core has **no runtime deps** (UI deps live in kurt-tui).
-- Install: `bun install` **at the workspace root `kurt/`** (lockfile owned there).
+- Install: `bun install` **at the repo root `kurt/`** (two levels up; it owns `bun.lock`).
 - Per-package: `bun test` · `bun run typecheck` (`tsc --noEmit`).
 - Run demos: `bun run dev` · `bun run demo:abort` · `bun run demo:error` · `bun run demo:sandbox`
 - Live chat (stdout) vs a real LLM: `bun run chat ["prompt"]` (needs `DEEPSEEK_API_KEY`).
@@ -57,7 +57,7 @@ and the loop continues.
 - **Add a tool** → create `src/tools/<name>.ts` implementing `Tool` (mirror `shell.ts`); export from `src/tools/index.ts`. Side effects go here, never in engine.
 - **Add a model vendor** → `src/providers/<vendor>.ts` implementing `ModelProvider`; digest wire/stream/token differences inside it. Reference impl: `openai-compat.ts` (any OpenAI-compatible endpoint). Auth/keys stay in the composition root (e.g. `chat.ts`), never in the engine.
 - **Add a sandbox backend** → `src/sandbox/<name>.ts` implementing `SandboxProvider`; only `seatbelt.ts` may reference `sandbox-exec`.
-- **Front-end / TUI** → lives in the **sibling `kurt-tui`** package (Ink), which consumes this lib. A minimal in-repo mode lives at `src/modes/stdout.ts` (clone its shape for new built-in modes).
+- **Front-end / TUI** → lives in the sibling package **`packages/kurt-tui`** (Ink), which consumes this lib. A minimal in-repo mode lives at `src/modes/stdout.ts` (clone its shape for new built-in modes).
 - **Compaction** (Phase 3) → implement `CompactionPolicy`; the seam is already wired in `loop.ts` (engine decides *when* via `thresholdTokens`, policy decides *how* via `compact`).
 - **Sub-agents** (Phase 7) → a `SubAgentTool` that runs its own `runLoop` and bubbles events via `ToolContext.emit`; no engine change.
 - **Tests** live next to code as `*.test.ts` (`src/engine/loop.test.ts`, `src/sandbox/seatbelt.test.ts`, `src/tools/tools.test.ts`). Run all: `bun test`.
@@ -72,6 +72,6 @@ and the loop continues.
 
 ## 7. Status / roadmap
 - **Done:** Phase 1 (minimal closed loop), Phase 2 (real tools + sandbox).
-- **In progress:** Phase 4 — `OpenAICompatModel` live-verified vs DeepSeek; engine gained thinking/usage events. Phase 3 — manual compaction core landed (`compactHistory`). Phase 6 — TUI shipped as sibling **kurt-tui**.
+- **In progress:** Phase 4 — `OpenAICompatModel` live-verified vs DeepSeek; engine gained thinking/usage events. Phase 3 — manual compaction core landed (`compactHistory`). Phase 6 — TUI shipped as sibling package **`packages/kurt-tui`**.
 - **Remaining:** Phase 3 (preload + Memory.md + auto-compaction) · Phase 4 (more vendors + AuthProvider) · Phase 5 (Skills + MCP) · more Phase-6 frontends · Phase 7 (multi-agent).
 - Full roadmap + per-phase constraints: `CLAUDE.md` §4 and §8.
