@@ -16,6 +16,7 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 - Global launcher: `kurt` (a `~/.bun/bin/kurt` wrapper → `src/cli.ts`). Subcommands: `kurt` (TUI), `kurt chat`, `kurt config [set|path]`, `kurt help`.
 - Flags (tui/chat): `--workspace`/`--workplace <path>` (working dir, default cwd) · `--allow-write <path>` (repeatable) · `--yes`/`-y` (auto-approve sensitive commands).
 - **Approval**: sensitive commands (rm/sudo/…) prompt allow/always/deny in the TUI (stdin in chat). "Always" persists the rule key to `<workspace>/.kurt/allowlist.json` (per-project). Classifier lives in `kurt-agent` (`classifyCommand`).
+- **Write outside the workspace**: the agent calls `request_write_access` (same approval prompt); on allow, the dir is opened for write_file/shell/run_code for the rest of the session (`makeTools` shares one mutable writable-roots array). "Always" persists `write-access:<dir>` in the allowlist.
 - **Working paths**: the agent works inside the workspace — `WORKSPACE_DIR` (writable), `IMPORT_DIR=<ws>/import` (inputs, read-only by convention), `EXPORT_DIR=<ws>/export` (deliverables). Injected into the system prompt AND as env to shell/run_code. Sandbox blocks writes outside the workspace (+ `--allow-write` dirs).
 - Settings (`model/effort/thinking/mode`) persist to `~/.kurt/config.json` (override path with `KURT_CONFIG_PATH`). Precedence: persisted > env > default. API key is env-only.
 - Gate before merge: **`bun run typecheck && bun test`** (currently 30 tests, offline).
