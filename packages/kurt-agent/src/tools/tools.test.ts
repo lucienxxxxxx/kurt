@@ -154,6 +154,14 @@ describe("ShellTool through the engine — implementation swap is transparent", 
   });
 });
 
+describe("ShellTool env option", () => {
+  test("injects env vars into the command (e.g. WORKSPACE_DIR)", async () => {
+    const tool = new ShellTool(new DirectSandbox(), { env: { WORKSPACE_DIR: "/tmp/ws-xyz" } });
+    const res = await tool.execute({ command: "echo $WORKSPACE_DIR" }, ctx());
+    expect(res.content).toContain("/tmp/ws-xyz");
+  });
+});
+
 function ctx() {
   return { signal: new AbortController().signal, emit: () => {} };
 }

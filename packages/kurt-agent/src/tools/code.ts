@@ -41,6 +41,10 @@ const ALIASES: Record<string, string> = {
 
 export interface CodeToolOptions {
   allowNetwork?: boolean;
+  /** Extra writable dirs beyond the script temp (e.g. the agent's WORKSPACE_DIR). */
+  writablePaths?: string[];
+  /** Extra env vars for the script (e.g. WORKSPACE_DIR/IMPORT_DIR/EXPORT_DIR). */
+  env?: Record<string, string>;
   timeoutMs?: number;
   maxOutputBytes?: number;
 }
@@ -100,7 +104,11 @@ export class CodeTool implements Tool {
         {
           cmd: lang.argv(interpreter, script),
           cwd: codeDir,
-          policy: { writablePaths: [this.#workspace.root], allowNetwork: this.#opts.allowNetwork ?? false },
+          env: this.#opts.env,
+          policy: {
+            writablePaths: [this.#workspace.root, ...(this.#opts.writablePaths ?? [])],
+            allowNetwork: this.#opts.allowNetwork ?? false,
+          },
           timeoutMs: this.#opts.timeoutMs,
           maxOutputBytes: this.#opts.maxOutputBytes,
         },

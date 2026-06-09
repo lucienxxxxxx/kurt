@@ -18,6 +18,8 @@ export interface ShellToolOptions {
   writablePaths?: string[];
   /** Allow network access. Default: false. */
   allowNetwork?: boolean;
+  /** Extra env vars for the command (e.g. WORKSPACE_DIR/IMPORT_DIR/EXPORT_DIR). */
+  env?: Record<string, string>;
   timeoutMs?: number;
   maxOutputBytes?: number;
   /** Absolute path to bash. Default: /bin/bash. */
@@ -60,6 +62,7 @@ export class ShellTool implements Tool {
       {
         cmd: [this.#opts.bashPath ?? "/bin/bash", "-c", command],
         cwd: this.#opts.cwd ?? process.cwd(),
+        env: this.#opts.env,
         policy: {
           writablePaths: this.#opts.writablePaths ?? [],
           allowNetwork: this.#opts.allowNetwork ?? false,
