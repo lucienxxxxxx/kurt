@@ -1,0 +1,24 @@
+{
+  "name": "kurt-agent",
+  "version": "0.1.0",
+  "description": "A protocol-agnostic, zero-I/O AI agent engine. Phase 1: minimal closed loop.",
+  "type": "module",
+  "module": "src/index.ts",
+  "exports": {
+    ".": "./src/lib.ts"
+  },
+  "private": true,
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "chat": "bun run src/chat.ts",
+    "demo:abort": "bun run src/demos/abort.ts",
+    "demo:error": "bun run src/demos/error.ts",
+    "demo:sandbox": "bun run src/demos/sandbox.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}

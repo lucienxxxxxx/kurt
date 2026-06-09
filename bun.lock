@@ -5,7 +5,7 @@
     "": {
       "name": "kurt",
     },
-    "kurt-agent": {
+    "packages/kurt-agent": {
       "name": "kurt-agent",
       "version": "0.1.0",
       "devDependencies": {
@@ -13,9 +13,12 @@
         "typescript": "^5",
       },
     },
-    "kurt-tui": {
+    "packages/kurt-tui": {
       "name": "kurt-tui",
       "version": "0.1.0",
+      "bin": {
+        "kurt": "./src/cli.ts",
+      },
       "dependencies": {
         "ink": "^7.0.5",
         "kurt-agent": "workspace:*",
@@ -117,9 +120,9 @@
 
     "is-in-ci": ["is-in-ci@2.0.0", "https://registry.npmmirror.com/is-in-ci/-/is-in-ci-2.0.0.tgz", { "bin": { "is-in-ci": "cli.js" } }, "sha512-cFeerHriAnhrQSbpAxL37W1wcJKUUX07HyLWZCW1URJT/ra3GyUTzBgUnh24TMVfNTV2Hij2HLxkPHFZfOZy5w=="],
 
-    "kurt-agent": ["kurt-agent@workspace:kurt-agent"],
+    "kurt-agent": ["kurt-agent@workspace:packages/kurt-agent"],
 
-    "kurt-tui": ["kurt-tui@workspace:kurt-tui"],
+    "kurt-tui": ["kurt-tui@workspace:packages/kurt-tui"],
 
     "marked": ["marked@18.0.5", "https://registry.npmmirror.com/marked/-/marked-18.0.5.tgz", { "bin": { "marked": "bin/marked.js" } }, "sha512-S6GcvALHg6K4ohtu4E7x0a1AqhAjp6cV8KhLSyN9qVapnzJkusVBxZRcIU9AeYsbe6P1hKDusSbEOzGyyuce6w=="],
 

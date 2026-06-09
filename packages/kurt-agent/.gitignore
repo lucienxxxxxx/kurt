@@ -1,0 +1,14 @@
+# dependencies
+node_modules/
+
+# bun (lockfile is owned by the kurt/ workspace root)
+.bun/
+bun.lockb
+bun.lock
+
+# logs / os
+*.log
+.DS_Store
+
+# kurt-agent session scratch (runtime temp dirs)
+.kurt/

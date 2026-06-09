@@ -1,0 +1,12 @@
+# dependencies (workspace lockfile lives at the kurt/ root)
+node_modules/
+.bun/
+bun.lockb
+bun.lock
+
+# logs / os
+*.log
+.DS_Store
+
+# session scratch
+.kurt/

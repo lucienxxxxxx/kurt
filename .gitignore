@@ -1,10 +1,13 @@
-# Member packages are their OWN git repos — not tracked by this root repo.
-kurt-agent/
-kurt-tui/
-
-# Dependencies are installed at this workspace root.
+# Dependencies (installed at this workspace root).
 node_modules/
+
+# bun
+.bun/
+bun.lockb
 
 # os / logs
 .DS_Store
 *.log
+
+# session scratch
+.kurt/

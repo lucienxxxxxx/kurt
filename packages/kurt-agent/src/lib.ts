@@ -1,0 +1,18 @@
+/**
+ * Public API of kurt-agent — the surface consumed by sibling packages (e.g.
+ * kurt-tui) via the package name "kurt-agent". Internally everything still lives
+ * in its own module; this is just the curated re-export.
+ */
+
+export * from "./engine/index.ts";
+export * from "./providers/index.ts";
+export * from "./tools/index.ts";
+export * from "./sandbox/index.ts";
+export * from "./session/index.ts";
+export * from "./search/index.ts";
+
+export { messagesFromEvents } from "./modes/history.ts";
+export { compactHistory, compactionSplit, serializeForSummary } from "./modes/compaction.ts";
+export type { CompactionResult } from "./modes/compaction.ts";
+export { runStdoutMode } from "./modes/stdout.ts";
+export type { StdoutModeOptions } from "./modes/stdout.ts";

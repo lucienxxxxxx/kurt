@@ -1,0 +1,48 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { loadConfig, sanitize, saveConfig } from "./config.ts";
+import { resolveSettings } from "./agent.ts";
+
+const tmpCfg = join(tmpdir(), `kurt-cfg-${process.pid}.json`);
+process.env.KURT_CONFIG_PATH = tmpCfg;
+afterEach(() => rmSync(tmpCfg, { force: true }));
+
+describe("persisted config", () => {
+  test("missing file → empty; save then load round-trips", async () => {
+    expect(await loadConfig()).toEqual({});
+    await saveConfig({ model: "deepseek-v4-pro", thinking: true });
+    expect(await loadConfig()).toEqual({ model: "deepseek-v4-pro", thinking: true });
+  });
+
+  test("save merges patches", async () => {
+    await saveConfig({ model: "m1", effort: "high" });
+    await saveConfig({ model: "m2" });
+    expect(await loadConfig()).toEqual({ model: "m2", effort: "high" });
+  });
+
+  test("sanitize drops unknown keys", () => {
+    expect(sanitize({ model: "x", junk: 1, apiKey: "secret" } as never)).toEqual({ model: "x" });
+  });
+});
+
+describe("resolveSettings precedence (persisted > env > default)", () => {
+  test("uses defaults when nothing set", () => {
+    const s = resolveSettings({}, {});
+    expect(s.modelId).toBe("deepseek-v4-flash");
+    expect(s.effort).toBe("medium");
+    expect(s.mode).toBe("agent");
+  });
+
+  test("env overrides default; persisted overrides env", () => {
+    expect(resolveSettings({}, { DEEPSEEK_MODEL: "from-env" }).modelId).toBe("from-env");
+    expect(resolveSettings({ model: "from-cfg" }, { DEEPSEEK_MODEL: "from-env" }).modelId).toBe("from-cfg");
+  });
+
+  test("thinking: persisted false beats reasoner auto-detect", () => {
+    expect(resolveSettings({}, {}).thinking).toBe(false);
+    expect(resolveSettings({}, { DEEPSEEK_MODEL: "deepseek-reasoner" }).thinking).toBe(true);
+    expect(resolveSettings({ thinking: false }, { DEEPSEEK_MODEL: "deepseek-reasoner" }).thinking).toBe(false);
+  });
+});
