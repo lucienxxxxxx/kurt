@@ -4,6 +4,27 @@
 
 ---
 
+## 模型能力元数据(thinking/effort/limits)— ✅ (2026-06-10)
+
+**用户要求**:对底层模型做能力抽象——给 model 一个"元数据"概念,让 agent 知道这个模型能发挥什么(有没有 thinking、effort 档位、max_tokens、context 最大值等)。先只做这一层(其余 max_tokens/截断/原生工具下一轮)。
+
+**依据**(用户提供的 DeepSeek 文档,WebFetch 读取):
+- thinking_mode 指南:OpenAI 格式经 body `thinking:{type:"enabled"|"disabled"}` 开关(API 默认 enabled);effort 经 `reasoning_effort:"high"|"max"`(legacy low/medium→high、xhigh→max);**thinking 模式下不支持** temperature/top_p/presence_penalty/frequency_penalty;有工具调用时 `reasoning_content` 需回填进上下文。
+- 模型/价格页:`deepseek-v4-flash`、`deepseek-v4-pro` 均 context 1M、max output 384K、支持 thinking 与 tool calls。
+
+**交付物**(纯 provider 层,引擎零改动):
+- `src/providers/capabilities.ts`:`ModelCapabilities`/`ThinkingCapability`/`CapableModel` 类型;DeepSeek V4 元数据表;`capabilitiesFor(id)`(未知 id 回退到"无 thinking"安全档,从而绝不发厂商 reasoning 字段);`mapEffort`(把 UI/legacy 档位钳到模型真正区分的 high/max)。
+- `OpenAICompatModel implements CapableModel`:`#buildBody` 按能力塑形请求——能 thinking 的模型显式发 `thinking:{type}`(行为确定,不靠 API 默认);thinking 开时发 `reasoning_effort` 且**省略 temperature 等**(修了"thinking 模式仍发 temperature"的潜伏 bug);未知/不支持 thinking 的模型永不见 reasoning 字段。
+- `kurt-tui`:`modelFor` 增加 `ReasoningOptions{thinking,effort}`,TUI runner(按 session)与 stdout chat(按 cfg)都把它传进去——**修复 effort 之前是纯 no-op**(之前传进 runner 就被丢弃)。
+
+**关键发现**:DeepSeek V4 的 effort 只区分 high/max,low/medium/high 这个 UI 旋钮其实都塌到 "high";真正的差异是 high vs max(复杂 agent 场景自动 max)。这正解释了之前"effort 什么都不控制"。
+
+**已知缺口(下一轮)**:thinking + 工具调用时需把 `reasoning_content` 回填进 assistant 历史(DeepSeek 要求),当前管线丢弃了 reasoning——这要动引擎 `Message` 归一化,单独处理。故本轮默认 thinking 关(确定且安全)。
+
+**验收**:kurt-agent **56** / kurt-tui **37** 通过;typecheck 干净;`git diff main -- src/engine` 为空(铁律 #3)。
+
+---
+
 ## 简化:去掉 import/export 目录,工作区默认可写 — ✅ (2026-06-10)
 
 **用户要求**:不要再产生 `import/`、`export/` 文件夹;agent 对工作目录默认拥有写权限、无需申请;但敏感 bash 命令仍走用户授权。**文件写入与命令授权两者不相干**。

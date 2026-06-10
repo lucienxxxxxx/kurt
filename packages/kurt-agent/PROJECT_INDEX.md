@@ -3,8 +3,8 @@
 > Cached architecture map. **Read this first**; scan the tree only for the files
 > this map points you to. Keep it fresh: update on every structural change.
 > Maintained via the `project-module-workflow` skill (see CLAUDE.md §3).
-> Last synced: 2026-06-10, after sandbox timeouts (idle+cap) + live output
-> streaming + subprocess group-kill.
+> Last synced: 2026-06-10, after model-capability metadata (thinking/effort/
+> limits) in the provider layer.
 
 ## 1. Overview
 A protocol-agnostic, **zero-I/O** AI agent engine (a **library**) in TypeScript on Bun.
@@ -20,7 +20,7 @@ front-end + `kurt` CLI) consumes it. Public API is `src/lib.ts`.
 - Run demos: `bun run dev` · `bun run demo:abort` · `bun run demo:error` · `bun run demo:sandbox`
 - Live chat (stdout) vs a real LLM: `bun run chat ["prompt"]` (needs `DEEPSEEK_API_KEY`).
 - Public API for consumers (kurt-tui): `src/lib.ts` (re-exports engine/providers/tools/sandbox/session/search + history/compaction/stdout).
-- Gate before any merge: **`bun run typecheck && bun test`** (currently 33 tests pass, all offline).
+- Gate before any merge: **`bun run typecheck && bun test`** (currently 56 tests pass, all offline).
 
 ## 3. Architecture & invariants
 Three layers, three iron rules (full text in `CLAUDE.md` §2 — do not break them):
@@ -42,7 +42,7 @@ and the loop continues.
 | `src/engine/` | The core loop + contracts. **Zero I/O.** | `runLoop` (`loop.ts`); types `Event`/`Message`; ifaces `Tool`/`ModelProvider`/`CompactionPolicy`; `AsyncEventQueue` | — (pure) |
 | `src/engine/loop.ts` | Agentic loop; pairs tool_call/result; abort handling | `runLoop`, `RunLoopOptions` | types, tool, model, compaction, async-queue |
 | `src/engine/async-queue.ts` | Single-consumer channel powering `ToolContext.emit` | `AsyncEventQueue` | — |
-| `src/providers/` | `ModelProvider` impls | `MockModel` (scripted, no deps); `OpenAICompatModel` (DeepSeek/OpenAI Chat Completions over SSE, key injected) | engine types |
+| `src/providers/` | `ModelProvider` impls + model metadata | `MockModel` (scripted, no deps); `OpenAICompatModel` (DeepSeek/OpenAI Chat Completions over SSE, key injected; `implements CapableModel`, shapes the request body from its `capabilities` — thinking on/off, mapped `reasoning_effort`, omits sampling params in thinking mode); `capabilities.ts` (`ModelCapabilities`/`CapableModel`, `capabilitiesFor`, `mapEffort`, DeepSeek V4 table) | engine types |
 | `src/tools/` | `Tool` impls — **all side effects live here** | `ReadFileTool`, `WriteFileTool`, `ShellTool`, `CodeTool`, `WebSearchTool`, `RequestWriteAccessTool`. Shell/Code take `cwd`/`writablePaths`/`env`/`allowNetwork`; `writablePaths`/WriteFile `roots` are read live (a shared mutable array) so `request_write_access` grants take effect immediately | engine, sandbox, session, search, permission |
 | `src/sandbox/` | Subprocess isolation behind `SandboxProvider` | `SeatbeltSandbox`, `DirectSandbox`, `buildProfile`; `run-process.ts` (detached spawn → group-kill; idle-timeout 90s + hard cap 10min; output cap; live `onOutput` streaming; abort) | — |
 | `src/session/` | Per-session scratch dir lifecycle | `SessionWorkspace` (`.root`, `.dir()`, `.dispose()`) | — |
@@ -57,6 +57,7 @@ and the loop continues.
 ## 5. Navigation — "to do X, look at Y"
 - **Add a tool** → create `src/tools/<name>.ts` implementing `Tool` (mirror `shell.ts`); export from `src/tools/index.ts`. Side effects go here, never in engine.
 - **Add a model vendor** → `src/providers/<vendor>.ts` implementing `ModelProvider`; digest wire/stream/token differences inside it. Reference impl: `openai-compat.ts` (any OpenAI-compatible endpoint). Auth/keys stay in the composition root (e.g. `chat.ts`), never in the engine.
+- **Describe a model's abilities** → add a `ModelCapabilities` entry in `src/providers/capabilities.ts` (thinking/effort/context/output-tokens/tools); the orchestration layer reads `capabilitiesFor(id)` to drive defaults and knobs. Pure metadata, no engine change.
 - **Add a sandbox backend** → `src/sandbox/<name>.ts` implementing `SandboxProvider`; only `seatbelt.ts` may reference `sandbox-exec`.
 - **Gate a new risky command** → add a rule in `src/permission/classify.ts` (key+explanation+risk). The front-end (kurt-tui) renders the prompt + persists the allowlist.
 - **Write outside the workspace** → the agent calls `request_write_access` (a Tool) → approval → the dir is pushed to the shared writable-roots array; file/exec tools read it live.

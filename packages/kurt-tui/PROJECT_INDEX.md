@@ -1,7 +1,7 @@
 # PROJECT_INDEX — kurt-tui
 
 > Cached architecture map. Read this first; scan only what it points to.
-> Last synced: 2026-06-10, after dropping import/export dirs (workspace fully writable).
+> Last synced: 2026-06-10, after threading thinking/effort into the model (modelFor reasoning options).
 
 ## 1. Overview
 Ink terminal UI for `kurt-agent`. A front-end consumer: subscribes to the engine
@@ -38,7 +38,7 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 | `src/cli.ts` | **CLI entry / bin `kurt`**: dispatches `tui` (default) / `chat` / `config` / `help` | — | `./run-tui`, `./run-chat`, `./config` |
 | `src/run-tui.tsx` | Launch the TUI: prints banner once, wires runner+compactor+newSession, mounts `<App>` (normal screen), persists settings on change | `runTui` | `kurt-agent`, `./agent`, `./config`, `./tui` |
 | `src/run-chat.ts` | Stdout REPL/one-shot using the same runtime as the TUI | `runChat` | `kurt-agent`, `./agent` |
-| `src/agent.ts` | Shared runtime: `resolveSettings`/`resolveConfig`, `resolveWorkspace`+`workspaceEnv` (only `WORKSPACE_DIR`), `systemPrompt(ws)`, `makeSandbox`/`makeTools(sandbox,codeTemp,ws,allowWrite)`/`modelFor`, `parseLaunchFlags` (`LaunchOptions`) | (those) | `kurt-agent`, `./config` |
+| `src/agent.ts` | Shared runtime: `resolveSettings`/`resolveConfig`, `resolveWorkspace`+`workspaceEnv` (only `WORKSPACE_DIR`), `systemPrompt(ws)`, `makeSandbox`/`makeTools(sandbox,codeTemp,ws,allowWrite)`/`modelFor(id,baseURL,apiKey,maxTokens,ReasoningOptions{thinking,effort})`, `parseLaunchFlags` (`LaunchOptions`) | (those) | `kurt-agent`, `./config` |
 | `src/config.ts` | Persisted user settings at `~/.kurt/config.json`: `loadConfig`/`saveConfig`/`configPath`/`sanitize` | (those) | — |
 | `src/tui/app.tsx` | Root Ink component: `committed` (→ `<Static>` scrollback) + `live` (current turn) + session state, command palette, drives the loop, `/compact`, `/new`, `/clear` | `App`, `EngineRunner`, `Compactor`, `SessionState` | ink, react, kurt-agent, sibling files |
 | `src/tui/conversation.tsx` | Renders one entry: user (divider+plain), kurt (markdown when final), thinking, tool cards (IN:/OUT:, live stream tail + ⠿ while running, clipped), notices | `EntryView` | ink, `./markdown`, `./tool-format`, `./entries` |
