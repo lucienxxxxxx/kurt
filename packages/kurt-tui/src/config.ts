@@ -6,9 +6,9 @@
  * The API key is NEVER persisted here — it stays in the environment.
  */
 
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import { kurtHome } from "./paths.ts";
 
 export interface PersistedConfig {
   model?: string;
@@ -23,7 +23,7 @@ export interface PersistedConfig {
 const PERSIST_KEYS: (keyof PersistedConfig)[] = ["model", "baseURL", "context", "maxTokens", "effort", "thinking", "mode"];
 
 export function configPath(): string {
-  return process.env.KURT_CONFIG_PATH ?? join(homedir(), ".kurt", "config.json");
+  return process.env.KURT_CONFIG_PATH ?? join(kurtHome(), "config.json");
 }
 
 export async function loadConfig(): Promise<PersistedConfig> {
