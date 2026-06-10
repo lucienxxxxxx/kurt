@@ -7,9 +7,23 @@
  */
 
 import { mkdir } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import type { Tool, ToolContext, ToolResult, ToolSpec } from "../engine/index.ts";
 import { malformedArgsError } from "../tool-args.ts";
+import { isInside } from "./fs-access.ts";
+
+// Serialize ALL writes into one FIFO chain: large writes never interleave, and
+// there's no size cap (the model's max_tokens is the natural bound). Module-level
+// so concurrent WriteFileTool calls share the queue.
+let writeQueue: Promise<unknown> = Promise.resolve();
+function enqueueWrite<T>(task: () => Promise<T>): Promise<T> {
+  const run = writeQueue.then(task, task);
+  writeQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
 
 export interface WriteFileToolOptions {
   /** Allowed write roots. A path must resolve inside one. Default: [cwd]. */
@@ -65,18 +79,16 @@ export class WriteFileTool implements Tool {
       };
     }
 
-    try {
-      await mkdir(dirname(fullPath), { recursive: true });
-      await Bun.write(fullPath, content);
-      return { content: `Wrote ${content.length} bytes to ${fullPath}` };
-    } catch (err) {
-      return { content: `Failed to write ${path}: ${err instanceof Error ? err.message : String(err)}`, isError: true };
-    }
+    // Serialized through the shared write queue so concurrent large writes can't
+    // interleave (no artificial size cap — max_tokens is the natural bound).
+    return enqueueWrite(async () => {
+      try {
+        await mkdir(dirname(fullPath), { recursive: true });
+        await Bun.write(fullPath, content);
+        return { content: `Wrote ${content.length} bytes to ${fullPath}` };
+      } catch (err) {
+        return { content: `Failed to write ${path}: ${err instanceof Error ? err.message : String(err)}`, isError: true };
+      }
+    });
   }
-}
-
-/** True if `target` is `root` itself or nested inside it. */
-function isInside(root: string, target: string): boolean {
-  const rel = relative(root, target);
-  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }

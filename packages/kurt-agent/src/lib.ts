@@ -12,6 +12,9 @@ export * from "./session/index.ts";
 export * from "./search/index.ts";
 export * from "./permission/index.ts";
 
+export { truncate, truncationNote, DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES } from "./truncate.ts";
+export type { TruncateOptions, Truncation } from "./truncate.ts";
+
 export { messagesFromEvents } from "./modes/history.ts";
 export { compactHistory, compactionSplit, serializeForSummary } from "./modes/compaction.ts";
 export type { CompactionResult } from "./modes/compaction.ts";
