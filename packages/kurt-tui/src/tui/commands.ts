@@ -13,7 +13,7 @@ export interface CommandSpec {
 export const COMMANDS: CommandSpec[] = [
   { name: "/help", summary: "List commands" },
   { name: "/model", summary: "Switch model", args: "[id]" },
-  { name: "/mode", summary: "Switch mode", args: "[ask|agent|plan]" },
+  { name: "/mode", summary: "Switch mode", args: "[chat|agent|plan]" },
   { name: "/effort", summary: "Reasoning effort", args: "[low|medium|high]" },
   { name: "/think", summary: "Toggle thinking", args: "[on|off]" },
   { name: "/compact", summary: "Summarize & compress context" },
