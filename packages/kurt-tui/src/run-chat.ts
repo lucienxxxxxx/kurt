@@ -13,6 +13,7 @@ import {
   type PermissionProvider,
 } from "kurt-agent";
 import { resolveConfig, makeSandbox, makeTools, modelFor, resolveWorkspace, systemPrompt, type LaunchOptions } from "./agent.ts";
+import { loadContextPrelude } from "./context-files.ts";
 import { Allowlist } from "./allowlist.ts";
 
 /** stdin-prompt approval for the stdout chat; --yes auto-allows. */
@@ -49,7 +50,7 @@ export async function runChat(args: string[], opts: LaunchOptions = {}): Promise
     thinking: cfg.thinking,
     effort: cfg.effort,
   });
-  const system = systemPrompt(ws);
+  const system = systemPrompt(ws) + (await loadContextPrelude(ws.root));
   const messages: Message[] = [];
 
   async function turn(text: string): Promise<void> {

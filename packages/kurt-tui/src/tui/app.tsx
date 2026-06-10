@@ -7,7 +7,10 @@ import { EntryView } from "./conversation.tsx";
 import { StatusBar, type ChatMode, type Status } from "./status-bar.tsx";
 import { Welcome } from "./welcome.tsx";
 import { Approval } from "./approval.tsx";
+import { SessionPicker } from "./session-picker.tsx";
+import { entriesFromMessages } from "./session-view.ts";
 import type { PermissionBridge } from "./permission.ts";
+import type { SessionMeta, SessionRecord } from "../session-store.ts";
 
 const NO_SUBSCRIBE = (): (() => void) => () => {};
 const NO_PENDING = (): PermissionRequest | null => null;
@@ -30,6 +33,27 @@ export interface AppConfig {
   mode?: ChatMode;
 }
 
+/**
+ * Persistence/switching for saved conversations. The controller owns the
+ * "current session" (in the composition root); the App calls it and renders.
+ */
+export interface SessionController {
+  /** Saved sessions for the current workspace, newest first. */
+  list: () => Promise<SessionMeta[]>;
+  /** Switch to a session, returning its full record. */
+  open: (id: string) => Promise<SessionRecord>;
+  /** Delete a session by id. */
+  remove: (id: string) => Promise<void>;
+  /** Persist the current session's messages (autosave after each turn). */
+  save: (messages: Message[]) => Promise<void>;
+  /** Begin a brand-new (empty) session. */
+  startNew: () => Promise<void>;
+  /** Ensure the current session has a title (LLM-summarized, with fallback). */
+  ensureTitle: (messages: Message[]) => Promise<string>;
+  /** Id of the current session (to detect deleting the active one). */
+  currentId: () => string;
+}
+
 export interface AppProps {
   run: EngineRunner;
   compact: Compactor;
@@ -40,18 +64,23 @@ export interface AppProps {
   onConfigChange?: (patch: { model: string; effort: string; thinking: boolean; mode: ChatMode }) => void;
   /** Bridge for sensitive-command approval prompts (when gating is enabled). */
   permission?: PermissionBridge;
+  /** Session persistence + switching (when enabled). */
+  session?: SessionController;
 }
 
 const MODES: ChatMode[] = ["ask", "agent", "plan"];
 const EFFORTS = ["low", "medium", "high"];
 const PALETTE_MAX = 8;
 
-export function App({ run, compact, models, config, onNewSession, onConfigChange, permission }: AppProps) {
+export function App({ run, compact, models, config, onNewSession, onConfigChange, permission, session }: AppProps) {
   const { stdout } = useStdout();
   const { exit } = useApp();
 
   // Current pending approval (null when none). Drives the prompt + key handling.
   const approval = useSyncExternalStore(permission?.subscribe ?? NO_SUBSCRIBE, permission?.getSnapshot ?? NO_PENDING);
+
+  // Session picker overlay (null when closed). Opened by /sessions.
+  const [picker, setPicker] = useState<{ sessions: SessionMeta[]; selected: number } | null>(null);
 
   const [cols, setCols] = useState(stdout.columns || 80);
   useEffect(() => {
@@ -115,6 +144,7 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
   };
 
   async function submit(text: string): Promise<void> {
+    const isFirstTurn = historyRef.current.length === 0;
     commit([{ kind: "user", text }]); // user line lands in scrollback immediately
     const nextHistory = [...historyRef.current, { role: "user", content: [{ type: "text", text }] } as Message];
     historyRef.current = nextHistory;
@@ -141,6 +171,16 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
     setLiveBoth([]);
     abortRef.current = null;
     setRunning(false);
+
+    // Persist the conversation (crash-safe) and title it on the first exchange.
+    if (session) {
+      void session.save(historyRef.current);
+      if (isFirstTurn) {
+        void session.ensureTitle(historyRef.current).then((t) => {
+          if (t) notice("info", `session titled: ${t}`);
+        });
+      }
+    }
   }
 
   async function runCompact(): Promise<void> {
@@ -166,6 +206,34 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
     setCtxUsed(0);
     setStaticKey((k) => k + 1); // remount <Static> so its print index resets
     if (typeof stdout.write === "function") stdout.write("\x1b[2J\x1b[3J\x1b[H"); // wipe screen + scrollback
+  }
+
+  async function openPicker(): Promise<void> {
+    if (!session) return void notice("warn", "sessions are not enabled");
+    setPicker({ sessions: await session.list(), selected: 0 });
+  }
+
+  async function openSession(id: string): Promise<void> {
+    if (!session) return;
+    const rec = await session.open(id);
+    historyRef.current = rec.messages;
+    reset();
+    setCommitted(entriesFromMessages(rec.messages)); // repaint reconstructed history
+    if (rec.model) setModelId(rec.model);
+    setPicker(null);
+    notice("info", `resumed: ${rec.title || "(untitled)"}`);
+  }
+
+  async function deleteSession(id: string): Promise<void> {
+    if (!session) return;
+    const wasCurrent = session.currentId() === id;
+    await session.remove(id);
+    if (wasCurrent) {
+      await session.startNew();
+      historyRef.current = [];
+      reset();
+    }
+    setPicker({ sessions: await session.list(), selected: 0 });
   }
 
   function handleCommand(name: string, args: string[]): void {
@@ -202,11 +270,18 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
       case "/compact":
         void runCompact();
         break;
+      case "/sessions":
+        void openPicker();
+        break;
       case "/clear":
+        // The old conversation is already saved; begin a fresh session so we
+        // don't overwrite it with the cleared history.
+        void session?.startNew();
         historyRef.current = [];
         reset();
         break;
       case "/new":
+        void session?.startNew();
         onNewSession?.();
         historyRef.current = [];
         reset();
@@ -235,6 +310,24 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
       if (running && abortRef.current) abortRef.current.abort();
       else exit();
       return;
+    }
+    // Session picker: arrows move, ↵ opens, d deletes, esc closes.
+    if (picker) {
+      if (key.escape) return void setPicker(null);
+      if (key.upArrow) return void setPicker((p) => (p ? { ...p, selected: Math.max(0, p.selected - 1) } : p));
+      if (key.downArrow)
+        return void setPicker((p) => (p ? { ...p, selected: Math.min(p.sessions.length - 1, p.selected + 1) } : p));
+      if (key.return) {
+        const s = picker.sessions[picker.selected];
+        if (s) void openSession(s.id);
+        return;
+      }
+      if (char === "d") {
+        const s = picker.sessions[picker.selected];
+        if (s) void deleteSession(s.id);
+        return;
+      }
+      return; // swallow other keys while the picker is open
     }
     if (key.escape) {
       if (running && abortRef.current) abortRef.current.abort();
@@ -298,7 +391,7 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
           <EntryView key={i} entry={entry} width={cols} live />
         ))}
 
-        {cmdItems.length > 0 && (
+        {!picker && cmdItems.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
             {cmdItems.slice(0, PALETTE_MAX).map((c, i) => (
               <Text key={c.name} inverse={i === sel} color={i === sel ? undefined : "gray"}>
@@ -310,6 +403,8 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
 
         {approval ? (
           <Approval req={approval} />
+        ) : picker ? (
+          <SessionPicker sessions={picker.sessions} selected={picker.selected} />
         ) : (
           <Box marginTop={1}>
             <Text color="green">{"› "}</Text>

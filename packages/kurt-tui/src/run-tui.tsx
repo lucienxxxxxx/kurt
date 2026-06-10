@@ -7,9 +7,11 @@
 import { render } from "ink";
 import { runLoop, SessionWorkspace, type Event, type Message } from "kurt-agent";
 import { compactHistory, serializeForSummary } from "kurt-agent";
-import { App, bannerString, type Compactor, type EngineRunner, type SessionState } from "./tui/index.ts";
+import { App, bannerString, type Compactor, type EngineRunner, type SessionController, type SessionState } from "./tui/index.ts";
 import { resolveConfig, makeSandbox, makeTools, modelFor, resolveWorkspace, systemPrompt, type LaunchOptions } from "./agent.ts";
 import { saveConfig } from "./config.ts";
+import { loadContextPrelude } from "./context-files.ts";
+import { SessionStore, type SessionRecord } from "./session-store.ts";
 import { Allowlist } from "./allowlist.ts";
 import { PermissionBridge } from "./tui/permission.ts";
 
@@ -37,7 +39,64 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
     tools = makeTools(sandbox, codeTemp, ws, allowWrite, permission);
   };
 
-  const system = systemPrompt(ws);
+  // Preload global memory (~/.kurt/memory.md) + project rules (.kurt/rules.md).
+  const system = systemPrompt(ws) + (await loadContextPrelude(ws.root));
+
+  // Saved conversations (stored globally, listed per workspace). A fresh session
+  // starts in memory now and is persisted on the first turn.
+  const store = new SessionStore();
+  let current = store.create(ws.root, cfg.modelId);
+
+  const makeTitle = async (messages: Message[]): Promise<string> => {
+    const firstUser = messages.find((m) => m.role === "user");
+    const fallback =
+      (firstUser?.content.find((b) => b.type === "text") as { text?: string } | undefined)?.text?.slice(0, 48).trim() ||
+      "untitled";
+    try {
+      const titler = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey!, 32);
+      const prompt =
+        "Give a 3-6 word title (no quotes, no trailing punctuation) for this conversation's topic. " +
+        "Reply with ONLY the title.\n\n" +
+        serializeForSummary(messages.slice(0, 4));
+      let text = "";
+      for await (const ev of titler.stream(
+        { system: "You write short, specific titles.", messages: [{ role: "user", content: [{ type: "text", text: prompt }] }], tools: [] },
+        AbortSignal.timeout(8000),
+      )) {
+        if (ev.type === "text_delta") text += ev.text;
+      }
+      return text.trim().replace(/^["']|["']$/g, "").split("\n")[0]?.slice(0, 60) || fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const sessions: SessionController = {
+    list: () => store.list(ws.root),
+    open: async (id): Promise<SessionRecord> => {
+      const rec = await store.load(id);
+      if (!rec) throw new Error(`session not found: ${id}`);
+      current = rec;
+      return rec;
+    },
+    remove: (id) => store.remove(id),
+    save: async (messages) => {
+      current.messages = messages;
+      await store.save(current);
+    },
+    startNew: async () => {
+      current = store.create(ws.root, cfg.modelId);
+    },
+    ensureTitle: async (messages) => {
+      if (current.title) return current.title;
+      current.title = await makeTitle(messages);
+      current.messages = messages;
+      await store.save(current);
+      return current.title;
+    },
+    currentId: () => current.id,
+  };
+
   const run: EngineRunner = (messages: Message[], signal: AbortSignal, session: SessionState): AsyncIterable<Event> =>
     runLoop({
       system,
@@ -81,6 +140,7 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
       onNewSession={newSession}
       onConfigChange={(patch) => void saveConfig(patch)}
       permission={permission}
+      session={sessions}
       config={{ model: cfg.modelId, contextLimit: cfg.contextLimit, effort: cfg.effort, thinking: cfg.thinking, mode: cfg.mode }}
     />,
   );

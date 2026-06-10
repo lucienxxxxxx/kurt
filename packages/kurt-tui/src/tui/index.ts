@@ -1,5 +1,6 @@
 export { App } from "./app.tsx";
-export type { EngineRunner, Compactor, SessionState, AppConfig, AppProps } from "./app.tsx";
+export type { EngineRunner, Compactor, SessionState, AppConfig, AppProps, SessionController } from "./app.tsx";
+export { entriesFromMessages } from "./session-view.ts";
 export { COMMANDS, filterCommands, parseCommand, isCommand } from "./commands.ts";
 export type { CommandSpec } from "./commands.ts";
 export type { Status, ChatMode } from "./status-bar.tsx";

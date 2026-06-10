@@ -17,8 +17,9 @@ export const COMMANDS: CommandSpec[] = [
   { name: "/effort", summary: "Reasoning effort", args: "[low|medium|high]" },
   { name: "/think", summary: "Toggle thinking", args: "[on|off]" },
   { name: "/compact", summary: "Summarize & compress context" },
-  { name: "/clear", summary: "Clear the conversation" },
-  { name: "/new", summary: "New session (clear + fresh workspace)" },
+  { name: "/sessions", summary: "Browse / switch / delete saved sessions" },
+  { name: "/clear", summary: "Clear & start a fresh conversation" },
+  { name: "/new", summary: "New session (also resets the sandbox temp)" },
   { name: "/exit", summary: "Quit" },
 ];
 
