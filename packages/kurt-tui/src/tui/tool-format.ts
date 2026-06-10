@@ -11,6 +11,12 @@ const TOOL_LABELS: Record<string, string> = {
   read_file: "Read",
   write_file: "Write",
   web_search: "Search",
+  ls: "List",
+  grep: "Grep",
+  brew: "Brew",
+  memory: "Memory",
+  ask_user: "Ask",
+  update_plan: "Plan",
 };
 
 /** Friendly display name (falls back to the raw tool name, e.g. MCP/skill tools). */
@@ -48,6 +54,12 @@ export function toolSummary(name: string, input: unknown): string {
     case "memory":
       s = [o.action, o.scope].filter(Boolean).join(" ");
       break;
+    case "ask_user":
+      s = String(o.question ?? "");
+      break;
+    case "update_plan":
+      s = `${Array.isArray(o.steps) ? o.steps.length : 0} steps`;
+      break;
     default:
       s = "";
   }
@@ -73,6 +85,18 @@ export function formatToolInput(name: string, input: unknown): string {
       return String(o.query ?? "");
     case "run_code":
       return `${String(o.language ?? "code")}\n${String(o.code ?? "")}`;
+    case "ask_user": {
+      const opts = Array.isArray(o.options)
+        ? o.options.map((x, i) => `${String.fromCharCode(65 + i)}. ${String(x)}`).join("\n")
+        : "";
+      return [String(o.question ?? ""), opts].filter((p) => p.length > 0).join("\n");
+    }
+    case "update_plan": {
+      const steps = Array.isArray(o.steps) ? o.steps : [];
+      return steps
+        .map((s, i) => `${i + 1}. ${typeof (s as { title?: unknown })?.title === "string" ? (s as { title: string }).title : ""}`)
+        .join("\n");
+    }
     default:
       return safeJson(input);
   }

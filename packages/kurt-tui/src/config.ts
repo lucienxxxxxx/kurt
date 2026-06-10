@@ -17,7 +17,8 @@ export interface PersistedConfig {
   maxTokens?: number;
   effort?: string;
   thinking?: boolean;
-  mode?: "ask" | "agent" | "plan";
+  /** chat | agent | plan. Legacy "ask" is migrated to "chat" on read. */
+  mode?: "chat" | "agent" | "plan";
 }
 
 const PERSIST_KEYS: (keyof PersistedConfig)[] = ["model", "baseURL", "context", "maxTokens", "effort", "thinking", "mode"];

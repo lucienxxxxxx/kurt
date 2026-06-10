@@ -2,7 +2,16 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseLaunchFlags, resolveWorkspace, systemPrompt, workspaceEnv } from "./agent.ts";
+import { ToolHub, type Tool } from "kurt-agent";
+import {
+  normalizeMode,
+  parseLaunchFlags,
+  resolveWorkspace,
+  systemPrompt,
+  toolsForMode,
+  TOOLS_BY_MODE,
+  workspaceEnv,
+} from "./agent.ts";
 
 describe("resolveWorkspace", () => {
   const root = join(tmpdir(), `kurt-ws-${process.pid}`);
@@ -30,6 +39,47 @@ describe("systemPrompt", () => {
     expect(p).toContain("request_write_access");
     expect(p).not.toContain("IMPORT_DIR");
     expect(p).not.toContain("EXPORT_DIR");
+  });
+
+  test("carries per-mode guidance", () => {
+    expect(systemPrompt({ root: "/w" }, "chat")).toContain("MODE: chat");
+    expect(systemPrompt({ root: "/w" }, "plan")).toContain("update_plan");
+    expect(systemPrompt({ root: "/w" }, "agent")).toContain("MODE: agent");
+  });
+});
+
+describe("modes", () => {
+  test("normalizeMode migrates legacy 'ask' → 'chat' and defaults to agent", () => {
+    expect(normalizeMode("ask")).toBe("chat");
+    expect(normalizeMode("chat")).toBe("chat");
+    expect(normalizeMode("plan")).toBe("plan");
+    expect(normalizeMode(undefined)).toBe("agent");
+    expect(normalizeMode("garbage")).toBe("agent");
+  });
+
+  test("tool profiles: chat read-only, plan adds update_plan, agent gets all", () => {
+    expect(TOOLS_BY_MODE.chat).not.toContain("write_file");
+    expect(TOOLS_BY_MODE.chat).not.toContain("shell");
+    expect(TOOLS_BY_MODE.chat).toContain("ask_user");
+    expect(TOOLS_BY_MODE.plan).toContain("update_plan");
+    expect(TOOLS_BY_MODE.plan).not.toContain("write_file");
+    expect(TOOLS_BY_MODE.agent).toBe("all");
+  });
+
+  test("toolsForMode selects the right subset from the hub", () => {
+    const fake = (name: string): Tool => ({
+      spec: { name, description: name, inputSchema: { type: "object", properties: {} } },
+      async execute() {
+        return { content: "" };
+      },
+    });
+    const hub = new ToolHub(["read_file", "write_file", "shell", "ask_user", "update_plan", "memory", "ls", "grep", "web_search"].map(fake));
+    expect(toolsForMode(hub, "chat").map((t) => t.spec.name).sort()).toEqual(
+      ["ask_user", "grep", "ls", "memory", "read_file", "web_search"].sort(),
+    );
+    expect(toolsForMode(hub, "agent")).toHaveLength(hub.all().length); // everything
+    expect(toolsForMode(hub, "plan").map((t) => t.spec.name)).toContain("update_plan");
+    expect(toolsForMode(hub, "plan").map((t) => t.spec.name)).not.toContain("write_file");
   });
 });
 

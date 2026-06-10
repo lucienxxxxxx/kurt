@@ -8,18 +8,22 @@ import { StatusBar, type ChatMode, type Status } from "./status-bar.tsx";
 import { Welcome } from "./welcome.tsx";
 import { Approval } from "./approval.tsx";
 import { SessionPicker } from "./session-picker.tsx";
+import { AskPrompt } from "./ask-prompt.tsx";
 import { entriesFromMessages } from "./session-view.ts";
 import type { PermissionBridge } from "./permission.ts";
+import type { AskBridge, PendingAsk } from "./ask.ts";
 import type { SessionMeta, SessionRecord } from "../session-store.ts";
 
 const NO_SUBSCRIBE = (): (() => void) => () => {};
 const NO_PENDING = (): PermissionRequest | null => null;
+const NO_ASK = (): PendingAsk | null => null;
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 export interface SessionState {
   modelId: string;
   effort: string;
   thinking: boolean;
+  mode: ChatMode;
 }
 
 export type EngineRunner = (messages: Message[], signal: AbortSignal, session: SessionState) => AsyncIterable<Event>;
@@ -66,18 +70,24 @@ export interface AppProps {
   permission?: PermissionBridge;
   /** Session persistence + switching (when enabled). */
   session?: SessionController;
+  /** Bridge for the agent's ask_user prompts (when enabled). */
+  ask?: AskBridge;
 }
 
-const MODES: ChatMode[] = ["ask", "agent", "plan"];
+const MODES: ChatMode[] = ["chat", "agent", "plan"];
 const EFFORTS = ["low", "medium", "high"];
 const PALETTE_MAX = 8;
 
-export function App({ run, compact, models, config, onNewSession, onConfigChange, permission, session }: AppProps) {
+export function App({ run, compact, models, config, onNewSession, onConfigChange, permission, session, ask }: AppProps) {
   const { stdout } = useStdout();
   const { exit } = useApp();
 
   // Current pending approval (null when none). Drives the prompt + key handling.
   const approval = useSyncExternalStore(permission?.subscribe ?? NO_SUBSCRIBE, permission?.getSnapshot ?? NO_PENDING);
+  // Current pending ask_user question (null when none).
+  const pendingAsk = useSyncExternalStore(ask?.subscribe ?? NO_SUBSCRIBE, ask?.getSnapshot ?? NO_ASK);
+  const [askInput, setAskInput] = useState("");
+  const [askSel, setAskSel] = useState(0);
 
   // Session picker overlay (null when closed). Opened by /sessions.
   const [picker, setPicker] = useState<{ sessions: SessionMeta[]; selected: number } | null>(null);
@@ -155,7 +165,7 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
     abortRef.current = ac;
     const captured: Event[] = [];
     try {
-      for await (const ev of run(nextHistory, ac.signal, { modelId, effort, thinking })) {
+      for await (const ev of run(nextHistory, ac.signal, { modelId, effort, thinking, mode })) {
         captured.push(ev);
         if (ev.type === "usage") setCtxUsed(ev.totalTokens);
         else if (ev.type === "thinking" && !thinkingRef.current) continue;
@@ -311,6 +321,29 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
       else exit();
       return;
     }
+    // ask_user prompt: ↑/↓ pick an option (when not typing), type a free answer,
+    // ↵ submits, esc skips.
+    if (pendingAsk && ask) {
+      const opts = pendingAsk.options;
+      const submit = (answer: string): void => {
+        ask.answer(answer);
+        setAskInput("");
+        setAskSel(0);
+      };
+      if (key.escape) return void submit("");
+      if (askInput.length === 0 && opts.length > 0) {
+        if (key.upArrow) return void setAskSel((s) => Math.max(0, s - 1));
+        if (key.downArrow) return void setAskSel((s) => Math.min(opts.length - 1, s + 1));
+      }
+      if (key.return) {
+        const answer = askInput.trim().length > 0 ? askInput.trim() : (opts[askSel] ?? "");
+        if (answer.length > 0) submit(answer);
+        return;
+      }
+      if (key.backspace || key.delete) return void setAskInput((v) => v.slice(0, -1));
+      if (char && !key.ctrl && !key.meta) return void setAskInput((v) => v + char);
+      return; // swallow other keys while asking
+    }
     // Session picker: arrows move, ↵ opens, d deletes, esc closes.
     if (picker) {
       if (key.escape) return void setPicker(null);
@@ -391,7 +424,7 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
           <EntryView key={i} entry={entry} width={cols} live />
         ))}
 
-        {!picker && cmdItems.length > 0 && (
+        {!picker && !pendingAsk && cmdItems.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
             {cmdItems.slice(0, PALETTE_MAX).map((c, i) => (
               <Text key={c.name} inverse={i === sel} color={i === sel ? undefined : "gray"}>
@@ -403,6 +436,8 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
 
         {approval ? (
           <Approval req={approval} />
+        ) : pendingAsk ? (
+          <AskPrompt pending={pendingAsk} input={askInput} selected={askSel} />
         ) : picker ? (
           <SessionPicker sessions={picker.sessions} selected={picker.selected} />
         ) : (

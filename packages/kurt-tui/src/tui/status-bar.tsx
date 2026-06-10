@@ -1,7 +1,7 @@
 import { Box, Text } from "ink";
 import { formatTokens, scarcityColor } from "./theme.ts";
 
-export type ChatMode = "ask" | "agent" | "plan";
+export type ChatMode = "chat" | "agent" | "plan";
 
 export interface Status {
   model: string;

@@ -8,13 +8,32 @@ import {
   runStdoutMode,
   messagesFromEvents,
   SessionWorkspace,
+  ToolHub,
+  type AskProvider,
   type Event,
   type Message,
   type PermissionProvider,
 } from "kurt-agent";
-import { resolveConfig, makeSandbox, makeTools, modelFor, resolveWorkspace, systemPrompt, type LaunchOptions } from "./agent.ts";
+import { resolveConfig, makeSandbox, makeTools, modelFor, resolveWorkspace, systemPrompt, toolsForMode, type LaunchOptions } from "./agent.ts";
 import { loadContextPrelude } from "./context-files.ts";
 import { Allowlist } from "./allowlist.ts";
+
+/** stdin-prompt for the agent's ask_user tool (pick a letter or type an answer). */
+function cliAsk(): AskProvider {
+  return {
+    async ask(req) {
+      process.stdout.write(`\n❓ ${req.question}\n`);
+      req.options?.forEach((o, i) => process.stdout.write(`  ${String.fromCharCode(65 + i)}. ${o}\n`));
+      const raw = (prompt(req.options?.length ? "  pick a letter or type an answer: " : "  your answer: ") ?? "").trim();
+      if (!raw) return "";
+      if (req.options?.length && raw.length === 1) {
+        const idx = raw.toUpperCase().charCodeAt(0) - 65;
+        if (idx >= 0 && idx < req.options.length) return req.options[idx]!;
+      }
+      return raw;
+    },
+  };
+}
 
 /** stdin-prompt approval for the stdout chat; --yes auto-allows. */
 function cliPermission(allowlist: Allowlist, yes: boolean): PermissionProvider {
@@ -45,12 +64,13 @@ export async function runChat(args: string[], opts: LaunchOptions = {}): Promise
   const permission = cliPermission(await Allowlist.load(ws.root), opts.yes ?? false);
   const sandbox = makeSandbox();
   const codeTemp = new SessionWorkspace({ sessionId: "chat" });
-  const tools = makeTools(sandbox, codeTemp, ws, opts.allowWrite ?? [], permission);
+  const hub = new ToolHub(makeTools(sandbox, codeTemp, ws, opts.allowWrite ?? [], permission, cliAsk()));
+  const tools = toolsForMode(hub, cfg.mode); // chat/agent/plan tool subset
   const model = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey, cfg.maxTokens, {
     thinking: cfg.thinking,
     effort: cfg.effort,
   });
-  const system = systemPrompt(ws) + (await loadContextPrelude(ws.root));
+  const system = systemPrompt(ws, cfg.mode) + (await loadContextPrelude(ws.root));
   const messages: Message[] = [];
 
   async function turn(text: string): Promise<void> {

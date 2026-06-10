@@ -5,15 +5,16 @@
  */
 
 import { render } from "ink";
-import { runLoop, SessionWorkspace, type Event, type Message } from "kurt-agent";
+import { runLoop, SessionWorkspace, ToolHub, type Event, type Message } from "kurt-agent";
 import { compactHistory, serializeForSummary } from "kurt-agent";
 import { App, bannerString, type Compactor, type EngineRunner, type SessionController, type SessionState } from "./tui/index.ts";
-import { resolveConfig, makeSandbox, makeTools, modelFor, resolveWorkspace, systemPrompt, type LaunchOptions } from "./agent.ts";
+import { resolveConfig, makeSandbox, makeTools, modelFor, resolveWorkspace, systemPrompt, toolsForMode, type LaunchOptions } from "./agent.ts";
 import { saveConfig } from "./config.ts";
 import { loadContextPrelude } from "./context-files.ts";
 import { SessionStore, type SessionRecord } from "./session-store.ts";
 import { Allowlist } from "./allowlist.ts";
 import { PermissionBridge } from "./tui/permission.ts";
+import { AskBridge } from "./tui/ask.ts";
 
 export async function runTui(opts: LaunchOptions = {}): Promise<void> {
   if (!process.stdin.isTTY) {
@@ -30,17 +31,19 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
   const ws = resolveWorkspace(opts.workspacePath);
   const allowWrite = opts.allowWrite ?? [];
   const permission = new PermissionBridge(await Allowlist.load(ws.root));
+  const askBridge = new AskBridge();
   const sandbox = makeSandbox();
   let codeTemp = new SessionWorkspace({ sessionId: "tui" });
-  let tools = makeTools(sandbox, codeTemp, ws, allowWrite, permission);
+  // All tools live in one hub; the runner hands each mode its allowed subset.
+  let hub = new ToolHub(makeTools(sandbox, codeTemp, ws, allowWrite, permission, askBridge));
   const newSession = (): void => {
     codeTemp.dispose();
     codeTemp = new SessionWorkspace({ sessionId: "tui" });
-    tools = makeTools(sandbox, codeTemp, ws, allowWrite, permission);
+    hub = new ToolHub(makeTools(sandbox, codeTemp, ws, allowWrite, permission, askBridge));
   };
 
   // Preload global memory (~/.kurt/memory.md) + project rules (.kurt/rules.md).
-  const system = systemPrompt(ws) + (await loadContextPrelude(ws.root));
+  const prelude = await loadContextPrelude(ws.root);
 
   // Saved conversations (stored globally, listed per workspace). A fresh session
   // starts in memory now and is persisted on the first turn.
@@ -99,9 +102,9 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
 
   const run: EngineRunner = (messages: Message[], signal: AbortSignal, session: SessionState): AsyncIterable<Event> =>
     runLoop({
-      system,
+      system: systemPrompt(ws, session.mode) + prelude,
       messages,
-      tools,
+      tools: toolsForMode(hub, session.mode),
       model: modelFor(session.modelId, cfg.baseURL, cfg.apiKey!, cfg.maxTokens, {
         thinking: session.thinking,
         effort: session.effort,
@@ -141,6 +144,7 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
       onConfigChange={(patch) => void saveConfig(patch)}
       permission={permission}
       session={sessions}
+      ask={askBridge}
       config={{ model: cfg.modelId, contextLimit: cfg.contextLimit, effort: cfg.effort, thinking: cfg.thinking, mode: cfg.mode }}
     />,
   );

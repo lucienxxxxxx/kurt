@@ -21,6 +21,10 @@ describe("tool-format", () => {
     expect(toolSummary("run_code", { language: "python", code: "print(1)" })).toBe("python");
     expect(toolSummary("grep", { pattern: "TODO", path: "src" })).toBe("/TODO/ src");
     expect(toolSummary("memory", { action: "append", scope: "global" })).toBe("append global");
+    expect(toolSummary("ask_user", { question: "Which one?" })).toBe("Which one?");
+    expect(toolSummary("update_plan", { steps: [{ title: "a" }, { title: "b" }] })).toBe("2 steps");
+    expect(toolLabel("ask_user")).toBe("Ask");
+    expect(toolLabel("update_plan")).toBe("Plan");
     // collapses newlines and clips long input to one line
     const long = toolSummary("shell", { command: "echo a\n".repeat(40) });
     expect(long).not.toContain("\n");
