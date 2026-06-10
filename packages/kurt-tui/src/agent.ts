@@ -15,6 +15,9 @@ import {
   CodeTool,
   WebSearchTool,
   RequestWriteAccessTool,
+  LsTool,
+  GrepTool,
+  BrewTool,
   DuckDuckGoSearch,
   type SandboxProvider,
   type Tool,
@@ -181,10 +184,17 @@ export function makeTools(
   const writable = [ws.root, ...allowWrite];
   const env = workspaceEnv(ws);
   const tools: Tool[] = [
-    new ReadFileTool({ cwd: ws.root }),
+    // read/ls/grep are pure-fs and confined to the workspace (+ approved dirs) —
+    // they share the same live `writable` roots array as write_file.
+    new ReadFileTool({ roots: writable }),
+    new LsTool({ roots: writable }),
+    new GrepTool({ roots: writable }),
     new WriteFileTool({ roots: writable }),
     new ShellTool(sandbox, { cwd: ws.root, writablePaths: writable, env, permission }),
     new CodeTool(sandbox, codeTemp, { writablePaths: writable, env }),
+    // brew runs UNSANDBOXED (network + system writes) via a Direct runner, gated
+    // by approval for mutating subcommands.
+    new BrewTool(new DirectSandbox(), { cwd: ws.root, permission }),
     new WebSearchTool(new DuckDuckGoSearch()),
   ];
   // The escalation tool only makes sense when there's an approver to ask.
