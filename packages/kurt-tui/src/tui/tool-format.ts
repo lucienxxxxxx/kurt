@@ -18,6 +18,48 @@ export function toolLabel(name: string): string {
   return TOOL_LABELS[name] ?? name;
 }
 
+/** A compact one-line brief for the tool-card header (or "" when not useful). */
+export function toolSummary(name: string, input: unknown): string {
+  const o = (input ?? {}) as Record<string, unknown>;
+  let s: string;
+  switch (name) {
+    case "shell":
+      s = String(o.command ?? "");
+      break;
+    case "read_file":
+    case "write_file":
+      s = String(o.path ?? "");
+      break;
+    case "ls":
+      s = String(o.path ?? ".");
+      break;
+    case "grep":
+      s = `/${String(o.pattern ?? "")}/${o.path ? " " + String(o.path) : ""}`;
+      break;
+    case "web_search":
+      s = String(o.query ?? "");
+      break;
+    case "run_code":
+      s = String(o.language ?? "code");
+      break;
+    case "brew":
+      s = String(o.args ?? "");
+      break;
+    case "memory":
+      s = [o.action, o.scope].filter(Boolean).join(" ");
+      break;
+    default:
+      s = "";
+  }
+  return oneLine(s, 60);
+}
+
+/** Collapse whitespace to a single line and clip to `max` chars. */
+function oneLine(s: string, max: number): string {
+  const t = s.replace(/\s+/g, " ").trim();
+  return t.length > max ? t.slice(0, max - 1) + "…" : t;
+}
+
 /** The most useful one-or-few-line view of a tool's input. */
 export function formatToolInput(name: string, input: unknown): string {
   const o = (input ?? {}) as Record<string, unknown>;

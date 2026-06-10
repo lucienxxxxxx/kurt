@@ -9,6 +9,7 @@ import { formatTokens, scarcityColor, usedFraction } from "./theme.ts";
 import { bannerString } from "./banner.ts";
 import { Welcome } from "./welcome.tsx";
 import { App, type Compactor } from "./app.tsx";
+import { EntryView } from "./conversation.tsx";
 
 describe("theme helpers", () => {
   test("formatTokens", () => {
@@ -125,5 +126,33 @@ describe("App render (Ink, no TTY)", () => {
 
   test("pushUser adds a user entry", () => {
     expect(pushUser([], "hi")).toEqual([{ kind: "user", text: "hi" }]);
+  });
+});
+
+describe("EntryView render", () => {
+  test("tool card: marker + label + brief one-liner, then IN:/OUT:", () => {
+    const { lastFrame, unmount } = render(
+      <EntryView
+        entry={{ kind: "tool", id: "c1", name: "shell", input: { command: "ls -la" }, result: "file1\nfile2", isError: false }}
+        width={80}
+        live={false}
+      />,
+    );
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("⚙ Bash"); // marker + label unchanged
+    expect(frame).toContain("ls -la"); // brief one-liner on the header
+    expect(frame).toContain("IN:");
+    expect(frame).toContain("OUT:");
+    unmount();
+  });
+
+  test("thinking renders its text (no crash) for resumed/live reasoning", () => {
+    const { lastFrame, unmount } = render(
+      <EntryView entry={{ kind: "thinking", text: "weighing options" }} width={80} live={false} />,
+    );
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("thinking");
+    expect(frame).toContain("weighing options");
+    unmount();
   });
 });

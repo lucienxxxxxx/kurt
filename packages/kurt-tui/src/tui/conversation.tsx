@@ -1,7 +1,7 @@
 import { Box, Text } from "ink";
 import { type Entry } from "./entries.ts";
 import { renderMarkdown } from "./markdown.ts";
-import { clip, formatToolInput, labeled, toolLabel } from "./tool-format.ts";
+import { clip, formatToolInput, labeled, toolLabel, toolSummary } from "./tool-format.ts";
 
 export function EntryView({ entry, width, live }: { entry: Entry; width: number; live: boolean }) {
   switch (entry.kind) {
@@ -29,22 +29,22 @@ export function EntryView({ entry, width, live }: { entry: Entry; width: number;
     case "thinking":
       return (
         <Box flexDirection="column" marginTop={1}>
-          <Text color="gray" italic>
-            ✿ thinking
-          </Text>
-          <Text color="gray" italic>
-            {entry.text}
-          </Text>
+          <Text color="gray">✿ thinking</Text>
+          <Text color="gray">{entry.text}</Text>
         </Box>
       );
     case "tool": {
       const done = entry.result !== undefined;
       // Finished → the formatted result (head); still running → live stream tail.
       const out = done ? clip(entry.result!, 12, 800) : entry.stream ? tail(entry.stream, 10) : null;
+      const summary = toolSummary(entry.name, entry.input);
       return (
         <Box flexDirection="column" marginTop={1}>
+          {/* marker + tool name + an optional brief one-liner, then IN:/OUT:. */}
           <Text color="yellow" bold>
-            {`⚙ ${toolLabel(entry.name)}${done ? "" : " ⠿"}`}
+            {`⚙ ${toolLabel(entry.name)}`}
+            {summary ? <Text dimColor>{`  ${summary}`}</Text> : null}
+            {done ? "" : " ⠿"}
           </Text>
           <Text dimColor>{labeled("IN: ", formatToolInput(entry.name, entry.input))}</Text>
           {out && (

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { clip, formatToolInput, labeled, toolLabel } from "./tool-format.ts";
+import { clip, formatToolInput, labeled, toolLabel, toolSummary } from "./tool-format.ts";
 
 describe("tool-format", () => {
   test("toolLabel maps known tools and passes through unknown ones", () => {
@@ -14,6 +14,18 @@ describe("tool-format", () => {
     expect(formatToolInput("web_search", { query: "bun ffi" })).toBe("bun ffi");
     expect(formatToolInput("run_code", { language: "python", code: "print(1)" })).toBe("python\nprint(1)");
     expect(formatToolInput("mystery", { a: 1 })).toBe('{"a":1}');
+  });
+
+  test("toolSummary gives a compact one-liner for the header", () => {
+    expect(toolSummary("read_file", { path: "src/x.ts" })).toBe("src/x.ts");
+    expect(toolSummary("run_code", { language: "python", code: "print(1)" })).toBe("python");
+    expect(toolSummary("grep", { pattern: "TODO", path: "src" })).toBe("/TODO/ src");
+    expect(toolSummary("memory", { action: "append", scope: "global" })).toBe("append global");
+    // collapses newlines and clips long input to one line
+    const long = toolSummary("shell", { command: "echo a\n".repeat(40) });
+    expect(long).not.toContain("\n");
+    expect(long.length).toBeLessThanOrEqual(60);
+    expect(toolSummary("mystery", {})).toBe("");
   });
 
   test("clip truncates by lines and chars, flagging when cut", () => {
