@@ -10,6 +10,7 @@ describe("capabilitiesFor", () => {
       expect(c.thinking.supported).toBe(true);
       expect(c.thinking.effortLevels).toEqual(["high", "max"]);
       expect(c.thinking.unsupportedParams).toContain("temperature");
+      expect(c.thinking.replayReasoning).toBe(true); // DeepSeek needs reasoning echoed back
       expect(c.maxContextTokens).toBeGreaterThanOrEqual(1_000_000);
       expect(c.maxOutputTokens).toBeGreaterThanOrEqual(384_000);
     }
@@ -18,6 +19,7 @@ describe("capabilitiesFor", () => {
   test("falls back to a safe no-thinking descriptor for unknown ids", () => {
     const c = capabilitiesFor("some-random-model");
     expect(c.thinking.supported).toBe(false);
+    expect(c.thinking.replayReasoning).toBe(false); // never replay for unknown models
     expect(c.tools).toBe(true);
     expect(c).toEqual(unknownModel("some-random-model"));
   });

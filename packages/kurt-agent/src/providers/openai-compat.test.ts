@@ -56,6 +56,31 @@ describe("toOpenAIMessages", () => {
     const msgs = toOpenAIMessages("", [{ role: "user", content: [{ type: "text", text: "x" }] }]);
     expect((msgs[0] as { role: string }).role).toBe("user");
   });
+
+  test("replays reasoning_content on a tool-calling assistant turn only when includeReasoning", () => {
+    const history = [
+      {
+        role: "assistant" as const,
+        content: [
+          { type: "thinking" as const, text: "reasoning here" },
+          { type: "tool_use" as const, id: "c1", name: "shell", input: { command: "ls" } },
+        ],
+      },
+    ];
+    const withReasoning = toOpenAIMessages("", history, { includeReasoning: true });
+    expect((withReasoning[0] as { reasoning_content?: string }).reasoning_content).toBe("reasoning here");
+
+    const withoutFlag = toOpenAIMessages("", history); // default: no replay
+    expect((withoutFlag[0] as { reasoning_content?: string }).reasoning_content).toBeUndefined();
+  });
+
+  test("does NOT replay reasoning on a final-answer assistant turn (no tool calls)", () => {
+    const history = [
+      { role: "assistant" as const, content: [{ type: "thinking" as const, text: "r" }, { type: "text" as const, text: "answer" }] },
+    ];
+    const msgs = toOpenAIMessages("", history, { includeReasoning: true });
+    expect((msgs[0] as { reasoning_content?: string }).reasoning_content).toBeUndefined();
+  });
 });
 
 describe("toOpenAITool", () => {

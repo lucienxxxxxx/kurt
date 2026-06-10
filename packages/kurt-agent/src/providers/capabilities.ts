@@ -32,6 +32,12 @@ export interface ThinkingCapability {
    * builder must omit them. DeepSeek: temperature/top_p/presence/frequency.
    */
   unsupportedParams: string[];
+  /**
+   * Whether the model REQUIRES the assistant's reasoning to be echoed back (as
+   * `reasoning_content`) on later requests when tools were used. DeepSeek does;
+   * most don't. When false, the provider never serializes the stored reasoning.
+   */
+  replayReasoning: boolean;
 }
 
 /** Everything the orchestration layer needs to know about one model id. */
@@ -65,6 +71,7 @@ const DEEPSEEK_V4_THINKING: ThinkingCapability = {
   effortLevels: ["high", "max"],
   defaultEffort: "high",
   unsupportedParams: ["temperature", "top_p", "presence_penalty", "frequency_penalty"],
+  replayReasoning: true, // DeepSeek requires reasoning_content echoed back with tool calls
 };
 
 function deepseekV4(id: string, label: string): ModelCapabilities {
@@ -99,6 +106,7 @@ export function unknownModel(id: string): ModelCapabilities {
       effortLevels: [],
       defaultEffort: "",
       unsupportedParams: [],
+      replayReasoning: false,
     },
   };
 }

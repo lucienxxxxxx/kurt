@@ -81,7 +81,9 @@ export class OpenAICompatModel implements ModelProvider, CapableModel {
 
     const body: Record<string, unknown> = {
       model: this.#o.model,
-      messages: toOpenAIMessages(request.system, request.messages),
+      messages: toOpenAIMessages(request.system, request.messages, {
+        includeReasoning: caps.thinking.replayReasoning,
+      }),
       tools: request.tools.length > 0 ? request.tools.map(toOpenAITool) : undefined,
       max_tokens: this.#o.maxTokens,
       stream: true,
@@ -201,8 +203,21 @@ interface ChatChunk {
 
 // ── Translation: normalized kurt-agent ↔ OpenAI wire format ──────────────────
 
+export interface ToOpenAIMessagesOptions {
+  /**
+   * Echo stored reasoning back as `reasoning_content` on assistant messages that
+   * made tool calls (DeepSeek thinking-mode requirement). Gated by the model's
+   * `capabilities.thinking.replayReasoning`; off for models that don't need it.
+   */
+  includeReasoning?: boolean;
+}
+
 /** Build the OpenAI `messages` array from the engine's normalized history. */
-export function toOpenAIMessages(system: string, messages: Message[]): unknown[] {
+export function toOpenAIMessages(
+  system: string,
+  messages: Message[],
+  opts: ToOpenAIMessagesOptions = {},
+): unknown[] {
   const out: unknown[] = [];
   if (system.trim().length > 0) out.push({ role: "system", content: system });
 
@@ -223,9 +238,13 @@ export function toOpenAIMessages(system: string, messages: Message[]): unknown[]
             function: { name: t.name, arguments: JSON.stringify(t.input ?? {}) },
           };
         });
+      // DeepSeek wants reasoning echoed back only when the turn made tool calls;
+      // it's ignored (harmless) otherwise, so we omit it there to stay minimal.
+      const reasoning = opts.includeReasoning && toolCalls.length > 0 ? thinkingOf(msg.content) : "";
       out.push({
         role: "assistant",
         content: text.length > 0 ? text : null,
+        ...(reasoning.length > 0 ? { reasoning_content: reasoning } : {}),
         ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
       });
       continue;
@@ -251,6 +270,13 @@ function textOf(content: Message["content"]): string {
   return content
     .filter((b) => b.type === "text")
     .map((b) => (b as Extract<typeof b, { type: "text" }>).text)
+    .join("");
+}
+
+function thinkingOf(content: Message["content"]): string {
+  return content
+    .filter((b) => b.type === "thinking")
+    .map((b) => (b as Extract<typeof b, { type: "thinking" }>).text)
     .join("");
 }
 
