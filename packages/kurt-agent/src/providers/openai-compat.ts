@@ -16,6 +16,7 @@ import type {
   ToolSpec,
 } from "../engine/index.ts";
 import { MALFORMED_ARGS } from "../tool-args.ts";
+import { capabilitiesFor, mapEffort, type CapableModel, type ModelCapabilities } from "./capabilities.ts";
 
 /** Minimal fetch shape (looser than Bun's `typeof fetch`, so test stubs fit). */
 export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -31,24 +32,70 @@ export interface OpenAICompatOptions {
   name?: string;
   temperature?: number;
   maxTokens?: number;
+  /**
+   * Enable the model's reasoning/"thinking" pass (only sent for models whose
+   * capabilities advertise thinking support). Default: false (deterministic,
+   * and avoids the reasoning-replay requirement that tool calls would impose).
+   */
+  thinking?: boolean;
+  /** Requested reasoning effort (UI/legacy value, mapped to a wire value). */
+  effort?: string;
   /** Injectable fetch for offline testing. Default: global fetch. */
   fetchImpl?: FetchLike;
 }
 
-export class OpenAICompatModel implements ModelProvider {
+export class OpenAICompatModel implements ModelProvider, CapableModel {
   readonly name: string;
-  #o: Required<Omit<OpenAICompatOptions, "name">>;
+  readonly capabilities: ModelCapabilities;
+  #o: Required<Omit<OpenAICompatOptions, "name" | "effort">> & { effort?: string };
 
   constructor(opts: OpenAICompatOptions) {
     this.name = opts.name ?? "openai-compat";
+    this.capabilities = capabilitiesFor(opts.model);
     this.#o = {
       baseURL: opts.baseURL.replace(/\/+$/, ""),
       model: opts.model,
       apiKey: opts.apiKey,
       temperature: opts.temperature ?? 0.7,
       maxTokens: opts.maxTokens ?? 8192,
+      thinking: opts.thinking ?? false,
+      effort: opts.effort,
       fetchImpl: opts.fetchImpl ?? fetch,
     };
+  }
+
+  /**
+   * Build the request body, shaped by the model's capabilities:
+   * - thinking-capable models get an explicit `thinking:{type}` (so behaviour is
+   *   deterministic regardless of the API default);
+   * - while thinking is on we send `reasoning_effort` and OMIT the sampling
+   *   params the API rejects (temperature/top_p/…);
+   * - models with no thinking support never see vendor reasoning fields.
+   */
+  #buildBody(request: ModelRequest): Record<string, unknown> {
+    const caps = this.capabilities;
+    const thinkOn = this.#o.thinking && caps.thinking.supported;
+
+    const body: Record<string, unknown> = {
+      model: this.#o.model,
+      messages: toOpenAIMessages(request.system, request.messages),
+      tools: request.tools.length > 0 ? request.tools.map(toOpenAITool) : undefined,
+      max_tokens: this.#o.maxTokens,
+      stream: true,
+      // Ask the API to include a final usage chunk (real token counts).
+      stream_options: { include_usage: true },
+    };
+
+    if (caps.thinking.supported) {
+      body.thinking = { type: thinkOn ? "enabled" : "disabled" };
+    }
+    if (thinkOn) {
+      body.reasoning_effort = mapEffort(this.#o.effort, caps.thinking);
+    } else {
+      // Sampling params are only valid (and only meaningful) outside thinking mode.
+      body.temperature = this.#o.temperature;
+    }
+    return body;
   }
 
   /** No standard count endpoint; estimate ~4 chars/token (enough for compaction). */
@@ -59,16 +106,7 @@ export class OpenAICompatModel implements ModelProvider {
   }
 
   async *stream(request: ModelRequest, signal: AbortSignal): AsyncIterable<ModelStreamEvent> {
-    const body = {
-      model: this.#o.model,
-      messages: toOpenAIMessages(request.system, request.messages),
-      tools: request.tools.length > 0 ? request.tools.map(toOpenAITool) : undefined,
-      temperature: this.#o.temperature,
-      max_tokens: this.#o.maxTokens,
-      stream: true,
-      // Ask the API to include a final usage chunk (real token counts).
-      stream_options: { include_usage: true },
-    };
+    const body = this.#buildBody(request);
 
     const res = await this.#o.fetchImpl(`${this.#o.baseURL}/chat/completions`, {
       method: "POST",

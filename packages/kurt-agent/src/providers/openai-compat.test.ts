@@ -153,6 +153,61 @@ describe("OpenAICompatModel.stream", () => {
     expect(tu.input.truncated).toBe(true);
   });
 
+  test("shapes the request body from the model's capabilities (thinking off)", async () => {
+    let body: Record<string, unknown> = {};
+    const model = new OpenAICompatModel({
+      baseURL: "https://example.test",
+      model: "deepseek-v4-pro",
+      apiKey: "k",
+      thinking: false,
+      fetchImpl: async (_url, init) => {
+        body = JSON.parse(String(init?.body));
+        return sseResponse('data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n', "data: [DONE]\n");
+      },
+    });
+    await drain(model.stream(REQ, new AbortController().signal));
+    expect(body.thinking).toEqual({ type: "disabled" }); // explicit, overrides API default
+    expect(body.reasoning_effort).toBeUndefined();
+    expect(body.temperature).toBeDefined(); // sampling allowed outside thinking
+  });
+
+  test("enables thinking, sends mapped reasoning_effort, and omits sampling params", async () => {
+    let body: Record<string, unknown> = {};
+    const model = new OpenAICompatModel({
+      baseURL: "https://example.test",
+      model: "deepseek-v4-pro",
+      apiKey: "k",
+      thinking: true,
+      effort: "medium", // collapses to "high" on V4
+      fetchImpl: async (_url, init) => {
+        body = JSON.parse(String(init?.body));
+        return sseResponse('data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n', "data: [DONE]\n");
+      },
+    });
+    await drain(model.stream(REQ, new AbortController().signal));
+    expect(body.thinking).toEqual({ type: "enabled" });
+    expect(body.reasoning_effort).toBe("high");
+    expect(body.temperature).toBeUndefined(); // rejected by the API while thinking
+  });
+
+  test("never sends vendor reasoning fields for a model without thinking support", async () => {
+    let body: Record<string, unknown> = {};
+    const model = new OpenAICompatModel({
+      baseURL: "https://example.test",
+      model: "some-unknown-model",
+      apiKey: "k",
+      thinking: true, // requested, but the model can't — so it must be ignored
+      fetchImpl: async (_url, init) => {
+        body = JSON.parse(String(init?.body));
+        return sseResponse('data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n', "data: [DONE]\n");
+      },
+    });
+    await drain(model.stream(REQ, new AbortController().signal));
+    expect(body.thinking).toBeUndefined();
+    expect(body.reasoning_effort).toBeUndefined();
+    expect(body.temperature).toBeDefined();
+  });
+
   test("throws a helpful error on non-2xx", async () => {
     const model = new OpenAICompatModel({
       baseURL: "https://example.test",
