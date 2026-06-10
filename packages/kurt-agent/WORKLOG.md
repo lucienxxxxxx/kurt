@@ -4,6 +4,27 @@
 
 ---
 
+## 会话持久化 + 切换 + 自动标题 + 记忆预载(全在 kurt-tui)— ✅ (2026-06-10)
+
+**用户要求**:会话保存到本地(全局),提供切换/清除,创建时自动总结主题作标题;`~/.kurt` 放全局配置(模型/effort)+ 记忆 + 规则 md。明确"这是 tui 的事"。
+
+**澄清后的取舍(经提问确认)**:① 会话全局存储、但 `/sessions` 只列**当前 workspace** 的;② 标题用 LLM 在首轮后总结(失败回退截断首条);③ 切换用**交互式 picker**(↑/↓·↵·d·esc);④ 本轮 memory/rules 只做**预载**(读 md 注入 system prompt),agent 写记忆留待下一轮。
+
+**交付物(纯编排,引擎零依赖,仅用 `Message` 类型)**:
+- `paths.ts`:`~/.kurt` 布局(`kurtHome` 带 `KURT_HOME` 覆盖、`sessionsDir`、`globalMemoryPath`、`projectRulesPath`);`config.ts` 改用 `kurtHome()`。
+- `session-store.ts`:`SessionStore` 把会话存 `~/.kurt/sessions/<id>.json`(全局、带 workspace 标签);create/save/`load`/`list(ws?)`/remove,自动算 `messageCount`、按 updatedAt 倒序。
+- `context-files.ts`:`loadContextPrelude(ws)` 读 `~/.kurt/memory.md`(全局)+ `<ws>/.kurt/rules.md`(项目)拼成 system prompt 前言;run-tui 与 run-chat 都接。
+- `tui/session-view.ts`:`entriesFromMessages` 把存档 `Message[]` 反向重建为展示 Entry(恢复会话时重绘;思考流不持久化故不重建)。
+- `tui/session-picker.tsx`:`/sessions` 列表浮层。`tui/commands.ts` 加 `/sessions`。
+- `tui/app.tsx`:`SessionController` 接口 + picker 状态 + 按键分支;每轮结束**自动存档**、首轮**自动起标题**;`/new`、`/clear` 开新会话(旧的已存档、可恢复)。`session` prop 可选(App 渲染测试无 session 仍通过)。
+- `run-tui.tsx`:建 `SessionStore` + 当前会话 + `makeTitle`(thinking off、tiny max_tokens、8s 超时)+ 组装 `SessionController` 传给 App。
+
+**验收**:kurt-tui **46** 通过(+9:session-store/context-files/session-view),typecheck 干净;CLI 冒烟 `KURT_HOME=… config path` 走通、`/sessions` 进帮助;`git diff main -- kurt-agent/src/engine` 为空(铁律 #3)。
+
+**已知取舍**:`list()` 扫目录并解析每个会话文件(含 messages),会话很多时略慢——量大再加 index。恢复会话用其模型 id,但 contextLimit 仍取 config(可后续从该会话模型的 capabilities 取)。
+
+---
+
 ## 模型能力元数据(thinking/effort/limits)— ✅ (2026-06-10)
 
 **用户要求**:对底层模型做能力抽象——给 model 一个"元数据"概念,让 agent 知道这个模型能发挥什么(有没有 thinking、effort 档位、max_tokens、context 最大值等)。先只做这一层(其余 max_tokens/截断/原生工具下一轮)。

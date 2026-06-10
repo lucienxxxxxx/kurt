@@ -1,7 +1,7 @@
 # PROJECT_INDEX — kurt-tui
 
 > Cached architecture map. Read this first; scan only what it points to.
-> Last synced: 2026-06-10, after threading thinking/effort into the model (modelFor reasoning options).
+> Last synced: 2026-06-10, after persistent sessions (/sessions switcher, auto-title) + memory/rules preload.
 
 ## 1. Overview
 Ink terminal UI for `kurt-agent`. A front-end consumer: subscribes to the engine
@@ -19,7 +19,7 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 - **Write outside the workspace**: the agent calls `request_write_access` (same approval prompt); on allow, the dir is opened for write_file/shell/run_code for the rest of the session (`makeTools` shares one mutable writable-roots array). "Always" persists `write-access:<dir>` in the allowlist.
 - **Working dir**: the agent works inside one workspace — `WORKSPACE_DIR` (the whole dir, **fully writable, no approval**). Injected into the system prompt AND as env to shell/run_code. No `import/`/`export/` subdirs are created. Sandbox blocks writes *outside* the workspace (+ `--allow-write` dirs). File writes and command approval are **independent**: in-workspace writes never prompt; sensitive commands always do.
 - Settings (`model/effort/thinking/mode`) persist to `~/.kurt/config.json` (override path with `KURT_CONFIG_PATH`). Precedence: persisted > env > default. API key is env-only.
-- Gate before merge: **`bun run typecheck && bun test`** (currently 37 tests, offline).
+- Gate before merge: **`bun run typecheck && bun test`** (currently 46 tests, offline).
 
 ## 3. Architecture
 - Depends on `kurt-agent` only through its public API (`"kurt-agent"` → its `src/lib.ts`):
@@ -36,11 +36,16 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 | Path | Responsibility | Key exports | Depends on |
 |------|----------------|-------------|------------|
 | `src/cli.ts` | **CLI entry / bin `kurt`**: dispatches `tui` (default) / `chat` / `config` / `help` | — | `./run-tui`, `./run-chat`, `./config` |
-| `src/run-tui.tsx` | Launch the TUI: prints banner once, wires runner+compactor+newSession, mounts `<App>` (normal screen), persists settings on change | `runTui` | `kurt-agent`, `./agent`, `./config`, `./tui` |
-| `src/run-chat.ts` | Stdout REPL/one-shot using the same runtime as the TUI | `runChat` | `kurt-agent`, `./agent` |
+| `src/run-tui.tsx` | Launch the TUI: prints banner once, wires runner+compactor+newSession, builds the `SessionController` (store + titling) + memory/rules preload, mounts `<App>` | `runTui` | `kurt-agent`, `./agent`, `./config`, `./session-store`, `./context-files`, `./tui` |
+| `src/run-chat.ts` | Stdout REPL/one-shot using the same runtime as the TUI (+ memory/rules preload) | `runChat` | `kurt-agent`, `./agent`, `./context-files` |
 | `src/agent.ts` | Shared runtime: `resolveSettings`/`resolveConfig`, `resolveWorkspace`+`workspaceEnv` (only `WORKSPACE_DIR`), `systemPrompt(ws)`, `makeSandbox`/`makeTools(sandbox,codeTemp,ws,allowWrite)`/`modelFor(id,baseURL,apiKey,maxTokens,ReasoningOptions{thinking,effort})`, `parseLaunchFlags` (`LaunchOptions`) | (those) | `kurt-agent`, `./config` |
-| `src/config.ts` | Persisted user settings at `~/.kurt/config.json`: `loadConfig`/`saveConfig`/`configPath`/`sanitize` | (those) | — |
-| `src/tui/app.tsx` | Root Ink component: `committed` (→ `<Static>` scrollback) + `live` (current turn) + session state, command palette, drives the loop, `/compact`, `/new`, `/clear` | `App`, `EngineRunner`, `Compactor`, `SessionState` | ink, react, kurt-agent, sibling files |
+| `src/config.ts` | Persisted user settings at `~/.kurt/config.json` (path via `kurtHome()`): `loadConfig`/`saveConfig`/`configPath`/`sanitize` | (those) | `./paths` |
+| `src/paths.ts` | `~/.kurt/` layout: `kurtHome` (KURT_HOME override), `sessionsDir`, `globalMemoryPath`, `projectRulesPath(ws)` | (those) | — |
+| `src/session-store.ts` | Persist conversations to `~/.kurt/sessions/<id>.json` (global, tagged by workspace): `SessionStore` create/save/load/`list(ws?)`/remove; `SessionMeta`/`SessionRecord` | `SessionStore` | `kurt-agent` (Message), `./paths` |
+| `src/context-files.ts` | `loadContextPrelude(ws)` → reads `~/.kurt/memory.md` + `<ws>/.kurt/rules.md` into a system-prompt prelude (read-only) | `loadContextPrelude` | `./paths` |
+| `src/tui/app.tsx` | Root Ink component: `committed` (→ `<Static>` scrollback) + `live` (current turn) + session state, command palette, drives the loop, `/compact`, `/sessions` picker, `/new`, `/clear`; autosave + auto-title via `SessionController` | `App`, `EngineRunner`, `Compactor`, `SessionState`, `SessionController` | ink, react, kurt-agent, sibling files |
+| `src/tui/session-view.ts` | `entriesFromMessages` — rebuild display entries from saved `Message[]` (resume repaint) | `entriesFromMessages` | `kurt-agent`, `./entries` |
+| `src/tui/session-picker.tsx` | The `/sessions` list overlay (title · msg count · time-ago); keys handled in App | `SessionPicker` | ink, `../session-store` |
 | `src/tui/conversation.tsx` | Renders one entry: user (divider+plain), kurt (markdown when final), thinking, tool cards (IN:/OUT:, live stream tail + ⠿ while running, clipped), notices | `EntryView` | ink, `./markdown`, `./tool-format`, `./entries` |
 | `src/tui/status-bar.tsx` | Bottom bar: model · ctx + scarcity dot · effort · think · mode | `StatusBar`, `Status`, `ChatMode` | ink, `./theme` |
 | `src/tui/banner.ts` | Startup banner (printed once at launch; scrolls with history) | `bannerString` | — |
@@ -60,6 +65,8 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 - **Change how a message type renders** → `conversation.tsx` `EntryView`.
 - **Status-bar content** → `status-bar.tsx` + `theme.ts`.
 - **Add a CLI subcommand** → `cli.ts` (dispatch) + a `run-*.ts`.
+- **Saved sessions / switching / titles** → `session-store.ts` (storage) + `tui/session-view.ts` (resume repaint) + `tui/session-picker.tsx` (UI) + `app.tsx` (`SessionController` calls); the controller (store + titling) is built in `run-tui.tsx`.
+- **Memory / rules preload, or the ~/.kurt layout** → `context-files.ts` + `paths.ts`.
 - **Change settings/precedence or persistence** → `agent.ts` (`resolveSettings`) + `config.ts`.
 - **Change working paths / sandbox writable dirs / system prompt** → `agent.ts` (`resolveWorkspace`, `makeTools`, `systemPrompt`); CLI flags in `cli.ts` (`parseLaunchFlags`).
 - **Change the approval prompt / allowlist** → `tui/approval.tsx` (UI), `tui/permission.ts` (bridge), `allowlist.ts` (storage); the *classifier* is in `kurt-agent` (`classifyCommand`).

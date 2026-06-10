@@ -58,6 +58,20 @@ command, a short explanation, and the risk shown. "Always allow" is remembered p
 project in `<workspace>/.kurt/allowlist.json` (commit it to share with your team).
 `--yes`/`-y` auto-approves; non-interactive runs default to deny.
 
+### Sessions & memory (`~/.kurt/`)
+
+Conversations are **saved automatically** (after each turn) to `~/.kurt/sessions/`
+and titled on the first exchange (a short LLM-generated topic, with a fallback to
+the first message). `/sessions` opens a picker — **↑/↓** move · **↵** open ·
+**d** delete · **esc** close — listing the sessions for the **current workspace**.
+`/new` and `/clear` begin a fresh conversation (the previous one stays saved and
+resumable). `/clear` keeps the sandbox temp dir; `/new` also resets it.
+
+Two optional files are **preloaded into the system prompt** if present:
+`~/.kurt/memory.md` (global, long-term notes) and `<workspace>/.kurt/rules.md`
+(project-specific rules). They're read-only for now — the agent updating memory
+itself comes later. The whole `~/.kurt` home can be relocated with `KURT_HOME`.
+
 ### Remembered settings
 
 What you pick in the TUI (`/model`, `/effort`, `/think`, `/mode`) is saved to
@@ -83,5 +97,5 @@ The API key is read from the env only — never written to the config file.
 
 - **Scroll** history with your terminal's native mouse wheel (no alt-screen — finished
   turns flow into normal scrollback via Ink `<Static>`).
-- **Slash commands** (type `/`): `/help /model /mode /effort /think /compact /clear /new /exit`.
+- **Slash commands** (type `/`): `/help /model /mode /effort /think /compact /sessions /clear /new /exit`.
 - `bun test` · `bun run typecheck`.
