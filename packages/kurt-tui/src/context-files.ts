@@ -8,13 +8,15 @@
  * the pure `systemPrompt`).
  */
 
-import { globalMemoryPath, projectRulesPath } from "./paths.ts";
+import { globalMemoryPath, projectMemoryPath, projectRulesPath } from "./paths.ts";
 
 /** Build a system-prompt prelude from any present context files (or ""). */
 export async function loadContextPrelude(workspaceRoot: string): Promise<string> {
   const parts: string[] = [];
-  const memory = await readIfPresent(globalMemoryPath());
-  if (memory) parts.push(`# Memory (global)\nLong-term notes the user has saved. Honor them.\n\n${memory}`);
+  const globalMem = await readIfPresent(globalMemoryPath());
+  if (globalMem) parts.push(`# Memory (global)\nYour long-term notes across all projects. Honor them.\n\n${globalMem}`);
+  const projectMem = await readIfPresent(projectMemoryPath(workspaceRoot));
+  if (projectMem) parts.push(`# Memory (project)\nYour long-term notes for this workspace. Honor them.\n\n${projectMem}`);
   const rules = await readIfPresent(projectRulesPath(workspaceRoot));
   if (rules) parts.push(`# Project rules (.kurt/rules.md)\nProject-specific instructions. Follow them.\n\n${rules}`);
   return parts.length > 0 ? "\n\n" + parts.join("\n\n") : "";

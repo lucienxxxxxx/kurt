@@ -18,6 +18,7 @@ import {
   LsTool,
   GrepTool,
   BrewTool,
+  MemoryTool,
   DuckDuckGoSearch,
   type SandboxProvider,
   type Tool,
@@ -27,6 +28,7 @@ import type { SessionWorkspace } from "kurt-agent";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadConfig, type PersistedConfig } from "./config.ts";
+import { globalMemoryPath, projectMemoryPath } from "./paths.ts";
 
 /**
  * The agent's working area: the whole working directory is writable. The agent
@@ -102,10 +104,17 @@ export interface ResolvedConfig extends Settings {
 export function systemPrompt(ws: Workspace): string {
   return [
     "You are kurt-agent, a concise coding assistant running locally.",
-    "Tools: read_file, ls, grep, write_file, shell, run_code, brew, web_search.",
+    "Tools: read_file, ls, grep, write_file, shell, run_code, brew, web_search, memory.",
     "Prefer the native read_file/ls/grep over shelling out for reads — they're confined to the workspace.",
     "shell and run_code are sandboxed and have no network; web_search and brew are the networked tools",
     "(brew runs outside the sandbox and asks for approval before installing/changing software).",
+    "",
+    "Memory: your memory (the `memory` tool) is preloaded above when present. Decide on your",
+    "OWN initiative — without being asked — to save durable facts worth recalling later:",
+    "the user's stated preferences, project conventions/commands, important decisions, and",
+    "environment details. Use memory(action:'append'); scope 'project' for workspace-specific",
+    "facts, 'global' for cross-project preferences. Skip transient task state and secrets.",
+    "Curate with action:'replace' when it grows stale or repetitive.",
     "",
     `WORKSPACE_DIR = ${ws.root} (also exported as an env var to shell/run_code).`,
     "This is your working directory and it is fully writable — read inputs and write all outputs",
@@ -197,6 +206,9 @@ export function makeTools(
     // brew runs UNSANDBOXED (network + system writes) via a Direct runner, gated
     // by approval for mutating subcommands.
     new BrewTool(new DirectSandbox(), { cwd: ws.root, permission }),
+    // Persistent memory (preloaded into the prompt next turn/session). Fixed files,
+    // so no approval/confinement needed.
+    new MemoryTool({ globalPath: globalMemoryPath(), projectPath: projectMemoryPath(ws.root) }),
     new WebSearchTool(new DuckDuckGoSearch()),
   ];
   // The escalation tool only makes sense when there's an approver to ask.

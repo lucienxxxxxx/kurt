@@ -25,14 +25,17 @@ describe("loadContextPrelude", () => {
     expect(await loadContextPrelude(ws)).toBe("");
   });
 
-  test("includes global memory and project rules when present", async () => {
+  test("includes global memory, project memory, and project rules when present", async () => {
     writeFileSync(join(home, "memory.md"), "remember: prefer Bun");
     mkdirSync(join(ws, ".kurt"), { recursive: true });
+    writeFileSync(join(ws, ".kurt", "memory.md"), "this repo uses bun workspaces");
     writeFileSync(join(ws, ".kurt", "rules.md"), "always run the gate");
 
     const prelude = await loadContextPrelude(ws);
     expect(prelude).toContain("# Memory (global)");
     expect(prelude).toContain("prefer Bun");
+    expect(prelude).toContain("# Memory (project)");
+    expect(prelude).toContain("bun workspaces");
     expect(prelude).toContain("# Project rules");
     expect(prelude).toContain("always run the gate");
   });

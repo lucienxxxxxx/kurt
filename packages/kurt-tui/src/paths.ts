@@ -27,7 +27,12 @@ export function globalMemoryPath(): string {
   return join(kurtHome(), "memory.md");
 }
 
-/** Project-scoped rules file under the workspace's .kurt/. */
+/** Project-scoped rules file under the workspace's .kurt/ (user-authored). */
 export function projectRulesPath(workspaceRoot: string): string {
   return join(workspaceRoot, ".kurt", "rules.md");
+}
+
+/** Project-scoped agent memory under the workspace's .kurt/ (agent-written). */
+export function projectMemoryPath(workspaceRoot: string): string {
+  return join(workspaceRoot, ".kurt", "memory.md");
 }
