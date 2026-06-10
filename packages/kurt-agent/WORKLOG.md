@@ -4,6 +4,21 @@
 
 ---
 
+## Agent 可写记忆(MemoryTool)+ 自主判断何时记 — ✅ (2026-06-10)
+
+**用户要求**:让 agent 能自己写/更新记忆(上一轮只做了只读预载),且**自动判断何时调用 memory**。先给方案确认再执行。
+
+**交付物(纯编排,引擎零改动)**:
+- `kurt-agent` `tools/memory.ts`:`MemoryTool`,按 scope 读写**固定文件**(global=`~/.kurt/memory.md`、project=`<ws>/.kurt/memory.md`);action=view/append/replace;路径固定(非模型提供)→ 无穿越面、无需授权;append 软上限 ~32KB,超了提示用 replace 精简。
+- `kurt-tui`:`paths.projectMemoryPath`;`context-files` 预载新增 project memory(与**用户写的 `rules.md` 分开**,agent 绝不覆盖 rules);`makeTools` 接入 MemoryTool;**systemPrompt 加主动记忆指令**——让模型**自行判断**把持久事实(偏好/项目约定/决策/环境)append 进去,project vs global 分级,replace 精简,不存秘密/临时态。
+- 闭环:写入的记忆下轮/下次会话经 preload 自动回到 prompt。
+
+**关键决策**:agent 的 project 记忆用独立的 `<ws>/.kurt/memory.md`,不碰用户的 `rules.md`;记忆写入不弹授权(固定笔记文件、低风险)。
+
+**验收**:kurt-agent **76**(+5 memory)/ kurt-tui **46** 通过;typecheck 干净;`git diff main -- src/engine` 为空(铁律 #3)。覆盖:view 空/append 持久/多次 append 分块/replace 覆盖/project scope 独立 + 缺失报错/超 cap 拒绝并提示 replace;preload 含 global+project+rules。
+
+---
+
 ## 原生工具 read/ls/grep/brew + truncate + 串行写队列 — ✅ (2026-06-10)
 
 **用户要求(排队的那批)**:① write 不限输入大小,靠 `model.maxTokens` 自然约束 + 文件队列串行化;② 读操作统一截断库 `truncate.ts`(行数/字节 whichever first);③ 新增 grep/ls/brew/read **原生 tool**,不走 bash。先前已确认:read/ls/grep **纯 fs、限制在工作区(+ 已授权目录)**;brew **走授权**。

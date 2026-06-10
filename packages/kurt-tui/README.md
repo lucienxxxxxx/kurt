@@ -67,10 +67,12 @@ the first message). `/sessions` opens a picker — **↑/↓** move · **↵** o
 `/new` and `/clear` begin a fresh conversation (the previous one stays saved and
 resumable). `/clear` keeps the sandbox temp dir; `/new` also resets it.
 
-Two optional files are **preloaded into the system prompt** if present:
-`~/.kurt/memory.md` (global, long-term notes) and `<workspace>/.kurt/rules.md`
-(project-specific rules). They're read-only for now — the agent updating memory
-itself comes later. The whole `~/.kurt` home can be relocated with `KURT_HOME`.
+**Memory** is preloaded into the system prompt and the agent **maintains it
+itself** via the `memory` tool (view/append/replace) — it decides on its own to
+save durable facts (your preferences, project conventions, decisions). Two scopes:
+`~/.kurt/memory.md` (global, cross-project) and `<workspace>/.kurt/memory.md`
+(project). Your own `<workspace>/.kurt/rules.md` is also preloaded and is **never
+overwritten** by the agent. The whole `~/.kurt` home can be relocated with `KURT_HOME`.
 
 ### Remembered settings
 

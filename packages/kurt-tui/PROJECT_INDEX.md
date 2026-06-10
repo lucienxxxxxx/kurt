@@ -1,7 +1,7 @@
 # PROJECT_INDEX — kurt-tui
 
 > Cached architecture map. Read this first; scan only what it points to.
-> Last synced: 2026-06-10, after persistent sessions (/sessions switcher, auto-title) + memory/rules preload.
+> Last synced: 2026-06-10, after agent-writable memory (memory tool + project memory preload).
 
 ## 1. Overview
 Ink terminal UI for `kurt-agent`. A front-end consumer: subscribes to the engine
@@ -38,11 +38,11 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 | `src/cli.ts` | **CLI entry / bin `kurt`**: dispatches `tui` (default) / `chat` / `config` / `help` | — | `./run-tui`, `./run-chat`, `./config` |
 | `src/run-tui.tsx` | Launch the TUI: prints banner once, wires runner+compactor+newSession, builds the `SessionController` (store + titling) + memory/rules preload, mounts `<App>` | `runTui` | `kurt-agent`, `./agent`, `./config`, `./session-store`, `./context-files`, `./tui` |
 | `src/run-chat.ts` | Stdout REPL/one-shot using the same runtime as the TUI (+ memory/rules preload) | `runChat` | `kurt-agent`, `./agent`, `./context-files` |
-| `src/agent.ts` | Shared runtime: `resolveSettings`/`resolveConfig`, `resolveWorkspace`+`workspaceEnv` (only `WORKSPACE_DIR`), `systemPrompt(ws)`, `makeSandbox`/`makeTools(sandbox,codeTemp,ws,allowWrite)` (wires read/ls/grep/write/shell/run_code/brew/web_search; read/ls/grep/write share the live `writable` roots, brew gets a Direct runner + permission)/`modelFor(id,baseURL,apiKey,maxTokens,ReasoningOptions{thinking,effort})`, `parseLaunchFlags` (`LaunchOptions`) | (those) | `kurt-agent`, `./config` |
+| `src/agent.ts` | Shared runtime: `resolveSettings`/`resolveConfig`, `resolveWorkspace`+`workspaceEnv` (only `WORKSPACE_DIR`), `systemPrompt(ws)`, `makeSandbox`/`makeTools(sandbox,codeTemp,ws,allowWrite)` (wires read/ls/grep/write/shell/run_code/brew/memory/web_search; read/ls/grep/write share the live `writable` roots, brew gets a Direct runner + permission, memory gets global+project file paths)/`modelFor(id,baseURL,apiKey,maxTokens,ReasoningOptions{thinking,effort})`, `parseLaunchFlags` (`LaunchOptions`) | (those) | `kurt-agent`, `./config` |
 | `src/config.ts` | Persisted user settings at `~/.kurt/config.json` (path via `kurtHome()`): `loadConfig`/`saveConfig`/`configPath`/`sanitize` | (those) | `./paths` |
-| `src/paths.ts` | `~/.kurt/` layout: `kurtHome` (KURT_HOME override), `sessionsDir`, `globalMemoryPath`, `projectRulesPath(ws)` | (those) | — |
+| `src/paths.ts` | `~/.kurt/` layout: `kurtHome` (KURT_HOME override), `sessionsDir`, `globalMemoryPath`, `projectRulesPath(ws)`, `projectMemoryPath(ws)` | (those) | — |
 | `src/session-store.ts` | Persist conversations to `~/.kurt/sessions/<id>.json` (global, tagged by workspace): `SessionStore` create/save/load/`list(ws?)`/remove; `SessionMeta`/`SessionRecord` | `SessionStore` | `kurt-agent` (Message), `./paths` |
-| `src/context-files.ts` | `loadContextPrelude(ws)` → reads `~/.kurt/memory.md` + `<ws>/.kurt/rules.md` into a system-prompt prelude (read-only) | `loadContextPrelude` | `./paths` |
+| `src/context-files.ts` | `loadContextPrelude(ws)` → reads `~/.kurt/memory.md` (global) + `<ws>/.kurt/memory.md` (project, agent-written) + `<ws>/.kurt/rules.md` (user rules) into a system-prompt prelude | `loadContextPrelude` | `./paths` |
 | `src/tui/app.tsx` | Root Ink component: `committed` (→ `<Static>` scrollback) + `live` (current turn) + session state, command palette, drives the loop, `/compact`, `/sessions` picker, `/new`, `/clear`; autosave + auto-title via `SessionController` | `App`, `EngineRunner`, `Compactor`, `SessionState`, `SessionController` | ink, react, kurt-agent, sibling files |
 | `src/tui/session-view.ts` | `entriesFromMessages` — rebuild display entries from saved `Message[]` (resume repaint) | `entriesFromMessages` | `kurt-agent`, `./entries` |
 | `src/tui/session-picker.tsx` | The `/sessions` list overlay (title · msg count · time-ago); keys handled in App | `SessionPicker` | ink, `../session-store` |
