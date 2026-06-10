@@ -44,7 +44,7 @@ export interface CodeToolOptions {
   allowNetwork?: boolean;
   /** Extra writable dirs beyond the script temp (e.g. the agent's WORKSPACE_DIR). */
   writablePaths?: string[];
-  /** Extra env vars for the script (e.g. WORKSPACE_DIR/IMPORT_DIR/EXPORT_DIR). */
+  /** Extra env vars for the script (e.g. WORKSPACE_DIR). */
   env?: Record<string, string>;
   timeoutMs?: number;
   idleTimeoutMs?: number;

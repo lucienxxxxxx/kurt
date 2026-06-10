@@ -18,7 +18,7 @@ describe("classifyCommand", () => {
     expect(classifyCommand("ls -la")).toBeNull();
     expect(classifyCommand("grep -rn TODO src | head")).toBeNull();
     expect(classifyCommand("git status")).toBeNull();
-    expect(classifyCommand('echo hi > "$EXPORT_DIR/out.txt"')).toBeNull();
+    expect(classifyCommand('echo hi > "$WORKSPACE_DIR/out.txt"')).toBeNull();
   });
 
   test("provides an explanation and a risk", () => {

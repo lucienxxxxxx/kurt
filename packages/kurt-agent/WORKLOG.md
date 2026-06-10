@@ -4,6 +4,20 @@
 
 ---
 
+## 简化:去掉 import/export 目录,工作区默认可写 — ✅ (2026-06-10)
+
+**用户要求**:不要再产生 `import/`、`export/` 文件夹;agent 对工作目录默认拥有写权限、无需申请;但敏感 bash 命令仍走用户授权。**文件写入与命令授权两者不相干**。
+
+**改动(全在编排/前端层,引擎未动)**:
+- `kurt-tui/src/agent.ts`:`Workspace` 简化为 `{ root }`;`resolveWorkspace` 只 `mkdir` 工作区本身、**不再建 import/export 子目录**;`workspaceEnv` 只注入 `WORKSPACE_DIR`;`systemPrompt` 删除 IMPORT_DIR/EXPORT_DIR 与"路径协议"措辞,改为"WORKSPACE_DIR 全程可写,要写外部先 `request_write_access`"。
+- 澄清边界:工作区内写文件**永不弹窗**(沙盒直接放行 `WORKSPACE_DIR`);敏感命令(rm/sudo/…)**永远**弹授权。两条独立。
+- 文档/措辞同步:`cli.ts` USAGE、`README.md`「Working directory & sandbox」、`PROJECT_INDEX.md`、`shell.ts`/`code.ts` 注释、`classify.test.ts` fixture(`$EXPORT_DIR`→`$WORKSPACE_DIR`)。
+- 历史教训延续:之前误删用户在 `export/` 的文件,现在干脆不造这些目录——但凡 agent 工作区里的用户/产物文件,绝不自动删。
+
+**验收**:kurt-agent **48** / kurt-tui **37** 通过;typecheck 干净;`git diff main -- packages/kurt-agent/src/engine` 为空(铁律 #3 成立)。
+
+---
+
 ## 修复:大文件写入失败(tool 参数被截断)— ✅ (2026-06-10)
 
 **现象**:让 agent 写一个大 HTML(PPT)时,`write_file` 报 `Invalid input: "path" must be a non-empty string`,看似参数 bug。

@@ -8,28 +8,28 @@ describe("resolveWorkspace", () => {
   const root = join(tmpdir(), `kurt-ws-${process.pid}`);
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-  test("derives import/export under the working dir and creates them", () => {
+  test("resolves the working dir (creating it) and makes NO import/export subdirs", () => {
     const ws = resolveWorkspace(root);
     expect(ws.root).toBe(root);
-    expect(ws.importDir).toBe(join(root, "import"));
-    expect(ws.exportDir).toBe(join(root, "export"));
-    expect(existsSync(ws.importDir)).toBe(true);
-    expect(existsSync(ws.exportDir)).toBe(true);
+    expect(existsSync(root)).toBe(true);
+    expect(existsSync(join(root, "import"))).toBe(false);
+    expect(existsSync(join(root, "export"))).toBe(false);
   });
 
-  test("workspaceEnv exposes the three dirs", () => {
+  test("workspaceEnv exposes only WORKSPACE_DIR", () => {
     const ws = resolveWorkspace(root);
-    expect(workspaceEnv(ws)).toEqual({ WORKSPACE_DIR: ws.root, IMPORT_DIR: ws.importDir, EXPORT_DIR: ws.exportDir });
+    expect(workspaceEnv(ws)).toEqual({ WORKSPACE_DIR: ws.root });
   });
 });
 
 describe("systemPrompt", () => {
-  test("injects the working paths and the path-protocol rule", () => {
-    const p = systemPrompt({ root: "/w", importDir: "/w/import", exportDir: "/w/export" });
+  test("injects the writable working dir and the escalation rule", () => {
+    const p = systemPrompt({ root: "/w" });
     expect(p).toContain("WORKSPACE_DIR = /w");
-    expect(p).toContain("IMPORT_DIR = /w/import");
-    expect(p).toContain("EXPORT_DIR = /w/export");
-    expect(p.toLowerCase()).toContain("path protocol");
+    expect(p).toContain("fully writable");
+    expect(p).toContain("request_write_access");
+    expect(p).not.toContain("IMPORT_DIR");
+    expect(p).not.toContain("EXPORT_DIR");
   });
 });
 

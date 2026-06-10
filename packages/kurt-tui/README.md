@@ -41,16 +41,14 @@ kurt help
 ### Working directory & sandbox
 
 The agent works **inside a workspace** (default: the dir you run `kurt` in, or
-`--workspace <path>`):
+`--workspace <path>`). The whole workspace (`WORKSPACE_DIR`, injected into the
+prompt and as an env var) is **fully writable — no permission needed**; the
+sandbox just **blocks writes outside it**. Open extra dirs with `--allow-write
+<path>` (repeatable), or the agent can `request_write_access` at runtime (you
+approve). No `import/`/`export/` folders are created.
 
-- `WORKSPACE_DIR` — writable working dir (do all work here).
-- `IMPORT_DIR` (`<ws>/import`) — inputs you drop in; read-only by convention.
-- `EXPORT_DIR` (`<ws>/export`) — where the agent writes deliverables.
-
-These are injected into the system prompt **and** as env vars for `shell`/`run_code`.
-The sandbox **blocks writes outside the workspace** — open extra dirs with
-`--allow-write <path>` (repeatable). "Path protocol over discovery": the agent
-acts on these injected paths instead of exploring the filesystem.
+> File writes and **command approval are independent**: writing in the workspace
+> never prompts, while sensitive bash commands (below) always do.
 
 ### Command approval
 

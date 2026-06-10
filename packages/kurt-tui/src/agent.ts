@@ -21,33 +21,28 @@ import {
 } from "kurt-agent";
 import type { SessionWorkspace } from "kurt-agent";
 import { mkdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { loadConfig, type PersistedConfig } from "./config.ts";
 
 /**
- * The agent's working area. "Path protocol over path discovery": the sandbox
- * only lets the agent write inside WORKSPACE_DIR (+ explicitly allowed dirs);
- * the agent acts on these injected paths rather than exploring the filesystem.
+ * The agent's working area: the whole working directory is writable. The agent
+ * does all its work here (reads inputs, writes outputs) — no special import/
+ * export subdirs. To write OUTSIDE it, the agent must request_write_access.
  */
 export interface Workspace {
-  root: string; // WORKSPACE_DIR — writable working dir
-  importDir: string; // IMPORT_DIR — inputs (read-only by convention)
-  exportDir: string; // EXPORT_DIR — deliverables (writable)
+  root: string; // WORKSPACE_DIR — the writable working dir
 }
 
-/** Resolve the working dir (default: cwd) and ensure import/ + export/ exist. */
+/** Resolve the working dir (default: cwd). Creates it if a --workspace path is new. */
 export function resolveWorkspace(workspacePath?: string): Workspace {
   const root = resolve(workspacePath ?? process.cwd());
-  const importDir = join(root, "import");
-  const exportDir = join(root, "export");
-  mkdirSync(importDir, { recursive: true });
-  mkdirSync(exportDir, { recursive: true });
-  return { root, importDir, exportDir };
+  mkdirSync(root, { recursive: true });
+  return { root };
 }
 
-/** Env vars injected into sandboxed subprocesses so scripts can use the paths. */
+/** Env var injected into sandboxed subprocesses so scripts can use the path. */
 export function workspaceEnv(ws: Workspace): Record<string, string> {
-  return { WORKSPACE_DIR: ws.root, IMPORT_DIR: ws.importDir, EXPORT_DIR: ws.exportDir };
+  return { WORKSPACE_DIR: ws.root };
 }
 
 /** Per-invocation launch options (parsed from CLI flags). */
@@ -99,23 +94,18 @@ export interface ResolvedConfig extends Settings {
   models: string[];
 }
 
-/** System prompt with the framework-injected working paths. */
+/** System prompt with the framework-injected working dir. */
 export function systemPrompt(ws: Workspace): string {
   return [
     "You are kurt-agent, a concise coding assistant running locally.",
     "Tools: read_file, write_file, shell, run_code, web_search.",
     "shell and run_code are sandboxed and have no network; web_search is the only networked tool.",
     "",
-    "Working paths (also exported as env vars to shell/run_code):",
-    `- WORKSPACE_DIR = ${ws.root} — your writable working directory. Do all work here.`,
-    `- IMPORT_DIR = ${ws.importDir} — inputs the user provides; READ ONLY, do not modify.`,
-    `- EXPORT_DIR = ${ws.exportDir} — put deliverables/outputs here.`,
-    "",
-    "Path protocol over path discovery: the sandbox only allows writing inside WORKSPACE_DIR.",
-    "Do NOT explore or write elsewhere; always act on these injected paths. Use relative paths",
-    "or the env vars (e.g. $EXPORT_DIR).",
-    "If you genuinely need to write OUTSIDE the workspace (e.g. ~/Downloads), call",
-    "request_write_access with that directory — the user will be asked to approve — then retry the write.",
+    `WORKSPACE_DIR = ${ws.root} (also exported as an env var to shell/run_code).`,
+    "This is your working directory and it is fully writable — read inputs and write all outputs",
+    "here. Use relative paths or $WORKSPACE_DIR. The sandbox blocks writes OUTSIDE it; if you",
+    "genuinely need to write elsewhere (e.g. ~/Downloads), call request_write_access with that",
+    "directory (the user approves), then retry. Don't explore the filesystem beyond what you need.",
     "Prefer doing real work with the tools over guessing. Keep answers short.",
   ].join("\n");
 }

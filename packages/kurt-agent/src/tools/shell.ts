@@ -21,7 +21,7 @@ export interface ShellToolOptions {
   writablePaths?: string[];
   /** Allow network access. Default: false. */
   allowNetwork?: boolean;
-  /** Extra env vars for the command (e.g. WORKSPACE_DIR/IMPORT_DIR/EXPORT_DIR). */
+  /** Extra env vars for the command (e.g. WORKSPACE_DIR). */
   env?: Record<string, string>;
   /** Hard wall-clock cap (ms); a per-call `timeout` arg overrides it. */
   timeoutMs?: number;
