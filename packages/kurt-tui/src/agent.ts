@@ -102,8 +102,10 @@ export interface ResolvedConfig extends Settings {
 export function systemPrompt(ws: Workspace): string {
   return [
     "You are kurt-agent, a concise coding assistant running locally.",
-    "Tools: read_file, write_file, shell, run_code, web_search.",
-    "shell and run_code are sandboxed and have no network; web_search is the only networked tool.",
+    "Tools: read_file, ls, grep, write_file, shell, run_code, brew, web_search.",
+    "Prefer the native read_file/ls/grep over shelling out for reads — they're confined to the workspace.",
+    "shell and run_code are sandboxed and have no network; web_search and brew are the networked tools",
+    "(brew runs outside the sandbox and asks for approval before installing/changing software).",
     "",
     `WORKSPACE_DIR = ${ws.root} (also exported as an env var to shell/run_code).`,
     "This is your working directory and it is fully writable — read inputs and write all outputs",

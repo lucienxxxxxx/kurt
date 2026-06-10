@@ -4,6 +4,25 @@
 
 ---
 
+## 原生工具 read/ls/grep/brew + truncate + 串行写队列 — ✅ (2026-06-10)
+
+**用户要求(排队的那批)**:① write 不限输入大小,靠 `model.maxTokens` 自然约束 + 文件队列串行化;② 读操作统一截断库 `truncate.ts`(行数/字节 whichever first);③ 新增 grep/ls/brew/read **原生 tool**,不走 bash。先前已确认:read/ls/grep **纯 fs、限制在工作区(+ 已授权目录)**;brew **走授权**。
+
+**交付物(全在 tools 层,引擎零改动)**:
+- `truncate.ts`:`truncate(text,{maxLines,maxBytes})` 逐行累计,任一上限先到即停(默认 1000 行 / 100KB);`truncationNote`。
+- `tools/fs-access.ts`:共享 `isInside` / `resolveWithin(input,roots,verb)`,把路径限制在工作区 + 经 `request_write_access` 开放的目录(读 live 共享数组)。
+- `read_file`:改为**受限 + 截断 + offset/limit 分页**(之前可读任意路径 → 现在越界拒绝并提示申请)。
+- `ls`、`grep`:新增**纯 fs**工具(不起子进程);`grep` 递归、跳过 .git/node_modules/二进制、封顶 300 命中。
+- `brew`:**不走沙盒**(需网络 + 写 Homebrew 前缀),用注入的 Direct runner 跑;**变更类子命令**(install/upgrade/uninstall…)经 `PermissionProvider` 授权,只读类(list/info/search…)直接跑;brew 不存在给清晰错误。
+- `write_file`:**模块级 FIFO 串行队列**(并发大写入不再交错;无人为尺寸上限——maxTokens 即天然边界),复用共享 `isInside`。
+- kurt-tui `makeTools`:接入 read/ls/grep(共享 `writable` roots)+ brew(`new DirectSandbox()` + permission)。
+
+**关键决策/踩坑**:read 现在**默认限制在工作区**(安全收紧,越界读需先 `request_write_access`)——比之前严,过严可放宽。brew 在 macOS 之外或未装会报"not found"。grep 二进制判定用 `charCodeAt===0` 扫前 1KB(避免源码里塞裸 NUL 字节)。
+
+**验收**:kurt-agent **71** / kurt-tui **46** 通过;typecheck 干净;`git diff main -- src/engine` 为空(铁律 #3)。测试覆盖:read 越界拒绝/分页、ls 目录优先+隐藏、grep 命中+跳 node_modules、brew 授权(deny 不跑 / readonly 直跑 / approve 跑 / 缺失报错)、写队列并发正确。
+
+---
+
 ## 会话持久化 + 切换 + 自动标题 + 记忆预载(全在 kurt-tui)— ✅ (2026-06-10)
 
 **用户要求**:会话保存到本地(全局),提供切换/清除,创建时自动总结主题作标题;`~/.kurt` 放全局配置(模型/effort)+ 记忆 + 规则 md。明确"这是 tui 的事"。

@@ -29,6 +29,14 @@ export interface SessionRecord extends SessionMeta {
   messages: Message[];
 }
 
+// Monotonic, strictly-increasing timestamp: two saves in the same millisecond
+// still get distinct values, so list() ordering is deterministic.
+let lastStamp = 0;
+function stamp(): number {
+  lastStamp = Math.max(Date.now(), lastStamp + 1);
+  return lastStamp;
+}
+
 export class SessionStore {
   #dir: string;
 
@@ -38,13 +46,13 @@ export class SessionStore {
 
   /** A fresh, unsaved session (persisted lazily on the first {@link save}). */
   create(workspace: string, model: string): SessionRecord {
-    const now = Date.now();
+    const now = stamp();
     const id = `${now}-${Math.random().toString(36).slice(2, 8)}`;
     return { id, title: "", createdAt: now, updatedAt: now, workspace, model, messageCount: 0, messages: [] };
   }
 
   async save(rec: SessionRecord): Promise<void> {
-    rec.updatedAt = Date.now();
+    rec.updatedAt = stamp();
     rec.messageCount = rec.messages.length;
     mkdirSync(this.#dir, { recursive: true });
     await Bun.write(this.#file(rec.id), JSON.stringify(rec, null, 2));
