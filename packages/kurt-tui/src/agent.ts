@@ -132,8 +132,28 @@ export async function resolveConfig(): Promise<ResolvedConfig> {
   return { ...settings, apiKey, models };
 }
 
-export function modelFor(id: string, baseURL: string, apiKey: string, maxTokens?: number): OpenAICompatModel {
-  return new OpenAICompatModel({ name: "deepseek", baseURL, model: id, apiKey, maxTokens });
+/** Reasoning knobs threaded from the session into the provider. */
+export interface ReasoningOptions {
+  thinking?: boolean;
+  effort?: string;
+}
+
+export function modelFor(
+  id: string,
+  baseURL: string,
+  apiKey: string,
+  maxTokens?: number,
+  reasoning: ReasoningOptions = {},
+): OpenAICompatModel {
+  return new OpenAICompatModel({
+    name: "deepseek",
+    baseURL,
+    model: id,
+    apiKey,
+    maxTokens,
+    thinking: reasoning.thinking,
+    effort: reasoning.effort,
+  });
 }
 
 export function makeSandbox(): SandboxProvider {

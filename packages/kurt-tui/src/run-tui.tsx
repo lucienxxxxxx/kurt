@@ -39,7 +39,16 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
 
   const system = systemPrompt(ws);
   const run: EngineRunner = (messages: Message[], signal: AbortSignal, session: SessionState): AsyncIterable<Event> =>
-    runLoop({ system, messages, tools, model: modelFor(session.modelId, cfg.baseURL, cfg.apiKey!, cfg.maxTokens), signal });
+    runLoop({
+      system,
+      messages,
+      tools,
+      model: modelFor(session.modelId, cfg.baseURL, cfg.apiKey!, cfg.maxTokens, {
+        thinking: session.thinking,
+        effort: session.effort,
+      }),
+      signal,
+    });
 
   const compact: Compactor = async (messages, signal) => {
     const model = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey!, cfg.maxTokens);

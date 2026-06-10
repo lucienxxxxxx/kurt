@@ -45,7 +45,10 @@ export async function runChat(args: string[], opts: LaunchOptions = {}): Promise
   const sandbox = makeSandbox();
   const codeTemp = new SessionWorkspace({ sessionId: "chat" });
   const tools = makeTools(sandbox, codeTemp, ws, opts.allowWrite ?? [], permission);
-  const model = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey, cfg.maxTokens);
+  const model = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey, cfg.maxTokens, {
+    thinking: cfg.thinking,
+    effort: cfg.effort,
+  });
   const system = systemPrompt(ws);
   const messages: Message[] = [];
 
