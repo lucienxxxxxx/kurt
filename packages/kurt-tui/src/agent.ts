@@ -6,6 +6,7 @@
 
 import {
   OpenAICompatModel,
+  capabilitiesFor,
   SeatbeltSandbox,
   DirectSandbox,
   ReadFileTool,
@@ -117,7 +118,9 @@ export function resolveSettings(persisted: PersistedConfig, env: Record<string, 
     modelId,
     baseURL: persisted.baseURL ?? env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
     contextLimit: persisted.context ?? num(env.DEEPSEEK_CONTEXT) ?? 128_000,
-    maxTokens: persisted.maxTokens ?? num(env.DEEPSEEK_MAX_TOKENS) ?? 8192,
+    // Default to the model's real output ceiling (from capabilities) instead of a
+    // tiny hardcoded cap, so large writes aren't truncated. persisted > env > metadata.
+    maxTokens: persisted.maxTokens ?? num(env.DEEPSEEK_MAX_TOKENS) ?? capabilitiesFor(modelId).maxOutputTokens,
     effort: persisted.effort ?? env.DEEPSEEK_EFFORT ?? "medium",
     thinking:
       persisted.thinking ?? (env.DEEPSEEK_THINKING != null ? env.DEEPSEEK_THINKING === "1" : /reason|think/i.test(modelId)),

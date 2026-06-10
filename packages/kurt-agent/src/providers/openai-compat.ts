@@ -57,7 +57,10 @@ export class OpenAICompatModel implements ModelProvider, CapableModel {
       model: opts.model,
       apiKey: opts.apiKey,
       temperature: opts.temperature ?? 0.7,
-      maxTokens: opts.maxTokens ?? 8192,
+      // Provider default = the model's own output ceiling (from capabilities),
+      // not a tiny hardcoded cap. Unknown models fall back to the conservative
+      // value in their descriptor.
+      maxTokens: opts.maxTokens ?? this.capabilities.maxOutputTokens,
       thinking: opts.thinking ?? false,
       effort: opts.effort,
       fetchImpl: opts.fetchImpl ?? fetch,

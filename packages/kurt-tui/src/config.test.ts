@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig, sanitize, saveConfig } from "./config.ts";
 import { resolveSettings } from "./agent.ts";
+import { capabilitiesFor } from "kurt-agent";
 
 const tmpCfg = join(tmpdir(), `kurt-cfg-${process.pid}.json`);
 process.env.KURT_CONFIG_PATH = tmpCfg;
@@ -33,10 +34,11 @@ describe("resolveSettings precedence (persisted > env > default)", () => {
     expect(s.modelId).toBe("deepseek-v4-flash");
     expect(s.effort).toBe("medium");
     expect(s.mode).toBe("agent");
-    expect(s.maxTokens).toBe(8192);
+    // Default maxTokens = the model's output ceiling (from capabilities), not 8192.
+    expect(s.maxTokens).toBe(capabilitiesFor("deepseek-v4-flash").maxOutputTokens);
   });
 
-  test("maxTokens: env then persisted override the default", () => {
+  test("maxTokens: env then persisted override the model-metadata default", () => {
     expect(resolveSettings({}, { DEEPSEEK_MAX_TOKENS: "16000" }).maxTokens).toBe(16000);
     expect(resolveSettings({ maxTokens: 4096 }, { DEEPSEEK_MAX_TOKENS: "16000" }).maxTokens).toBe(4096);
   });

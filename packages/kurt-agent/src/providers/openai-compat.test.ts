@@ -169,6 +169,8 @@ describe("OpenAICompatModel.stream", () => {
     expect(body.thinking).toEqual({ type: "disabled" }); // explicit, overrides API default
     expect(body.reasoning_effort).toBeUndefined();
     expect(body.temperature).toBeDefined(); // sampling allowed outside thinking
+    // No maxTokens passed → defaults to the model's output ceiling, not 8192.
+    expect(body.max_tokens).toBe(model.capabilities.maxOutputTokens);
   });
 
   test("enables thinking, sends mapped reasoning_effort, and omits sampling params", async () => {

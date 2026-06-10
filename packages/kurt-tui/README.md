@@ -64,7 +64,8 @@ What you pick in the TUI (`/model`, `/effort`, `/think`, `/mode`) is saved to
 `~/.kurt/config.json` and restored next launch — no need to reconfigure each time.
 Precedence: saved config → env var → default. Env (optional): `DEEPSEEK_BASE_URL`,
 `DEEPSEEK_MODEL`, `DEEPSEEK_CONTEXT`, `DEEPSEEK_EFFORT`, `DEEPSEEK_THINKING=1`,
-`DEEPSEEK_MAX_TOKENS` (raise for large outputs like writing big files; default 8192).
+`DEEPSEEK_MAX_TOKENS` (output-token cap; **defaults to the model's own max output**
+from its capability metadata — e.g. 384K for DeepSeek V4 — so large writes aren't truncated).
 The API key is read from the env only — never written to the config file.
 
 ## Layout
