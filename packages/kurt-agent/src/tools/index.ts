@@ -8,6 +8,8 @@ export { GrepTool } from "./grep.ts";
 export type { GrepToolOptions } from "./grep.ts";
 export { BrewTool } from "./brew.ts";
 export type { BrewToolOptions } from "./brew.ts";
+export { MemoryTool } from "./memory.ts";
+export type { MemoryToolOptions } from "./memory.ts";
 export { isInside, resolveWithin } from "./fs-access.ts";
 export { ShellTool } from "./shell.ts";
 export type { ShellToolOptions } from "./shell.ts";
