@@ -3,8 +3,8 @@
 > Cached architecture map. **Read this first**; scan the tree only for the files
 > this map points you to. Keep it fresh: update on every structural change.
 > Maintained via the `project-module-workflow` skill (see CLAUDE.md §3).
-> Last synced: 2026-06-10, after the agent-writable MemoryTool (+ native
-> read/ls/grep + brew, truncate, path confinement, serialized writes).
+> Last synced: 2026-06-10, after reasoning_content replay (ThinkingBlock +
+> capability-gated serialization) and the agent-writable MemoryTool.
 
 ## 1. Overview
 A protocol-agnostic, **zero-I/O** AI agent engine (a **library**) in TypeScript on Bun.
@@ -20,7 +20,7 @@ front-end + `kurt` CLI) consumes it. Public API is `src/lib.ts`.
 - Run demos: `bun run dev` · `bun run demo:abort` · `bun run demo:error` · `bun run demo:sandbox`
 - Live chat (stdout) vs a real LLM: `bun run chat ["prompt"]` (needs `DEEPSEEK_API_KEY`).
 - Public API for consumers (kurt-tui): `src/lib.ts` (re-exports engine/providers/tools/sandbox/session/search + history/compaction/stdout).
-- Gate before any merge: **`bun run typecheck && bun test`** (currently 76 tests pass, all offline).
+- Gate before any merge: **`bun run typecheck && bun test`** (currently 81 tests pass, all offline).
 
 ## 3. Architecture & invariants
 Three layers, three iron rules (full text in `CLAUDE.md` §2 — do not break them):
@@ -28,10 +28,15 @@ Three layers, three iron rules (full text in `CLAUDE.md` §2 — do not break th
 2. **Protocol-agnostic** — engine doesn't know its consumer; modes only map events↔commands.
 3. **Add shells, don't change the core** — new capability = injected impl or outer
    orchestration, never an engine edit. Verify with `git diff main -- src/engine src/modes`.
+   > Sanctioned exceptions (pure-data contract extensions, user-approved): the
+   > `thinking`/`usage` `ModelStreamEvent`s + `thinking` `Event`, and the
+   > `ThinkingBlock` content type (for reasoning replay). The engine still does
+   > zero I/O and never branches on a provider.
 
 Event contract (locked by `src/engine/loop.test.ts`):
 `turn_start → llm_delta* → (tool_call, tool_result)* → turn_end`, repeated per loop;
-abnormal end = `aborted`/`error`. Also display-only `thinking` + `usage` events, and `tool_output` (live tool
+abnormal end = `aborted`/`error`. Also `thinking` (display + accumulated into a
+`ThinkingBlock` on the assistant message for capability-gated replay) + `usage` events, and `tool_output` (live tool
 output streamed via `ctx.emit`, tagged with `ToolContext.toolCallId`). Invariant: every `tool_call` is paired with
 exactly one `tool_result` (even on abort/throw); a throwing tool → `tool_result(isError)`
 and the loop continues.
@@ -42,7 +47,7 @@ and the loop continues.
 | `src/engine/` | The core loop + contracts. **Zero I/O.** | `runLoop` (`loop.ts`); types `Event`/`Message`; ifaces `Tool`/`ModelProvider`/`CompactionPolicy`; `AsyncEventQueue` | — (pure) |
 | `src/engine/loop.ts` | Agentic loop; pairs tool_call/result; abort handling | `runLoop`, `RunLoopOptions` | types, tool, model, compaction, async-queue |
 | `src/engine/async-queue.ts` | Single-consumer channel powering `ToolContext.emit` | `AsyncEventQueue` | — |
-| `src/providers/` | `ModelProvider` impls + model metadata | `MockModel` (scripted, no deps); `OpenAICompatModel` (DeepSeek/OpenAI Chat Completions over SSE, key injected; `implements CapableModel`, shapes the request body from its `capabilities` — thinking on/off, mapped `reasoning_effort`, omits sampling params in thinking mode); `capabilities.ts` (`ModelCapabilities`/`CapableModel`, `capabilitiesFor`, `mapEffort`, DeepSeek V4 table) | engine types |
+| `src/providers/` | `ModelProvider` impls + model metadata | `MockModel` (scripted, no deps); `OpenAICompatModel` (DeepSeek/OpenAI Chat Completions over SSE, key injected; `implements CapableModel`, shapes the request body from its `capabilities` — thinking on/off, mapped `reasoning_effort`, omits sampling params in thinking mode, and replays `reasoning_content` on tool-calling turns when `thinking.replayReasoning`); `capabilities.ts` (`ModelCapabilities`/`CapableModel`, `capabilitiesFor`, `mapEffort`, `replayReasoning`, DeepSeek V4 table) | engine types |
 | `src/tools/` | `Tool` impls — **all side effects live here** | `ReadFileTool` (confined + truncate + offset/limit), `LsTool`, `GrepTool` (pure-fs, workspace-confined), `WriteFileTool` (serialized FIFO queue, no size cap), `ShellTool`, `CodeTool`, `BrewTool` (unsandboxed Direct runner, mutating subcommands gated), `MemoryTool` (agent-writable memory at fixed global/project files; view/append/replace), `WebSearchTool`, `RequestWriteAccessTool`. `fs-access.ts` = shared `isInside`/`resolveWithin`; read/ls/grep/write share the live `writable` roots array (request_write_access grants apply immediately) | engine, sandbox, session, search, permission, `../truncate` |
 | `src/truncate.ts` | Shared read-output cap (lines OR bytes, whichever first) | `truncate`, `truncationNote` | — |
 | `src/sandbox/` | Subprocess isolation behind `SandboxProvider` | `SeatbeltSandbox`, `DirectSandbox`, `buildProfile`; `run-process.ts` (detached spawn → group-kill; idle-timeout 90s + hard cap 10min; output cap; live `onOutput` streaming; abort) | — |

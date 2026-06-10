@@ -1,7 +1,7 @@
 # PROJECT_INDEX — kurt-tui
 
 > Cached architecture map. Read this first; scan only what it points to.
-> Last synced: 2026-06-10, after agent-writable memory (memory tool + project memory preload).
+> Last synced: 2026-06-10, after reasoning replay (session-view renders persisted thinking blocks).
 
 ## 1. Overview
 Ink terminal UI for `kurt-agent`. A front-end consumer: subscribes to the engine
@@ -44,7 +44,7 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 | `src/session-store.ts` | Persist conversations to `~/.kurt/sessions/<id>.json` (global, tagged by workspace): `SessionStore` create/save/load/`list(ws?)`/remove; `SessionMeta`/`SessionRecord` | `SessionStore` | `kurt-agent` (Message), `./paths` |
 | `src/context-files.ts` | `loadContextPrelude(ws)` → reads `~/.kurt/memory.md` (global) + `<ws>/.kurt/memory.md` (project, agent-written) + `<ws>/.kurt/rules.md` (user rules) into a system-prompt prelude | `loadContextPrelude` | `./paths` |
 | `src/tui/app.tsx` | Root Ink component: `committed` (→ `<Static>` scrollback) + `live` (current turn) + session state, command palette, drives the loop, `/compact`, `/sessions` picker, `/new`, `/clear`; autosave + auto-title via `SessionController` | `App`, `EngineRunner`, `Compactor`, `SessionState`, `SessionController` | ink, react, kurt-agent, sibling files |
-| `src/tui/session-view.ts` | `entriesFromMessages` — rebuild display entries from saved `Message[]` (resume repaint) | `entriesFromMessages` | `kurt-agent`, `./entries` |
+| `src/tui/session-view.ts` | `entriesFromMessages` — rebuild display entries from saved `Message[]` (resume repaint; renders thinking/text/tool blocks) | `entriesFromMessages` | `kurt-agent`, `./entries` |
 | `src/tui/session-picker.tsx` | The `/sessions` list overlay (title · msg count · time-ago); keys handled in App | `SessionPicker` | ink, `../session-store` |
 | `src/tui/conversation.tsx` | Renders one entry: user (divider+plain), kurt (markdown when final), thinking, tool cards (IN:/OUT:, live stream tail + ⠿ while running, clipped), notices | `EntryView` | ink, `./markdown`, `./tool-format`, `./entries` |
 | `src/tui/status-bar.tsx` | Bottom bar: model · ctx + scarcity dot · effort · think · mode | `StatusBar`, `Status`, `ChatMode` | ink, `./theme` |

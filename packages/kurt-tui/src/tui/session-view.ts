@@ -19,7 +19,9 @@ export function entriesFromMessages(messages: Message[]): Entry[] {
     }
     if (msg.role === "assistant") {
       for (const block of msg.content) {
-        if (block.type === "text" && block.text.length > 0) {
+        if (block.type === "thinking" && block.text.length > 0) {
+          entries.push({ kind: "thinking", text: block.text });
+        } else if (block.type === "text" && block.text.length > 0) {
           entries.push({ kind: "assistant", text: block.text });
         } else if (block.type === "tool_use") {
           entries.push({ kind: "tool", id: block.id, name: block.name, input: block.input });

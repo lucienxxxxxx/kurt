@@ -4,6 +4,23 @@
 
 ---
 
+## thinking + 工具:reasoning_content 回填(元数据门控)— ✅ (2026-06-10)
+
+**问题**:DeepSeek thinking 模式下,assistant 若调用了工具,后续请求**必须把该轮的 `reasoning_content` 原样带回**,否则可能出错。旧管线把推理只当显示用、丢弃,没回填 → thinking+工具是潜伏的正确性 bug(thinking 默认关才没暴露)。
+
+**用户要求**:用 A 方案(把推理存进 Message),但**不要写死**——这是 DeepSeek 的规则,别的模型未必强制;**做成模型元数据,用 DeepSeek 时才开**。
+
+**交付物**:
+- **引擎(经用户批准的破例,纯数据扩展)**:`types.ts` 加 `ThinkingBlock`({type:"thinking"}) 进 `ContentBlock`;`loop.ts` 把 `thinking_delta` 累加进 assistant 轮的 thinking 块(轮内工具循环即可回放);`modes/history.ts` 的 `messagesFromEvents` 同样重建 thinking 块(前端历史 + 会话存档都带上)。引擎仍零 I/O、不分厂商。
+- **门控(元数据驱动,不写死)**:`ThinkingCapability.replayReasoning`(DeepSeek V4=true,未知模型=false);`toOpenAIMessages(…,{includeReasoning})` **仅当模型要求且该轮有 tool_calls** 时序列化 `reasoning_content`(精确匹配 DeepSeek 规则,其余忽略);`#buildBody` 传 `caps.thinking.replayReasoning`。
+- `mock-model` 支持 `thinking` + 记录 requests(支撑引擎级回放测试);kurt-tui `session-view` 恢复会话时渲染持久化的 thinking 块。
+
+**关键决策**:推理**捕获**进 Message 是与厂商无关的(纯数据、无害);**是否上线回填**完全由 capability 决定 → 换模型零改动、不写死。这是项目里**唯一一次**有意扩展引擎 Message 契约,已在 PROJECT_INDEX「Sanctioned exceptions」记录。
+
+**验收**:kurt-agent **81**(+5)/ kurt-tui **46** 通过;typecheck 干净。`git diff main -- src/engine` **本轮非空**(预期内、已批准):仅 `ThinkingBlock` 纯数据扩展 + loop 累加。覆盖:引擎回放(第二次请求含 thinking 块)、messagesFromEvents 重建、capability 标志、reasoning_content 仅在"要求+有工具调用"时序列化。
+
+---
+
 ## Agent 可写记忆(MemoryTool)+ 自主判断何时记 — ✅ (2026-06-10)
 
 **用户要求**:让 agent 能自己写/更新记忆(上一轮只做了只读预载),且**自动判断何时调用 memory**。先给方案确认再执行。
