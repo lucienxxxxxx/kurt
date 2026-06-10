@@ -88,6 +88,7 @@ async function drive(
     // ── Stream one assistant response. ──
     const request: ModelRequest = { system: options.system, messages, tools: toolSpecs };
     let textBuffer = "";
+    let thinkingBuffer = "";
     const toolCalls: ToolUseBlock[] = [];
     let stopReason = "end_turn";
 
@@ -99,7 +100,9 @@ async function drive(
             emit({ type: "llm_delta", text: chunk.text });
             break;
           case "thinking_delta":
-            // Display-only: forwarded for UIs, never accumulated into history.
+            // Forwarded for UIs AND accumulated, so it can be replayed in history
+            // for providers that require it (capabilities-gated at serialize time).
+            thinkingBuffer += chunk.text;
             emit({ type: "thinking", text: chunk.text });
             break;
           case "tool_use":
@@ -123,8 +126,9 @@ async function drive(
       throw err;
     }
 
-    // Record the assistant turn (text first, then any tool_use blocks).
+    // Record the assistant turn (thinking, then text, then any tool_use blocks).
     const assistantContent: ContentBlock[] = [];
+    if (thinkingBuffer.length > 0) assistantContent.push({ type: "thinking", text: thinkingBuffer });
     if (textBuffer.length > 0) assistantContent.push({ type: "text", text: textBuffer });
     assistantContent.push(...toolCalls);
     messages.push({ role: "assistant", content: assistantContent });

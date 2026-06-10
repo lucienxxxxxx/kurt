@@ -36,6 +36,18 @@ export interface TextBlock {
   text: string;
 }
 
+/**
+ * Reasoning/"thinking" produced before the answer. Kept as a normalized block so
+ * providers that REQUIRE it echoed back (e.g. DeepSeek thinking mode with tool
+ * calls — see `ModelCapabilities.thinking.replayReasoning`) can re-serialize it.
+ * Providers that don't need it simply ignore the block. The engine never inspects
+ * its contents.
+ */
+export interface ThinkingBlock {
+  type: "thinking";
+  text: string;
+}
+
 export interface ToolUseBlock {
   type: "tool_use";
   id: string;
@@ -51,7 +63,7 @@ export interface ToolResultBlock {
   isError: boolean;
 }
 
-export type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock;
+export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock;
 
 export interface Message {
   role: Role;
@@ -76,8 +88,9 @@ export interface Message {
 export type Event =
   | { type: "turn_start"; turn: number }
   | { type: "llm_delta"; text: string }
-  // Reasoning/"thinking" tokens streamed separately from the answer (display-only;
-  // never stored in message history).
+  // Reasoning/"thinking" tokens streamed separately from the answer (for display).
+  // Also accumulated into a ThinkingBlock on the assistant message so providers
+  // that require it can replay it (see ModelCapabilities.thinking.replayReasoning).
   | { type: "thinking"; text: string }
   | { type: "tool_call"; id: string; name: string; input: unknown }
   // Live output a running tool streams before its final tool_result (e.g. a shell

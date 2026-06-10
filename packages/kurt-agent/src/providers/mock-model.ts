@@ -16,6 +16,8 @@ export interface MockToolCall {
 export interface MockResponse {
   /** Assistant text; streamed out in small deltas to exercise the stream path. */
   text?: string;
+  /** Reasoning/"thinking" streamed before the answer (thinking_delta). */
+  thinking?: string;
   /** Tool calls the model makes this turn. */
   toolCalls?: MockToolCall[];
 }
@@ -29,6 +31,9 @@ export interface MockModelOptions {
 
 export class MockModel implements ModelProvider {
   readonly name = "mock";
+
+  /** Every request passed to stream(), in order — lets tests assert replayed history. */
+  readonly requests: ModelRequest[] = [];
 
   #script: MockResponse[];
   #turn = 0;
@@ -46,10 +51,21 @@ export class MockModel implements ModelProvider {
     return Math.ceil(text.length / 4);
   }
 
-  async *stream(_request: ModelRequest, signal: AbortSignal): AsyncIterable<ModelStreamEvent> {
+  async *stream(request: ModelRequest, signal: AbortSignal): AsyncIterable<ModelStreamEvent> {
+    // Snapshot the request (deep-ish) so later mutations don't change what we saw.
+    this.requests.push({ ...request, messages: request.messages.map((m) => ({ ...m, content: [...m.content] })) });
+
     const response: MockResponse = this.#script[this.#turn++] ?? {
       text: "(mock script exhausted)",
     };
+
+    if (response.thinking) {
+      for (const piece of chunk(response.thinking, this.#opts.chunkSize)) {
+        throwIfAborted(signal);
+        if (this.#opts.chunkDelayMs > 0) await delay(this.#opts.chunkDelayMs, signal);
+        yield { type: "thinking_delta", text: piece };
+      }
+    }
 
     if (response.text) {
       for (const piece of chunk(response.text, this.#opts.chunkSize)) {

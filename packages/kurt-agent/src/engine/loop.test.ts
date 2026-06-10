@@ -221,4 +221,28 @@ describe("runLoop — Phase 1 承重墙", () => {
     expect(result.content).toContain("Unknown tool: ghost");
     assertNoDanglingToolCalls(events);
   });
+
+  test("reasoning round-trips: a thinking turn with tools replays a thinking block in history", async () => {
+    const model = new MockModel([
+      { thinking: "let me reason about this", text: "checking", toolCalls: [{ name: "emitter", input: {} }] },
+      { text: "all done" },
+    ]);
+    await collect(
+      runLoop({
+        system: "s",
+        messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+        tools: [new EmittingTool()],
+        model,
+      }),
+    );
+
+    // The 2nd model call (after the tool result) must see the assistant turn with
+    // its thinking block preserved — that's what the provider replays as reasoning_content.
+    expect(model.requests).toHaveLength(2);
+    const assistant = model.requests[1]!.messages.find((m) => m.role === "assistant");
+    expect(assistant).toBeDefined();
+    const thinking = assistant!.content.find((b) => b.type === "thinking");
+    expect(thinking).toBeDefined();
+    expect((thinking as { text: string }).text).toBe("let me reason about this");
+  });
 });
