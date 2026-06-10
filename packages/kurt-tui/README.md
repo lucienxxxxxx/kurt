@@ -50,6 +50,19 @@ approve). No `import/`/`export/` folders are created.
 > File writes and **command approval are independent**: writing in the workspace
 > never prompts, while sensitive bash commands (below) always do.
 
+### Modes (`/mode` · chat / agent / plan)
+
+The mode decides which tools the agent may use (one shared tool hub, different
+subsets) and tunes its system prompt:
+
+- **chat** — read-only: `read_file`/`ls`/`grep`/`web_search` + `memory` + `ask_user`. No file writes, no commands. Good for Q&A and exploring.
+- **plan** — chat's tools **plus `update_plan`** (a visible step checklist). Investigates and produces a plan; still no writes/commands.
+- **agent** — everything (writes, `shell`/`run_code`, `brew`, …). Acts directly.
+
+Switch with `/mode` (cycles) or `/mode chat|agent|plan`. The agent can also call
+**`ask_user`** in any mode to ask you a clarifying question — a lettered
+multiple-choice prompt (↑/↓ + ↵ to pick) where you can also just type a free answer.
+
 ### Command approval
 
 Sensitive commands (`rm`, `sudo`, disk writes, `curl … | sh`, force-push, …) pause

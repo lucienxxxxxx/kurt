@@ -4,6 +4,20 @@
 
 ---
 
+## Agent/ToolHub 抽象 + 模式(chat/agent/plan)可用 + ask_user/update_plan — ✅ (2026-06-11)
+
+**用户要求**:抽象 Agent(model/context 等构建参数)+ 共享 tool_hub,各 Agent 按需分配不同 tool;新增 `ask_user`(agent 主动提问,TUI 选择题 ABCD + 可直接输入);把 chat/agent/plan 三模式做成可用。经提问确认:chat=只读+ask_user+memory;plan=+`update_plan`(不执行/不写);agent=全开放;模式命名 chat/agent/plan,新 tool 名 `ask_user`。
+
+**交付物**:
+- **kurt-agent(组合层,引擎零改动)**:`agent/tool-hub.ts`(`ToolHub` 注册表 name→Tool,`get(names)`/`all()`);`agent/agent.ts`(`Agent{model,system,tools}`+`run()`→runLoop+`with()`,为 Phase 7 子 agent 铺路);`ask/types.ts`(`AskProvider` seam,仿 PermissionProvider);`tools/ask-user.ts`(`AskUserTool` 经注入 provider 提问);`tools/update-plan.ts`(`UpdatePlanTool` 无状态,把有序 checklist 作为 tool 结果返回,plan 模式用)。
+- **kurt-tui(模式从"装饰"变"真功能")**:所有 tool 进一个 `ToolHub`,runner 按 `session.mode` 用 `toolsForMode(hub,mode)` 分子集;`systemPrompt(ws,mode)` 加 per-mode 指令;`TOOLS_BY_MODE`(chat 只读+ask_user · plan +update_plan · agent all);mode 重命名 ask→chat(`normalizeMode` 迁移旧值);`AskBridge`+`AskPrompt`(选项↑/↓选/直接输入/↵提交/esc跳过)接进 App;chat 路径用 stdin 版 AskProvider;tool-format 给 ask_user/update_plan 加标签/摘要。
+
+**关键决策**:Agent/ToolHub 是 runLoop 的薄壳(不动 src/engine);`update_plan` 无状态(结果即展示,免新事件/状态);ask_user 的"选 ABCD vs 直接输入"用箭头选+键入消歧(避免单键既是选项又是首字母的冲突)。
+
+**验收**:kurt-agent **89**(+8)/ kurt-tui **56**(+7)通过;typecheck 干净;`git diff main -- src/engine` 为空;CLI 冒烟 `config set mode chat` 通过、旧值 `ask` 读时迁移为 chat。
+
+---
+
 ## thinking + 工具:reasoning_content 回填(元数据门控)— ✅ (2026-06-10)
 
 **问题**:DeepSeek thinking 模式下,assistant 若调用了工具,后续请求**必须把该轮的 `reasoning_content` 原样带回**,否则可能出错。旧管线把推理只当显示用、丢弃,没回填 → thinking+工具是潜伏的正确性 bug(thinking 默认关才没暴露)。

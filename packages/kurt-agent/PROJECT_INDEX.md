@@ -3,8 +3,8 @@
 > Cached architecture map. **Read this first**; scan the tree only for the files
 > this map points you to. Keep it fresh: update on every structural change.
 > Maintained via the `project-module-workflow` skill (see CLAUDE.md §3).
-> Last synced: 2026-06-10, after reasoning_content replay (ThinkingBlock +
-> capability-gated serialization) and the agent-writable MemoryTool.
+> Last synced: 2026-06-11, after the Agent/ToolHub abstraction + ask_user/update_plan
+> tools (modes built on top in kurt-tui).
 
 ## 1. Overview
 A protocol-agnostic, **zero-I/O** AI agent engine (a **library**) in TypeScript on Bun.
@@ -20,7 +20,7 @@ front-end + `kurt` CLI) consumes it. Public API is `src/lib.ts`.
 - Run demos: `bun run dev` · `bun run demo:abort` · `bun run demo:error` · `bun run demo:sandbox`
 - Live chat (stdout) vs a real LLM: `bun run chat ["prompt"]` (needs `DEEPSEEK_API_KEY`).
 - Public API for consumers (kurt-tui): `src/lib.ts` (re-exports engine/providers/tools/sandbox/session/search + history/compaction/stdout).
-- Gate before any merge: **`bun run typecheck && bun test`** (currently 81 tests pass, all offline).
+- Gate before any merge: **`bun run typecheck && bun test`** (currently 89 tests pass, all offline).
 
 ## 3. Architecture & invariants
 Three layers, three iron rules (full text in `CLAUDE.md` §2 — do not break them):
@@ -48,12 +48,14 @@ and the loop continues.
 | `src/engine/loop.ts` | Agentic loop; pairs tool_call/result; abort handling | `runLoop`, `RunLoopOptions` | types, tool, model, compaction, async-queue |
 | `src/engine/async-queue.ts` | Single-consumer channel powering `ToolContext.emit` | `AsyncEventQueue` | — |
 | `src/providers/` | `ModelProvider` impls + model metadata | `MockModel` (scripted, no deps); `OpenAICompatModel` (DeepSeek/OpenAI Chat Completions over SSE, key injected; `implements CapableModel`, shapes the request body from its `capabilities` — thinking on/off, mapped `reasoning_effort`, omits sampling params in thinking mode, and replays `reasoning_content` on tool-calling turns when `thinking.replayReasoning`); `capabilities.ts` (`ModelCapabilities`/`CapableModel`, `capabilitiesFor`, `mapEffort`, `replayReasoning`, DeepSeek V4 table) | engine types |
-| `src/tools/` | `Tool` impls — **all side effects live here** | `ReadFileTool` (confined + truncate + offset/limit), `LsTool`, `GrepTool` (pure-fs, workspace-confined), `WriteFileTool` (serialized FIFO queue, no size cap), `ShellTool`, `CodeTool`, `BrewTool` (unsandboxed Direct runner, mutating subcommands gated), `MemoryTool` (agent-writable memory at fixed global/project files; view/append/replace), `WebSearchTool`, `RequestWriteAccessTool`. `fs-access.ts` = shared `isInside`/`resolveWithin`; read/ls/grep/write share the live `writable` roots array (request_write_access grants apply immediately) | engine, sandbox, session, search, permission, `../truncate` |
+| `src/tools/` | `Tool` impls — **all side effects live here** | `ReadFileTool` (confined + truncate + offset/limit), `LsTool`, `GrepTool` (pure-fs, workspace-confined), `WriteFileTool` (serialized FIFO queue, no size cap), `ShellTool`, `CodeTool`, `BrewTool` (unsandboxed Direct runner, mutating subcommands gated), `MemoryTool` (agent-writable memory at fixed global/project files; view/append/replace), `AskUserTool` (`ask_user` — agent asks the user via an injected `AskProvider`), `UpdatePlanTool` (`update_plan` — stateless checklist for plan mode), `WebSearchTool`, `RequestWriteAccessTool`. `fs-access.ts` = shared `isInside`/`resolveWithin`; read/ls/grep/write share the live `writable` roots array (request_write_access grants apply immediately) | engine, sandbox, session, search, permission, `../truncate` |
 | `src/truncate.ts` | Shared read-output cap (lines OR bytes, whichever first) | `truncate`, `truncationNote` | — |
 | `src/sandbox/` | Subprocess isolation behind `SandboxProvider` | `SeatbeltSandbox`, `DirectSandbox`, `buildProfile`; `run-process.ts` (detached spawn → group-kill; idle-timeout 90s + hard cap 10min; output cap; live `onOutput` streaming; abort) | — |
 | `src/session/` | Per-session scratch dir lifecycle | `SessionWorkspace` (`.root`, `.dir()`, `.dispose()`) | — |
 | `src/search/` | Pluggable web-search backend | `SearchProvider`, `DuckDuckGoSearch` | — |
 | `src/permission/` | Approval seam for sensitive commands | `PermissionProvider`/`PermissionDecision`/`PermissionRequest`, `classifyCommand` (pure rules → key+explanation+risk), `allowAll`/`denyAll`. ShellTool consults it; the front-end supplies the prompt/whitelist | — (pure) |
+| `src/ask/` | Seam for the `ask_user` tool (agent → user) | `AskProvider`, `AskRequest` (front-end implements; mirrors permission) | — (pure) |
+| `src/agent/` | Composition shells around the engine | `Agent` ({model,system,tools}+`run()`→runLoop+`with()`); `ToolHub` (name→Tool registry; `get(names)`/`all()`). Engine untouched | engine, tools |
 | `src/modes/` | Modal layer + reusable orchestration helpers | `runStdoutMode` (`stdout.ts`); `messagesFromEvents` (`history.ts`); `compactHistory`/`compactionSplit`/`serializeForSummary` (`compaction.ts`, cuts only at user boundaries → preserves tool pairing) | engine types |
 | `src/lib.ts` | **Public API barrel** (what kurt-tui imports via `"kurt-agent"`) | re-exports the above | all |
 | `src/demos/` | Runnable scenarios | `abort.ts`, `error.ts`, `sandbox.ts` | everything |
@@ -66,6 +68,8 @@ and the loop continues.
 - **Describe a model's abilities** → add a `ModelCapabilities` entry in `src/providers/capabilities.ts` (thinking/effort/context/output-tokens/tools); the orchestration layer reads `capabilitiesFor(id)` to drive defaults and knobs. Pure metadata, no engine change.
 - **Add a sandbox backend** → `src/sandbox/<name>.ts` implementing `SandboxProvider`; only `seatbelt.ts` may reference `sandbox-exec`.
 - **Gate a new risky command** → add a rule in `src/permission/classify.ts` (key+explanation+risk). The front-end (kurt-tui) renders the prompt + persists the allowlist.
+- **Bundle a configured agent / share tools** → `src/agent/` (`Agent` wraps runLoop; `ToolHub` is the shared registry). The chat/agent/plan modes are built on these in kurt-tui (`toolsForMode`).
+- **Agent asks the user** → `ask_user` tool + `AskProvider` (`src/ask/`); the front-end implements the prompt (TUI overlay / stdin).
 - **Write outside the workspace** → the agent calls `request_write_access` (a Tool) → approval → the dir is pushed to the shared writable-roots array; file/exec tools read it live.
 - **Front-end / TUI** → lives in the sibling package **`packages/kurt-tui`** (Ink), which consumes this lib. A minimal in-repo mode lives at `src/modes/stdout.ts` (clone its shape for new built-in modes).
 - **Compaction** (Phase 3) → implement `CompactionPolicy`; the seam is already wired in `loop.ts` (engine decides *when* via `thresholdTokens`, policy decides *how* via `compact`).
