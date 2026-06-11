@@ -10,6 +10,7 @@
  */
 
 import { Agent } from "../agent/agent.ts";
+import { withRetry } from "../providers/retry.ts";
 import type { Event, Message, ModelProvider, Tool } from "../engine/index.ts";
 import type { TaskSpec } from "./task.ts";
 
@@ -43,7 +44,12 @@ export interface BeeResult {
 
 export async function runBee(opts: BeeRunOptions): Promise<BeeResult> {
   const agent = new Agent({
-    model: opts.model,
+    // Transient API failures (429 rate limits under parallel bees, 5xx, network
+    // blips) back off and retry instead of killing the bee mid-task.
+    model: withRetry(opts.model, {
+      onRetry: (attempt, error, delayMs) =>
+        opts.onActivity?.(`⟳ model retry ${attempt} (${firstLine(error)}) in ${Math.ceil(delayMs / 1000)}s\n`),
+    }),
     system: opts.system,
     tools: opts.tools,
     maxTurns: opts.maxTurns ?? 32,

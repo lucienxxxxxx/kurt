@@ -18,6 +18,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { AsyncEventQueue } from "../engine/index.ts";
+import { withRetry } from "../providers/retry.ts";
 import type { Event, ModelProvider, ModelRequest, Tool } from "../engine/index.ts";
 import { runBee, type BeeResult } from "./bee.ts";
 import { formatPlan, TaskGraph, type TaskSpec, type TaskState } from "./task.ts";
@@ -240,11 +241,16 @@ async function drive(opts: HiveOptions, queue: AsyncEventQueue<Event>, signal: A
     emit({ type: "usage", inputTokens: totals.input, outputTokens: totals.output, totalTokens: totals.total });
   };
 
-  // 1. Plan (one structured call), shown as a tool card.
+  // 1. Plan (one structured call), shown as a tool card. Transient API errors
+  // retry with backoff; the retry lines stream onto the plan card.
   emit({ type: "tool_call", id: "hive-plan", name: "hive_plan", input: { goal: opts.goal } });
+  const planner = withRetry(opts.planner, {
+    onRetry: (attempt, error, delayMs) =>
+      emit({ type: "tool_output", id: "hive-plan", text: `⟳ retry ${attempt} (${error.split("\n")[0]?.slice(0, 80)}) in ${Math.ceil(delayMs / 1000)}s\n` }),
+  });
   let graph: TaskGraph;
   try {
-    graph = await planTasks(opts.planner, opts.goal, opts.context ?? "", signal, opts.maxTasks ?? 10, addUsage);
+    graph = await planTasks(planner, opts.goal, opts.context ?? "", signal, opts.maxTasks ?? 10, addUsage);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     emit({ type: "tool_result", id: "hive-plan", content: `Planning failed: ${msg}`, isError: true });
@@ -321,7 +327,7 @@ async function drive(opts: HiveOptions, queue: AsyncEventQueue<Event>, signal: A
   }
 
   // 3. Queen's final summary, streamed as ordinary assistant text.
-  const summarizer = opts.summarizer ?? opts.planner;
+  const summarizer = withRetry(opts.summarizer ?? opts.planner);
   try {
     for await (const ev of summarizer.stream(summaryRequest(opts.goal, graph, records), signal)) {
       if (ev.type === "text_delta") emit({ type: "llm_delta", text: ev.text });

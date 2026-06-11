@@ -4,6 +4,19 @@
 
 ---
 
+## 蜂群实测修复 #4:瞬时错误重试(withRetry 退避)— ✅ (2026-06-12)
+
+**动机**:并行工蜂对 DeepSeek 限流(429)/5xx/网络抖动最敏感,一次瞬时错误就让整只工蜂阵亡(修 #3 让原因可见了,这轮让它**自愈**)。
+
+**交付物**:
+- `providers/retry.ts`:`withRetry(model, {retries=2, baseDelayMs=1000, onRetry})` —— ModelProvider 装饰器,指数退避+抖动;**安全规则:只在流还没吐出任何事件时重试**(已下发的 chunk 不可重复),中流错误原样抛出;abort 不重试;`isTransientModelError`(429/5xx/网络类)分类。
+- 蜂群内部三方全包:工蜂(重试行写进 Bee 卡活动尾巴 `⟳ model retry 1 (…) in 2s`)、规划器(重试行流到 Hive plan 卡)、总结器(静默)。TUI 零改动。
+- 导出 `withRetry`/`isTransientModelError`(providers barrel + lib),其他模式将来可复用。
+
+**验收**:kurt-agent **111**(+6)/ kurt-tui **58**;测试:429→退避→成功(onRetry 可见)、4xx 不重试、**中流错误不重试不重复**、重试预算耗尽即抛、工蜂端到端 429 自愈+活动行可见。
+
+---
+
 ## 蜂群实测修复 #3:失败原因可见 + beeMaxTurns 32 + run_code CWD + usage 汇总 — ✅ (2026-06-12)
 
 **实测现象**:两只并行工蜂"failed"但卡片只有干活到一半的独白;状态栏 ctx 始终 0。

@@ -202,6 +202,41 @@ describe("runHive", () => {
     expect(byId.docs).toBe("done");
   });
 
+  test("a bee survives a transient 429: retries with a visible activity line", async () => {
+    // First model call throws 429, the second succeeds — the bee must finish.
+    let calls = 0;
+    const flaky: ModelProvider = {
+      name: "flaky",
+      async countTokens() {
+        return 0;
+      },
+      async *stream() {
+        if (calls++ === 0) throw new Error("deepseek HTTP 429 Too Many Requests: slow down");
+        yield { type: "text_delta" as const, text: "recovered and finished" };
+        yield { type: "done" as const, stopReason: "end_turn" };
+      },
+    };
+    const events = await collect(
+      runHive({
+        ...baseOptions(() => flaky),
+        planner: new MockModel([
+          { toolCalls: [{ name: "submit_plan", input: { tasks: [{ id: "solo", title: "Solo", goal: "g", dependsOn: [] }] } }] },
+        ]),
+      }),
+    );
+    const result = events.find((e) => e.type === "tool_result" && (e as { id: string }).id === "bee:solo") as {
+      isError: boolean;
+      content: string;
+    };
+    expect(result.isError).toBe(false);
+    expect(result.content).toContain("recovered and finished");
+    const activity = events
+      .filter((e) => e.type === "tool_output" && (e as { id: string }).id === "bee:solo")
+      .map((e) => (e as { text: string }).text)
+      .join("");
+    expect(activity).toContain("model retry 1");
+  });
+
   test("aggregates bee usage into cumulative usage events", async () => {
     // A bee model that reports real token usage (MockModel doesn't).
     const usageModel: ModelProvider = {
