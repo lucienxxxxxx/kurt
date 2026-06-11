@@ -251,7 +251,9 @@ export function makeTools(
     new GrepTool({ roots: writable }),
     new WriteFileTool({ roots: writable }),
     new ShellTool(sandbox, { cwd: ws.root, writablePaths: writable, env, permission }),
-    new CodeTool(sandbox, codeTemp, { writablePaths: writable, env }),
+    // Scripts run WITH the workspace as CWD (relative paths resolve there); the
+    // script files themselves stay in the session temp dir.
+    new CodeTool(sandbox, codeTemp, { writablePaths: writable, env, cwd: ws.root }),
     // brew runs UNSANDBOXED (network + system writes) via a Direct runner, gated
     // by approval for mutating subcommands.
     new BrewTool(new DirectSandbox(), { cwd: ws.root, permission }),

@@ -186,8 +186,10 @@ describe("runHive", () => {
 
     const typesResult = events.find(
       (e) => e.type === "tool_result" && (e as { id: string }).id === "bee:types",
-    ) as { isError: boolean };
+    ) as { isError: boolean; content: string };
     expect(typesResult.isError).toBe(true);
+    // The WHY is on the first line of the result, so clipping can never hide it.
+    expect(typesResult.content.split("\n")[0]).toContain("model exploded");
     // api (depends on types) must never have been dispatched.
     expect(events.some((e) => e.type === "tool_call" && (e as { id: string }).id === "bee:api")).toBe(false);
 
@@ -198,6 +200,26 @@ describe("runHive", () => {
     expect(byId.types).toBe("failed");
     expect(byId.api).toBe("blocked");
     expect(byId.docs).toBe("done");
+  });
+
+  test("aggregates bee usage into cumulative usage events", async () => {
+    // A bee model that reports real token usage (MockModel doesn't).
+    const usageModel: ModelProvider = {
+      name: "usage",
+      async countTokens() {
+        return 0;
+      },
+      async *stream() {
+        yield { type: "usage" as const, inputTokens: 60, outputTokens: 40, totalTokens: 100 };
+        yield { type: "text_delta" as const, text: "done" };
+        yield { type: "done" as const, stopReason: "end_turn" };
+      },
+    };
+    const events = await collect(runHive(baseOptions(() => usageModel)));
+    const usages = events.filter((e) => e.type === "usage") as Array<{ totalTokens: number }>;
+    expect(usages.length).toBeGreaterThanOrEqual(3); // one per bee, cumulative
+    // Three bees × 100 tokens each → the final cumulative total is 300.
+    expect(usages.at(-1)!.totalTokens).toBe(300);
   });
 
   test("planning failure surfaces as an error card + fatal error event", async () => {

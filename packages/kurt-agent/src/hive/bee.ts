@@ -20,10 +20,14 @@ export interface BeeRunOptions {
   system: string;
   /** The task brief (user message) — built by the queen, includes upstream handoffs. */
   brief: string;
+  /** Safety bound on the bee's loop turns. Default 32 (a bound must exist —
+   * unbounded bees can loop forever and parallel bees multiply the burn). */
   maxTurns?: number;
   signal?: AbortSignal;
   /** Called with a short human-readable line for each notable bee event. */
   onActivity?: (line: string) => void;
+  /** Called with each real token-usage report from the bee's model calls. */
+  onUsage?: (usage: { inputTokens: number; outputTokens: number; totalTokens: number }) => void;
 }
 
 export interface BeeResult {
@@ -33,6 +37,8 @@ export interface BeeResult {
   summary: string;
   /** Files the bee wrote (write_file paths, deduped, in order). */
   artifacts: string[];
+  /** WHY it failed (maxTurns / API error / aborted) — shown first in the result. */
+  reason?: string;
 }
 
 export async function runBee(opts: BeeRunOptions): Promise<BeeResult> {
@@ -40,7 +46,7 @@ export async function runBee(opts: BeeRunOptions): Promise<BeeResult> {
     model: opts.model,
     system: opts.system,
     tools: opts.tools,
-    maxTurns: opts.maxTurns ?? 12,
+    maxTurns: opts.maxTurns ?? 32,
   });
 
   const messages: Message[] = [{ role: "user", content: [{ type: "text", text: opts.brief }] }];
@@ -74,6 +80,9 @@ export async function runBee(opts: BeeRunOptions): Promise<BeeResult> {
         case "aborted":
           failure = `aborted (${ev.reason})`;
           break;
+        case "usage":
+          opts.onUsage?.({ inputTokens: ev.inputTokens, outputTokens: ev.outputTokens, totalTokens: ev.totalTokens });
+          break;
       }
     }
   } catch (err) {
@@ -83,7 +92,7 @@ export async function runBee(opts: BeeRunOptions): Promise<BeeResult> {
   // Prefer the final turn's text as the report (earlier turns are working notes).
   const summary = (lastTurnText.trim() || text.trim()).slice(0, 2000);
   if (failure) {
-    return { taskId: opts.task.id, status: "failed", summary: summary || failure, artifacts };
+    return { taskId: opts.task.id, status: "failed", summary: summary || failure, artifacts, reason: failure };
   }
   return { taskId: opts.task.id, status: "done", summary: summary || "(no report)", artifacts };
 }

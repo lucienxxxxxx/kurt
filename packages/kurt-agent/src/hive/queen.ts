@@ -73,17 +73,26 @@ function extractPlanJson(text: string): unknown {
   }
 }
 
+/** A real token-usage report from one model call. */
+export interface UsageReport {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
 /** Run one planning round; prefer the tool call, fall back to JSON in the text. */
 async function planAttempt(
   planner: ModelProvider,
   request: ModelRequest,
   signal: AbortSignal,
+  onUsage?: (u: UsageReport) => void,
 ): Promise<{ raw: unknown; text: string }> {
   let raw: unknown = null;
   let text = "";
   for await (const ev of planner.stream(request, signal)) {
     if (ev.type === "tool_use" && ev.name === "submit_plan") raw = ev.input;
     else if (ev.type === "text_delta") text += ev.text;
+    else if (ev.type === "usage") onUsage?.(ev);
   }
   if (raw == null) raw = extractPlanJson(text);
   return { raw, text };
@@ -96,9 +105,10 @@ export async function planTasks(
   context: string,
   signal: AbortSignal,
   maxTasks = 10,
+  onUsage?: (u: UsageReport) => void,
 ): Promise<TaskGraph> {
   const userMsg = { role: "user" as const, content: [{ type: "text" as const, text: `${goal}\n\nWorkspace context:\n${context}` }] };
-  let { raw, text } = await planAttempt(planner, { system: PLANNER_SYSTEM, messages: [userMsg], tools: [PLAN_TOOL] }, signal);
+  let { raw, text } = await planAttempt(planner, { system: PLANNER_SYSTEM, messages: [userMsg], tools: [PLAN_TOOL] }, signal, onUsage);
 
   // Some models ignore the tool and chat instead — retry once demanding bare JSON.
   if (!Array.isArray((raw as { tasks?: unknown })?.tasks)) {
@@ -113,6 +123,7 @@ export async function planTasks(
         tools: [],
       },
       signal,
+      onUsage,
     ));
   }
 
@@ -219,11 +230,21 @@ async function drive(opts: HiveOptions, queue: AsyncEventQueue<Event>, signal: A
   const startedAt = Date.now();
   emit({ type: "turn_start", turn: 1 });
 
+  // Aggregate token usage across the planner + ALL bees + the summarizer, and
+  // re-emit CUMULATIVE totals (front-ends show the latest usage event as-is).
+  const totals = { input: 0, output: 0, total: 0 };
+  const addUsage = (u: UsageReport): void => {
+    totals.input += u.inputTokens;
+    totals.output += u.outputTokens;
+    totals.total += u.totalTokens;
+    emit({ type: "usage", inputTokens: totals.input, outputTokens: totals.output, totalTokens: totals.total });
+  };
+
   // 1. Plan (one structured call), shown as a tool card.
   emit({ type: "tool_call", id: "hive-plan", name: "hive_plan", input: { goal: opts.goal } });
   let graph: TaskGraph;
   try {
-    graph = await planTasks(opts.planner, opts.goal, opts.context ?? "", signal, opts.maxTasks ?? 10);
+    graph = await planTasks(opts.planner, opts.goal, opts.context ?? "", signal, opts.maxTasks ?? 10, addUsage);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     emit({ type: "tool_result", id: "hive-plan", content: `Planning failed: ${msg}`, isError: true });
@@ -261,6 +282,7 @@ async function drive(opts: HiveOptions, queue: AsyncEventQueue<Event>, signal: A
         maxTurns: opts.beeMaxTurns,
         signal,
         onActivity: (line) => emit({ type: "tool_output", id: `bee:${task.id}`, text: line }),
+        onUsage: addUsage,
       }),
     );
   };
@@ -287,7 +309,8 @@ async function drive(opts: HiveOptions, queue: AsyncEventQueue<Event>, signal: A
     rec.summary = result.summary;
     rec.artifacts = result.artifacts;
     const body = [
-      `status: ${result.status}`,
+      // The reason goes on the FIRST line so output clipping can never hide it.
+      `status: ${result.status}${result.reason ? ` — ${result.reason}` : ""}`,
       result.summary,
       result.artifacts.length > 0 ? `artifacts:\n${result.artifacts.map((a) => `- ${a}`).join("\n")}` : "",
     ]
@@ -302,6 +325,7 @@ async function drive(opts: HiveOptions, queue: AsyncEventQueue<Event>, signal: A
   try {
     for await (const ev of summarizer.stream(summaryRequest(opts.goal, graph, records), signal)) {
       if (ev.type === "text_delta") emit({ type: "llm_delta", text: ev.text });
+      else if (ev.type === "usage") addUsage(ev);
     }
   } catch {
     emit({ type: "llm_delta", text: fallbackSummary(graph, records) });

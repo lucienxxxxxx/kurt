@@ -9,11 +9,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PermissionDecision, PermissionRequest } from "../permission/types.ts";
 import type { SandboxExecOptions, SandboxProvider, SandboxResult } from "../sandbox/types.ts";
+import { basename } from "node:path";
+import { DirectSandbox } from "../sandbox/direct.ts";
+import { SessionWorkspace } from "../session/index.ts";
 import { ReadFileTool } from "./read-file.ts";
 import { WriteFileTool } from "./write-file.ts";
 import { LsTool } from "./ls.ts";
 import { GrepTool } from "./grep.ts";
 import { BrewTool } from "./brew.ts";
+import { CodeTool } from "./code.ts";
 
 let ws: string;
 beforeEach(() => {
@@ -127,6 +131,20 @@ describe("BrewTool gating", () => {
     const res = await tool.execute({ args: "list" }, ctx());
     expect(res.isError).toBe(true);
     expect(res.content).toContain("not found");
+  });
+});
+
+describe("CodeTool cwd", () => {
+  test("scripts run with the configured working directory (not the temp dir)", async () => {
+    const codeTemp = new SessionWorkspace({ sessionId: "cwd-test" });
+    try {
+      const tool = new CodeTool(new DirectSandbox(), codeTemp, { cwd: ws });
+      const res = await tool.execute({ language: "bash", code: "pwd" }, ctx());
+      // Compare by unique dir name (macOS tmp resolves /var → /private/var).
+      expect(res.content).toContain(basename(ws));
+    } finally {
+      codeTemp.dispose();
+    }
   });
 });
 
