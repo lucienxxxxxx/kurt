@@ -57,10 +57,39 @@ const PLANNER_SYSTEM = [
   "Rules: tasks that can run in parallel must NOT depend on each other; give each task an",
   "exclusive `files` ownership list so parallel bees never edit the same file; put shared",
   "contracts (types/schemas/interfaces) in an early task others depend on.",
-  "Call submit_plan exactly once with the full list. Do not write prose.",
+  "You MUST call the submit_plan tool exactly once with the full list. NEVER answer in plain text.",
 ].join("\n");
 
-/** One structured LLM call → a validated TaskGraph. */
+/** Pull a {"tasks":[…]} object out of free text (handles ```json fences / prose). */
+function extractPlanJson(text: string): unknown {
+  const cleaned = text.replace(/```[a-z]*\n?/gi, "");
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try {
+    return JSON.parse(cleaned.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+/** Run one planning round; prefer the tool call, fall back to JSON in the text. */
+async function planAttempt(
+  planner: ModelProvider,
+  request: ModelRequest,
+  signal: AbortSignal,
+): Promise<{ raw: unknown; text: string }> {
+  let raw: unknown = null;
+  let text = "";
+  for await (const ev of planner.stream(request, signal)) {
+    if (ev.type === "tool_use" && ev.name === "submit_plan") raw = ev.input;
+    else if (ev.type === "text_delta") text += ev.text;
+  }
+  if (raw == null) raw = extractPlanJson(text);
+  return { raw, text };
+}
+
+/** One structured LLM call → a validated TaskGraph (retried once in JSON-only mode). */
 export async function planTasks(
   planner: ModelProvider,
   goal: string,
@@ -68,31 +97,29 @@ export async function planTasks(
   signal: AbortSignal,
   maxTasks = 10,
 ): Promise<TaskGraph> {
-  const request: ModelRequest = {
-    system: PLANNER_SYSTEM,
-    messages: [{ role: "user", content: [{ type: "text", text: `${goal}\n\nWorkspace context:\n${context}` }] }],
-    tools: [PLAN_TOOL],
-  };
+  const userMsg = { role: "user" as const, content: [{ type: "text" as const, text: `${goal}\n\nWorkspace context:\n${context}` }] };
+  let { raw, text } = await planAttempt(planner, { system: PLANNER_SYSTEM, messages: [userMsg], tools: [PLAN_TOOL] }, signal);
 
-  let raw: unknown = null;
-  let text = "";
-  for await (const ev of planner.stream(request, signal)) {
-    if (ev.type === "tool_use" && ev.name === "submit_plan") raw = ev.input;
-    else if (ev.type === "text_delta") text += ev.text;
+  // Some models ignore the tool and chat instead — retry once demanding bare JSON.
+  if (!Array.isArray((raw as { tasks?: unknown })?.tasks)) {
+    ({ raw, text } = await planAttempt(
+      planner,
+      {
+        system:
+          PLANNER_SYSTEM +
+          '\nThe tool is unavailable: respond with ONLY the JSON object {"tasks":[...]} — no prose, no code fences.',
+        messages: [userMsg],
+        tools: [],
+      },
+      signal,
+    ));
   }
-  // Fallback: some models answer with JSON text instead of the tool call.
-  if (raw == null) {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        raw = JSON.parse(match[0]);
-      } catch {
-        // fall through to the error below
-      }
-    }
-  }
+
   const tasks = (raw as { tasks?: unknown })?.tasks;
-  if (!Array.isArray(tasks)) throw new Error("planner did not produce a task plan (no submit_plan call)");
+  if (!Array.isArray(tasks)) {
+    const said = text.trim().slice(0, 200);
+    throw new Error(`planner did not produce a task plan${said ? ` — model said: "${said}"` : ""}`);
+  }
   if (tasks.length > maxTasks) throw new Error(`planner produced ${tasks.length} tasks (max ${maxTasks})`);
 
   const specs: TaskSpec[] = tasks.map((t) => {

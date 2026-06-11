@@ -53,13 +53,28 @@ describe("planTasks", () => {
     expect(graph.get("api")!.dependsOn).toEqual(["types"]);
   });
 
-  test("falls back to JSON in plain text; errors when there is no plan", async () => {
+  test("falls back to JSON in plain text (incl. ```json fences)", async () => {
     const jsonPlanner = new MockModel([{ text: `Here you go: ${JSON.stringify(PLAN)}` }]);
-    const graph = await planTasks(jsonPlanner, "g", "", new AbortController().signal);
-    expect(graph.tasks).toHaveLength(3);
+    expect((await planTasks(jsonPlanner, "g", "", new AbortController().signal)).tasks).toHaveLength(3);
 
-    const chatty = new MockModel([{ text: "I would split this into a few tasks..." }]);
-    await expect(planTasks(chatty, "g", "", new AbortController().signal)).rejects.toThrow(/no submit_plan/);
+    const fenced = new MockModel([{ text: "```json\n" + JSON.stringify(PLAN) + "\n```" }]);
+    expect((await planTasks(fenced, "g", "", new AbortController().signal)).tasks).toHaveLength(3);
+  });
+
+  test("retries once in JSON-only mode when the model chats instead of planning", async () => {
+    const planner = new MockModel([
+      { text: "我会把这个项目拆分成几个任务……" }, // first attempt: prose, no plan
+      { text: JSON.stringify(PLAN) }, // retry: bare JSON
+    ]);
+    const graph = await planTasks(planner, "g", "", new AbortController().signal);
+    expect(graph.tasks.map((t) => t.id)).toEqual(["types", "api", "docs"]);
+  });
+
+  test("errors (with the model's words) when both attempts produce no plan", async () => {
+    const chatty = new MockModel([{ text: "I would split this into tasks..." }, { text: "still chatting" }]);
+    await expect(planTasks(chatty, "g", "", new AbortController().signal)).rejects.toThrow(
+      /did not produce a task plan.*still chatting/,
+    );
   });
 });
 
