@@ -107,7 +107,8 @@ export async function planTasks(
       {
         system:
           PLANNER_SYSTEM +
-          '\nThe tool is unavailable: respond with ONLY the JSON object {"tasks":[...]} — no prose, no code fences.',
+          '\nThe tool is unavailable: respond with ONLY this JSON shape — no prose, no code fences:\n' +
+          '{"tasks":[{"id":"short-slug","title":"...","goal":"...","dependsOn":[],"files":["path"],"acceptance":"..."}]}',
         messages: [userMsg],
         tools: [],
       },
@@ -122,18 +123,52 @@ export async function planTasks(
   }
   if (tasks.length > maxTasks) throw new Error(`planner produced ${tasks.length} tasks (max ${maxTasks})`);
 
-  const specs: TaskSpec[] = tasks.map((t) => {
+  const specs = normalizePlan(tasks);
+  try {
+    return new TaskGraph(specs); // validates ids/deps/cycles
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`invalid plan: ${msg} — plan was: ${JSON.stringify(specs).slice(0, 300)}`);
+  }
+}
+
+/**
+ * Coerce a model-produced plan into TaskSpecs. Models drift from the schema
+ * (name/description/depends_on/snake_case, missing ids), so accept the common
+ * aliases, derive missing ids from titles, and let title/goal back-fill each
+ * other — only a task with NEITHER is unusable.
+ */
+function normalizePlan(tasks: unknown[]): TaskSpec[] {
+  const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim().length > 0 ? v.trim() : undefined);
+  const list = (...vs: unknown[]): string[] | undefined => {
+    for (const v of vs) if (Array.isArray(v)) return v.map(String).filter((s) => s.length > 0);
+    return undefined;
+  };
+  const slugify = (s: string): string =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 32);
+
+  const used = new Set<string>();
+  return tasks.map((t, i) => {
     const o = (t ?? {}) as Record<string, unknown>;
+    const title = str(o.title) ?? str(o.name) ?? str(o.task);
+    const goal = str(o.goal) ?? str(o.description) ?? str(o.detail) ?? str(o.objective);
+    let id = str(o.id) ?? str(o.slug) ?? (slugify(title ?? "") || `task-${i + 1}`);
+    if (!/^[a-z0-9][a-z0-9_-]*$/i.test(id)) id = slugify(id) || `task-${i + 1}`;
+    while (used.has(id)) id = `${id}-${i + 1}`; // dedupe generated ids
+    used.add(id);
     return {
-      id: String(o.id ?? ""),
-      title: String(o.title ?? ""),
-      goal: String(o.goal ?? ""),
-      dependsOn: Array.isArray(o.dependsOn) ? o.dependsOn.map(String) : [],
-      files: Array.isArray(o.files) ? o.files.map(String) : undefined,
-      acceptance: typeof o.acceptance === "string" ? o.acceptance : undefined,
+      id,
+      title: title ?? (goal ? goal.slice(0, 60) : ""), // TaskGraph rejects if still empty
+      goal: goal ?? title ?? "",
+      dependsOn: list(o.dependsOn, o.depends_on, o.deps, o.dependencies, o.after) ?? [],
+      files: list(o.files, o.ownership, o.paths),
+      acceptance: str(o.acceptance) ?? str(o.acceptance_criteria) ?? str(o.done_when),
     };
   });
-  return new TaskGraph(specs); // validates ids/deps/cycles
 }
 
 // ── The hive run ─────────────────────────────────────────────────────────────

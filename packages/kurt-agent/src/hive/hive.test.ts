@@ -61,6 +61,40 @@ describe("planTasks", () => {
     expect((await planTasks(fenced, "g", "", new AbortController().signal)).tasks).toHaveLength(3);
   });
 
+  test("normalizes alias/snake_case fields, numeric ids, and missing titles (live-failure repro)", async () => {
+    // Repro of the real DeepSeek failure: tasks with id "1", name/description
+    // instead of title/goal, depends_on instead of dependsOn.
+    const messy = {
+      tasks: [
+        { id: "1", name: "设计页面结构", description: "搭好 index.html 骨架", files: ["index.html"] },
+        { id: "2", description: "写样式", depends_on: ["1"], ownership: ["style.css"] },
+        { name: "联调", description: "整合页面与样式", dependencies: ["1", "2"] },
+      ],
+    };
+    const planner = new MockModel([{ toolCalls: [{ name: "submit_plan", input: messy }] }]);
+    const graph = await planTasks(planner, "build webui", "", new AbortController().signal);
+
+    expect(graph.tasks).toHaveLength(3);
+    expect(graph.get("1")!.title).toBe("设计页面结构"); // name → title
+    expect(graph.get("2")!.title).toBe("写样式"); // description backfills the missing title
+    expect(graph.get("2")!.dependsOn).toEqual(["1"]); // depends_on → dependsOn
+    expect(graph.get("2")!.files).toEqual(["style.css"]); // ownership → files
+    const third = graph.tasks[2]!;
+    expect(third.dependsOn).toEqual(["1", "2"]); // dependencies → dependsOn
+    expect(third.id.length).toBeGreaterThan(0); // id derived (slug or task-3)
+  });
+
+  test("invalid plans fail with the offending plan attached", async () => {
+    const bad = { tasks: [{ id: "a", title: "A", goal: "g", dependsOn: ["ghost"] }] };
+    const planner = new MockModel([
+      { toolCalls: [{ name: "submit_plan", input: bad }] },
+      { toolCalls: [{ name: "submit_plan", input: bad }] }, // retry gets the same bad plan
+    ]);
+    await expect(planTasks(planner, "g", "", new AbortController().signal)).rejects.toThrow(
+      /unknown dependency.*plan was:/,
+    );
+  });
+
   test("retries once in JSON-only mode when the model chats instead of planning", async () => {
     const planner = new MockModel([
       { text: "我会把这个项目拆分成几个任务……" }, // first attempt: prose, no plan
