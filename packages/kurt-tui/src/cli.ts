@@ -71,7 +71,7 @@ function coerce(key: string, value: string): PersistedConfig | null {
     case "effort":
       return { [key]: value };
     case "mode":
-      return value === "chat" || value === "agent" || value === "plan" ? { mode: value } : null;
+      return value === "chat" || value === "agent" || value === "plan" || value === "hive" ? { mode: value } : null;
     case "context":
       return Number.isFinite(Number(value)) ? { context: Number(value) } : null;
     case "thinking":

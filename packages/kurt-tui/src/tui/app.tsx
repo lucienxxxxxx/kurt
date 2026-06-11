@@ -74,7 +74,7 @@ export interface AppProps {
   ask?: AskBridge;
 }
 
-const MODES: ChatMode[] = ["chat", "agent", "plan"];
+const MODES: ChatMode[] = ["chat", "agent", "plan", "hive"];
 const EFFORTS = ["low", "medium", "high"];
 const PALETTE_MAX = 8;
 

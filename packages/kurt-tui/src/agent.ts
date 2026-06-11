@@ -23,10 +23,13 @@ import {
   UpdatePlanTool,
   ToolHub,
   DuckDuckGoSearch,
+  denyAllPermission,
   type SandboxProvider,
   type Tool,
   type PermissionProvider,
   type AskProvider,
+  type TaskSpec,
+  type Message,
 } from "kurt-agent";
 import type { SessionWorkspace } from "kurt-agent";
 import { mkdirSync } from "node:fs";
@@ -89,8 +92,9 @@ export function parseLaunchFlags(argv: string[]): { options: LaunchOptions; posi
   };
 }
 
-/** The three operating modes (structurally identical to the TUI's `ChatMode`). */
-export type Mode = "chat" | "agent" | "plan";
+/** The operating modes (structurally identical to the TUI's `ChatMode`).
+ * "hive" = 蜂群模式: a queen plans a task DAG and parallel worker bees execute it. */
+export type Mode = "chat" | "agent" | "plan" | "hive";
 
 export interface Settings {
   modelId: string;
@@ -128,6 +132,10 @@ function modeGuidance(mode: Mode): string[] {
         "MODE: agent. Full tools available — act directly to accomplish the task. Use ask_user",
         "only when a decision is genuinely the user's to make.",
       ];
+    case "hive":
+      // The hive runner builds its own queen/bee prompts; this is only used if
+      // someone runs a plain loop in hive mode.
+      return ["MODE: hive. You coordinate a hive of worker bees over a task DAG."];
   }
 }
 
@@ -178,6 +186,7 @@ export function resolveSettings(persisted: PersistedConfig, env: Record<string, 
 export function normalizeMode(mode: string | undefined): Mode {
   if (mode === "ask" || mode === "chat") return "chat";
   if (mode === "plan") return "plan";
+  if (mode === "hive") return "hive";
   return "agent";
 }
 
@@ -265,12 +274,66 @@ export const TOOLS_BY_MODE: Record<Mode, readonly string[] | "all"> = {
   chat: ["read_file", "ls", "grep", "web_search", "memory", "ask_user"],
   plan: ["read_file", "ls", "grep", "web_search", "memory", "ask_user", "update_plan"],
   agent: "all",
+  // hive: the queen doesn't run a plain tool loop (she plans + schedules); the
+  // worker bees get their own subset via makeHiveBeeTools.
+  hive: [],
 };
 
 /** Select the tools a given mode is allowed to use, from the shared hub. */
 export function toolsForMode(hub: ToolHub, mode: Mode): Tool[] {
   const profile = TOOLS_BY_MODE[mode];
   return profile === "all" ? hub.all() : hub.get(profile);
+}
+
+// ── Hive (蜂群) helpers ──────────────────────────────────────────────────────
+
+/** What a worker bee may use: real work tools, but no user prompts (ask_user /
+ * approval would collide across parallel bees) and no memory (append races). */
+export const HIVE_BEE_TOOLS = ["read_file", "ls", "grep", "write_file", "shell", "run_code", "web_search"] as const;
+
+/** Build a bee's toolset: same construction as makeTools but sensitive commands
+ * are auto-DENIED (no interactive approver can serve parallel bees). */
+export function makeHiveBeeTools(
+  sandbox: SandboxProvider,
+  codeTemp: SessionWorkspace,
+  ws: Workspace,
+  allowWrite: string[] = [],
+): Tool[] {
+  const hub = new ToolHub(makeTools(sandbox, codeTemp, ws, allowWrite, denyAllPermission, undefined));
+  return hub.get(HIVE_BEE_TOOLS);
+}
+
+/** System prompt for one worker bee (ownership + parallel-awareness). */
+export function hiveBeeSystem(ws: Workspace, task: TaskSpec, plan: TaskSpec[]): string {
+  const others = plan
+    .filter((t) => t.id !== task.id)
+    .map((t) => `- ${t.id}: ${t.title}${t.files?.length ? ` (owns: ${t.files.join(", ")})` : ""}`)
+    .join("\n");
+  return [
+    systemPrompt(ws, "agent"),
+    "",
+    `HIVE: you are worker bee "${task.id}" — one of several bees working IN PARALLEL in this shared workspace.`,
+    "Stay strictly within your task and your owned files; do NOT touch files owned by other tasks.",
+    others.length > 0 ? `Other tasks in this hive:\n${others}` : "",
+    "Sensitive commands (rm/sudo/…) are denied for bees — work without them.",
+    "You cannot ask the user questions; make reasonable choices and note them in your report.",
+  ]
+    .filter((l) => l !== "")
+    .join("\n");
+}
+
+/** The text of the most recent user message (the hive run's goal). */
+export function lastUserText(messages: Message[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]!;
+    if (m.role !== "user") continue;
+    const text = m.content
+      .filter((b) => b.type === "text")
+      .map((b) => (b as Extract<(typeof m.content)[number], { type: "text" }>).text)
+      .join("");
+    if (text.trim().length > 0) return text;
+  }
+  return "";
 }
 
 function num(v: string | undefined): number | undefined {

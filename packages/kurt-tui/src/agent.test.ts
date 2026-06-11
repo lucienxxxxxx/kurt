@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ToolHub, type Tool } from "kurt-agent";
 import {
+  hiveBeeSystem,
+  HIVE_BEE_TOOLS,
+  lastUserText,
   normalizeMode,
   parseLaunchFlags,
   resolveWorkspace,
@@ -53,6 +56,7 @@ describe("modes", () => {
     expect(normalizeMode("ask")).toBe("chat");
     expect(normalizeMode("chat")).toBe("chat");
     expect(normalizeMode("plan")).toBe("plan");
+    expect(normalizeMode("hive")).toBe("hive");
     expect(normalizeMode(undefined)).toBe("agent");
     expect(normalizeMode("garbage")).toBe("agent");
   });
@@ -64,6 +68,32 @@ describe("modes", () => {
     expect(TOOLS_BY_MODE.plan).toContain("update_plan");
     expect(TOOLS_BY_MODE.plan).not.toContain("write_file");
     expect(TOOLS_BY_MODE.agent).toBe("all");
+  });
+
+  test("hive: bees get work tools but no user-facing/sensitive ones; bee prompt carries ownership", () => {
+    expect(TOOLS_BY_MODE.hive).toEqual([]); // the queen runs no plain tool loop
+    expect(HIVE_BEE_TOOLS).not.toContain("ask_user");
+    expect(HIVE_BEE_TOOLS).not.toContain("memory");
+    expect(HIVE_BEE_TOOLS).not.toContain("brew");
+    expect(HIVE_BEE_TOOLS).toContain("write_file");
+
+    const task = { id: "api", title: "Build API", goal: "g", dependsOn: ["types"], files: ["src/api.ts"] };
+    const other = { id: "types", title: "Types", goal: "g", dependsOn: [], files: ["src/types.ts"] };
+    const p = hiveBeeSystem({ root: "/w" }, task, [task, other]);
+    expect(p).toContain('worker bee "api"');
+    expect(p).toContain("types: Types (owns: src/types.ts)");
+    expect(p).toContain("cannot ask the user");
+  });
+
+  test("lastUserText picks the most recent non-empty user message", () => {
+    expect(
+      lastUserText([
+        { role: "user", content: [{ type: "text", text: "first" }] },
+        { role: "assistant", content: [{ type: "text", text: "reply" }] },
+        { role: "user", content: [{ type: "text", text: "the goal" }] },
+      ]),
+    ).toBe("the goal");
+    expect(lastUserText([])).toBe("");
   });
 
   test("toolsForMode selects the right subset from the hub", () => {

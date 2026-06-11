@@ -5,10 +5,23 @@
  */
 
 import { render } from "ink";
-import { runLoop, SessionWorkspace, ToolHub, type Event, type Message } from "kurt-agent";
+import { join } from "node:path";
+import { runLoop, runHive, SessionWorkspace, ToolHub, type Event, type Message } from "kurt-agent";
 import { compactHistory, serializeForSummary } from "kurt-agent";
 import { App, bannerString, type Compactor, type EngineRunner, type SessionController, type SessionState } from "./tui/index.ts";
-import { resolveConfig, makeSandbox, makeTools, modelFor, resolveWorkspace, systemPrompt, toolsForMode, type LaunchOptions } from "./agent.ts";
+import {
+  resolveConfig,
+  makeSandbox,
+  makeTools,
+  makeHiveBeeTools,
+  hiveBeeSystem,
+  lastUserText,
+  modelFor,
+  resolveWorkspace,
+  systemPrompt,
+  toolsForMode,
+  type LaunchOptions,
+} from "./agent.ts";
 import { saveConfig } from "./config.ts";
 import { loadContextPrelude } from "./context-files.ts";
 import { SessionStore, type SessionRecord } from "./session-store.ts";
@@ -100,8 +113,23 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
     currentId: () => current.id,
   };
 
-  const run: EngineRunner = (messages: Message[], signal: AbortSignal, session: SessionState): AsyncIterable<Event> =>
-    runLoop({
+  const run: EngineRunner = (messages: Message[], signal: AbortSignal, session: SessionState): AsyncIterable<Event> => {
+    if (session.mode === "hive") {
+      // 蜂群: queen plans a DAG, parallel bees execute it. Bees run with thinking
+      // off and sensitive commands auto-denied; events render as tool cards.
+      const hiveModel = () => modelFor(session.modelId, cfg.baseURL, cfg.apiKey!, cfg.maxTokens, { thinking: false });
+      return runHive({
+        goal: lastUserText(messages),
+        planner: hiveModel(),
+        beeModel: () => hiveModel(),
+        beeTools: () => makeHiveBeeTools(sandbox, codeTemp, ws, allowWrite),
+        beeSystem: (task, plan) => hiveBeeSystem(ws, task, plan),
+        context: `Working directory: ${ws.root}`,
+        signal,
+        statusDir: join(ws.root, ".kurt", "hive", String(Date.now())),
+      });
+    }
+    return runLoop({
       system: systemPrompt(ws, session.mode) + prelude,
       messages,
       tools: toolsForMode(hub, session.mode),
@@ -111,6 +139,7 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
       }),
       signal,
     });
+  };
 
   const compact: Compactor = async (messages, signal) => {
     const model = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey!, cfg.maxTokens);

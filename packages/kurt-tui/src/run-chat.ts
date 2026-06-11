@@ -3,8 +3,10 @@
  * TUI (shares config + tools). `kurt chat` or `kurt chat "prompt"`.
  */
 
+import { join } from "node:path";
 import {
   runLoop,
+  runHive,
   runStdoutMode,
   messagesFromEvents,
   SessionWorkspace,
@@ -14,7 +16,18 @@ import {
   type Message,
   type PermissionProvider,
 } from "kurt-agent";
-import { resolveConfig, makeSandbox, makeTools, modelFor, resolveWorkspace, systemPrompt, toolsForMode, type LaunchOptions } from "./agent.ts";
+import {
+  resolveConfig,
+  makeSandbox,
+  makeTools,
+  makeHiveBeeTools,
+  hiveBeeSystem,
+  modelFor,
+  resolveWorkspace,
+  systemPrompt,
+  toolsForMode,
+  type LaunchOptions,
+} from "./agent.ts";
 import { loadContextPrelude } from "./context-files.ts";
 import { Allowlist } from "./allowlist.ts";
 
@@ -82,7 +95,19 @@ export async function runChat(args: string[], opts: LaunchOptions = {}): Promise
         yield e;
       }
     };
-    await runStdoutMode(tee(runLoop({ system, messages, tools, model })));
+    const stream =
+      cfg.mode === "hive"
+        ? runHive({
+            goal: text,
+            planner: model,
+            beeModel: () => model,
+            beeTools: () => makeHiveBeeTools(sandbox, codeTemp, ws, opts.allowWrite ?? []),
+            beeSystem: (task, plan) => hiveBeeSystem(ws, task, plan),
+            context: `Working directory: ${ws.root}`,
+            statusDir: join(ws.root, ".kurt", "hive", String(Date.now())),
+          })
+        : runLoop({ system, messages, tools, model });
+    await runStdoutMode(tee(stream));
     const appended = messagesFromEvents(captured);
     if (appended.length > 0) messages.push(...appended);
     else messages.pop();

@@ -17,6 +17,8 @@ const TOOL_LABELS: Record<string, string> = {
   memory: "Memory",
   ask_user: "Ask",
   update_plan: "Plan",
+  hive_plan: "Hive plan",
+  bee: "Bee",
 };
 
 /** Friendly display name (falls back to the raw tool name, e.g. MCP/skill tools). */
@@ -60,6 +62,12 @@ export function toolSummary(name: string, input: unknown): string {
     case "update_plan":
       s = `${Array.isArray(o.steps) ? o.steps.length : 0} steps`;
       break;
+    case "hive_plan":
+      s = String(o.goal ?? "");
+      break;
+    case "bee":
+      s = String(o.title ?? o.task ?? "");
+      break;
     default:
       s = "";
   }
@@ -96,6 +104,13 @@ export function formatToolInput(name: string, input: unknown): string {
       return steps
         .map((s, i) => `${i + 1}. ${typeof (s as { title?: unknown })?.title === "string" ? (s as { title: string }).title : ""}`)
         .join("\n");
+    }
+    case "hive_plan":
+      return String(o.goal ?? "");
+    case "bee": {
+      const files = Array.isArray(o.files) && o.files.length > 0 ? `\nfiles: ${o.files.join(", ")}` : "";
+      const deps = Array.isArray(o.dependsOn) && o.dependsOn.length > 0 ? `  (after: ${o.dependsOn.join(", ")})` : "";
+      return `${String(o.task ?? "")}: ${String(o.title ?? "")}${deps}${files}`;
     }
     default:
       return safeJson(input);
