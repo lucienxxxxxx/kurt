@@ -3,8 +3,8 @@
 > Cached architecture map. **Read this first**; scan the tree only for the files
 > this map points you to. Keep it fresh: update on every structural change.
 > Maintained via the `project-module-workflow` skill (see CLAUDE.md §3).
-> Last synced: 2026-06-11, after the Agent/ToolHub abstraction + ask_user/update_plan
-> tools (modes built on top in kurt-tui).
+> Last synced: 2026-06-11, after the hive (蜂群) core — task DAG + bee runtime +
+> queen scheduler (internal test feature, surfaced as kurt-tui's hive mode).
 
 ## 1. Overview
 A protocol-agnostic, **zero-I/O** AI agent engine (a **library**) in TypeScript on Bun.
@@ -20,7 +20,7 @@ front-end + `kurt` CLI) consumes it. Public API is `src/lib.ts`.
 - Run demos: `bun run dev` · `bun run demo:abort` · `bun run demo:error` · `bun run demo:sandbox`
 - Live chat (stdout) vs a real LLM: `bun run chat ["prompt"]` (needs `DEEPSEEK_API_KEY`).
 - Public API for consumers (kurt-tui): `src/lib.ts` (re-exports engine/providers/tools/sandbox/session/search + history/compaction/stdout).
-- Gate before any merge: **`bun run typecheck && bun test`** (currently 89 tests pass, all offline).
+- Gate before any merge: **`bun run typecheck && bun test`** (currently 99 tests pass, all offline).
 
 ## 3. Architecture & invariants
 Three layers, three iron rules (full text in `CLAUDE.md` §2 — do not break them):
@@ -56,6 +56,7 @@ and the loop continues.
 | `src/permission/` | Approval seam for sensitive commands | `PermissionProvider`/`PermissionDecision`/`PermissionRequest`, `classifyCommand` (pure rules → key+explanation+risk), `allowAll`/`denyAll`. ShellTool consults it; the front-end supplies the prompt/whitelist | — (pure) |
 | `src/ask/` | Seam for the `ask_user` tool (agent → user) | `AskProvider`, `AskRequest` (front-end implements; mirrors permission) | — (pure) |
 | `src/agent/` | Composition shells around the engine | `Agent` ({model,system,tools}+`run()`→runLoop+`with()`); `ToolHub` (name→Tool registry; `get(names)`/`all()`). Engine untouched | engine, tools |
+| `src/hive/` | 蜂群 (internal test): queen plans a task DAG, parallel bees execute | `TaskGraph`/`TaskSpec`/`TaskState` + `formatPlan` (`task.ts`, pure); `runBee` (`bee.ts`: one Agent per task → structured `BeeResult` w/ summary+artifacts); `planTasks` (one `submit_plan` LLM call) + `runHive` (`queen.ts`: deterministic scheduler, bounded concurrency, handoff briefs, failure→blocked, status.json, streamed summary). **Emits standard engine events** (hive_plan/bee tool cards) so front-ends render unchanged | engine, agent |
 | `src/modes/` | Modal layer + reusable orchestration helpers | `runStdoutMode` (`stdout.ts`); `messagesFromEvents` (`history.ts`); `compactHistory`/`compactionSplit`/`serializeForSummary` (`compaction.ts`, cuts only at user boundaries → preserves tool pairing) | engine types |
 | `src/lib.ts` | **Public API barrel** (what kurt-tui imports via `"kurt-agent"`) | re-exports the above | all |
 | `src/demos/` | Runnable scenarios | `abort.ts`, `error.ts`, `sandbox.ts` | everything |
@@ -70,6 +71,7 @@ and the loop continues.
 - **Gate a new risky command** → add a rule in `src/permission/classify.ts` (key+explanation+risk). The front-end (kurt-tui) renders the prompt + persists the allowlist.
 - **Bundle a configured agent / share tools** → `src/agent/` (`Agent` wraps runLoop; `ToolHub` is the shared registry). The chat/agent/plan modes are built on these in kurt-tui (`toolsForMode`).
 - **Agent asks the user** → `ask_user` tool + `AskProvider` (`src/ask/`); the front-end implements the prompt (TUI overlay / stdin).
+- **Hive (蜂群) / multi-bee runs** → `src/hive/` (`planTasks` + `runHive`); kurt-tui's hive mode supplies bee models/tools/prompts. Worktree-per-task + verify/reopen states are future rounds.
 - **Write outside the workspace** → the agent calls `request_write_access` (a Tool) → approval → the dir is pushed to the shared writable-roots array; file/exec tools read it live.
 - **Front-end / TUI** → lives in the sibling package **`packages/kurt-tui`** (Ink), which consumes this lib. A minimal in-repo mode lives at `src/modes/stdout.ts` (clone its shape for new built-in modes).
 - **Compaction** (Phase 3) → implement `CompactionPolicy`; the seam is already wired in `loop.ts` (engine decides *when* via `thresholdTokens`, policy decides *how* via `compact`).

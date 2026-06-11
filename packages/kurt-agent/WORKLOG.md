@@ -4,6 +4,25 @@
 
 ---
 
+## 蜂群模式(hive)MVP — 内部测试功能 — ✅ (2026-06-11)
+
+**用户要求**:按《蜂群 Agent 架构设计与协同编排》文档新增第四个模式"蜂群"(重要内部测试功能,不影响现有功能)。经提问确认的 MVP 取舍:① 工蜂**共享工作区并行**(git worktree/分支合流留下一轮);② 蜂王 = **规划一次 + 机械调度**(一次 LLM 结构化调用拆 DAG → 确定性状态机派工 → LLM 总结);③ 完成后照常合入 main(additive,藏在模式开关后)。
+
+**交付物**:
+- **kurt-agent `src/hive/`(组合层,引擎零改动)**:
+  - `task.ts`:`TaskSpec`/`TaskState`(文档完整状态机,调度器驱动 pending/ready/running/blocked/done/failed 子集)、`TaskGraph`(校验 id/依赖/环,`ready()`/`blockedBy()`)、`formatPlan`。
+  - `bee.ts`:`runBee` —— 每任务实例化一个 `Agent`(即文档的 `Bee(context, model, tools, taskSpec)`),把工蜂事件流折叠成结构化 `BeeResult`(状态/末轮总结/write_file 产物清单)+ 活动行。
+  - `queen.ts`:`planTasks`(一次 `submit_plan` 工具调用 → 校验过的 TaskGraph,带 JSON 文本回退)+ `runHive`(有界并发的确定性 DAG 调度;**上游交接**——依赖完成的 summary 注入下游 brief(结构化交接 MVP);失败→下游 blocked;`status.json` 同步落盘;蜂王总结流式输出)。
+  - **关键设计**:runHive 合成**标准引擎事件**——计划=一张 `hive_plan` 工具卡,每任务=一张 `bee` 工具卡(tool_output 实时活动尾巴 + 完成时结构化结果),总结=普通 llm_delta → 前端零改动即可渲染,历史经 messagesFromEvents 自然成形。
+- **kurt-tui**:Mode/ChatMode 加 `hive`(config/cli/`/mode`/normalizeMode);`HIVE_BEE_TOOLS`(只给干活工具——**不给 ask_user/memory/brew**:并行工蜂无法共享交互提示,memory 追加会竞态);`makeHiveBeeTools`(同 makeTools 构造但敏感命令经 `denyAllPermission` **自动拒绝**);`hiveBeeSystem`(Ownership + 并行意识提示词);run-tui/run-chat 在 mode==="hive" 时把回合路由到 `runHive`(bee 用会话模型、thinking 关);`tool-format` 渲染 hive_plan/bee 卡。
+- 运行产物:`<ws>/.kurt/hive/<ts>/status.json`(goal + 每任务 state/summary/artifacts)。
+
+**MVP 验收标准对照(文档第十节)**:多工蜂并行 ✓(独立 worktree 改为共享工作区+Ownership,经确认);蜂王按 DAG 自动推进依赖/等待 ✓;主干合流治理 ✗(下一轮:worktree/integration 分支/verify+reopen 状态)。
+
+**验收**:kurt-agent **99**(+10)/ kurt-tui **58**(+2)通过;typecheck 干净;`git diff main -- src/engine` 为空(铁律 #3);CLI 冒烟 `config set mode hive` 通过。测试覆盖:DAG 校验(环/重复/未知依赖)、ready/blocked 推进、计划解析+回退、并行根任务先发+依赖后发、失败→blocked+status.json、规划失败浮出。
+
+---
+
 ## Agent/ToolHub 抽象 + 模式(chat/agent/plan)可用 + ask_user/update_plan — ✅ (2026-06-11)
 
 **用户要求**:抽象 Agent(model/context 等构建参数)+ 共享 tool_hub,各 Agent 按需分配不同 tool;新增 `ask_user`(agent 主动提问,TUI 选择题 ABCD + 可直接输入);把 chat/agent/plan 三模式做成可用。经提问确认:chat=只读+ask_user+memory;plan=+`update_plan`(不执行/不写);agent=全开放;模式命名 chat/agent/plan,新 tool 名 `ask_user`。

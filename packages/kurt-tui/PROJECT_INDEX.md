@@ -1,7 +1,7 @@
 # PROJECT_INDEX — kurt-tui
 
 > Cached architecture map. Read this first; scan only what it points to.
-> Last synced: 2026-06-11, after functional modes (chat/agent/plan via ToolHub) + the ask_user overlay.
+> Last synced: 2026-06-11, after hive mode (蜂群: queen plans a DAG, parallel bees execute).
 
 ## 1. Overview
 Ink terminal UI for `kurt-agent`. A front-end consumer: subscribes to the engine
@@ -19,7 +19,7 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 - **Write outside the workspace**: the agent calls `request_write_access` (same approval prompt); on allow, the dir is opened for write_file/shell/run_code for the rest of the session (`makeTools` shares one mutable writable-roots array). "Always" persists `write-access:<dir>` in the allowlist.
 - **Working dir**: the agent works inside one workspace — `WORKSPACE_DIR` (the whole dir, **fully writable, no approval**). Injected into the system prompt AND as env to shell/run_code. No `import/`/`export/` subdirs are created. Sandbox blocks writes *outside* the workspace (+ `--allow-write` dirs). File writes and command approval are **independent**: in-workspace writes never prompt; sensitive commands always do.
 - Settings (`model/effort/thinking/mode`) persist to `~/.kurt/config.json` (override path with `KURT_CONFIG_PATH`). Precedence: persisted > env > default. API key is env-only.
-- Gate before merge: **`bun run typecheck && bun test`** (currently 56 tests, offline).
+- Gate before merge: **`bun run typecheck && bun test`** (currently 58 tests, offline).
 
 ## 3. Architecture
 - Depends on `kurt-agent` only through its public API (`"kurt-agent"` → its `src/lib.ts`):
@@ -69,7 +69,8 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 - **Add a CLI subcommand** → `cli.ts` (dispatch) + a `run-*.ts`.
 - **Saved sessions / switching / titles** → `session-store.ts` (storage) + `tui/session-view.ts` (resume repaint) + `tui/session-picker.tsx` (UI) + `app.tsx` (`SessionController` calls); the controller (store + titling) is built in `run-tui.tsx`.
 - **Memory / rules preload, or the ~/.kurt layout** → `context-files.ts` + `paths.ts`.
-- **Modes (chat/agent/plan) — change tool sets or per-mode prompt** → `agent.ts` (`TOOLS_BY_MODE`, `toolsForMode`, `systemPrompt(ws,mode)`); the runner picks `toolsForMode(hub, session.mode)`. `ToolHub`/`Agent` live in `kurt-agent`.
+- **Modes (chat/agent/plan/hive) — change tool sets or per-mode prompt** → `agent.ts` (`TOOLS_BY_MODE`, `toolsForMode`, `systemPrompt(ws,mode)`); the runner picks `toolsForMode(hub, session.mode)`. `ToolHub`/`Agent` live in `kurt-agent`.
+- **Hive mode (蜂群)** → routing in `run-tui.tsx`/`run-chat.ts` (mode==="hive" → `runHive`); bee toolset/prompt in `agent.ts` (`HIVE_BEE_TOOLS`, `makeHiveBeeTools` — sensitive commands auto-denied, no ask_user/memory for bees; `hiveBeeSystem`); cards rendered via `tool-format` (`hive_plan`/`bee`); the scheduler itself is `kurt-agent` `src/hive/`. Runs persist `<ws>/.kurt/hive/<ts>/status.json`.
 - **ask_user prompt (agent → user)** → `tui/ask.ts` (bridge) + `tui/ask-prompt.tsx` (UI) + `app.tsx` (keys); stdin variant in `run-chat.ts`. Tool/`AskProvider` are in `kurt-agent`.
 - **Change settings/precedence or persistence** → `agent.ts` (`resolveSettings`) + `config.ts`.
 - **Change working paths / sandbox writable dirs / system prompt** → `agent.ts` (`resolveWorkspace`, `makeTools`, `systemPrompt`); CLI flags in `cli.ts` (`parseLaunchFlags`).

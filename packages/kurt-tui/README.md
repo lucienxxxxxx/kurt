@@ -58,8 +58,14 @@ subsets) and tunes its system prompt:
 - **chat** — read-only: `read_file`/`ls`/`grep`/`web_search` + `memory` + `ask_user`. No file writes, no commands. Good for Q&A and exploring.
 - **plan** — chat's tools **plus `update_plan`** (a visible step checklist). Investigates and produces a plan; still no writes/commands.
 - **agent** — everything (writes, `shell`/`run_code`, `brew`, …). Acts directly.
+- **hive** *(蜂群, internal test)* — a **queen** decomposes your goal into a task
+  DAG (one planning call), then **parallel worker bees** execute it in the shared
+  workspace: each task renders as a live `Bee` tool card, dependencies gate
+  dispatch, a failed task blocks its dependents, and the queen streams a final
+  summary. Bees can't prompt you (no ask_user/approval — sensitive commands are
+  auto-denied) and runs persist `<workspace>/.kurt/hive/<ts>/status.json`.
 
-Switch with `/mode` (cycles) or `/mode chat|agent|plan`. The agent can also call
+Switch with `/mode` (cycles) or `/mode chat|agent|plan|hive`. The agent can also call
 **`ask_user`** in any mode to ask you a clarifying question — a lettered
 multiple-choice prompt (↑/↓ + ↵ to pick) where you can also just type a free answer.
 
