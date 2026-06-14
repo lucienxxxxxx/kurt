@@ -8,7 +8,18 @@ import { render } from "ink";
 import { runLoop, SessionWorkspace, ToolHub, type Event, type Message } from "kurt-agent";
 import { autoCompaction, compactHistory, serializeForSummary, type CompactionPolicy } from "kurt-agent";
 import { App, bannerString, type Compactor, type EngineRunner, type SessionController, type SessionState } from "./tui/index.ts";
-import { resolveConfig, makeSandbox, makeTools, modelFor, resolveWorkspace, systemPrompt, toolsForMode, type LaunchOptions } from "./agent.ts";
+import {
+  resolveConfig,
+  makeSandbox,
+  makeTools,
+  maybeWorktree,
+  modelFor,
+  resolveWorkspace,
+  systemPrompt,
+  toolsForMode,
+  type LaunchOptions,
+  type WorktreeSession,
+} from "./agent.ts";
 import { saveConfig } from "./config.ts";
 import { loadContextPrelude } from "./context-files.ts";
 import { SessionStore, type SessionRecord } from "./session-store.ts";
@@ -28,7 +39,15 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
     process.exit(1);
   }
 
-  const ws = resolveWorkspace(opts.workspacePath);
+  // --worktree: isolate this session in its own git worktree + branch.
+  let worktree: WorktreeSession | null;
+  try {
+    worktree = await maybeWorktree(opts);
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+  const ws = resolveWorkspace(worktree ? worktree.root : opts.workspacePath);
   const allowWrite = opts.allowWrite ?? [];
   const permission = new PermissionBridge(await Allowlist.load(ws.root));
   const askBridge = new AskBridge();
@@ -142,6 +161,7 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
   // Natural-flow: no alternate screen → native scrollback + mouse wheel work.
   process.stdout.write("\n" + bannerString(process.stdout.columns || 80) + "\n");
   process.stdout.write(`\x1b[2m  workspace: ${ws.root}${allowWrite.length ? `  (+write: ${allowWrite.join(", ")})` : ""}\x1b[0m\n`);
+  if (worktree) process.stdout.write(`\x1b[2m  worktree:  isolated on branch ${worktree.branch} (of ${worktree.repoRoot})\x1b[0m\n`);
 
   const app = render(
     <App
@@ -161,5 +181,12 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
     await app.waitUntilExit();
   } finally {
     codeTemp.dispose();
+    if (worktree) {
+      try {
+        process.stdout.write(`\n${await worktree.finish()}\n`);
+      } catch (err) {
+        process.stdout.write(`\n(worktree commit failed: ${err instanceof Error ? err.message : String(err)})\n`);
+      }
+    }
   }
 }

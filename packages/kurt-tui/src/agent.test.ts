@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ToolHub, type Tool } from "kurt-agent";
+import { maybeWorktree } from "./agent.ts";
 import {
   normalizeMode,
   parseLaunchFlags,
@@ -98,5 +99,64 @@ describe("parseLaunchFlags", () => {
     const c = parseLaunchFlags(["tui"]);
     expect(c.options.workspacePath).toBeUndefined();
     expect(c.options.allowWrite).toBeUndefined();
+    expect(c.options.worktree).toBeUndefined();
+  });
+
+  test("--worktree is a boolean flag; default off", () => {
+    expect(parseLaunchFlags(["--worktree"]).options.worktree).toBe(true);
+    expect(parseLaunchFlags(["chat"]).options.worktree).toBeUndefined();
+  });
+});
+
+describe("maybeWorktree", () => {
+  const savedHome = process.env.KURT_HOME;
+  let home: string;
+  let repo: string;
+
+  async function git(args: string[], cwd: string): Promise<void> {
+    await Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" }).exited;
+  }
+
+  afterEach(() => {
+    if (savedHome === undefined) delete process.env.KURT_HOME;
+    else process.env.KURT_HOME = savedHome;
+    if (home) rmSync(home, { recursive: true, force: true });
+    if (repo) rmSync(repo, { recursive: true, force: true });
+  });
+
+  test("returns null when --worktree is off", async () => {
+    expect(await maybeWorktree({})).toBeNull();
+  });
+
+  test("rejects a non-git workspace", async () => {
+    const plain = realpathSync(mkdtempSync(join(tmpdir(), "kurt-plain-")));
+    try {
+      await expect(maybeWorktree({ worktree: true, workspacePath: plain })).rejects.toThrow(/git repository/);
+    } finally {
+      rmSync(plain, { recursive: true, force: true });
+    }
+  });
+
+  test("creates an isolated worktree under KURT_HOME and commits on finish", async () => {
+    home = realpathSync(mkdtempSync(join(tmpdir(), "kurt-home-")));
+    repo = realpathSync(mkdtempSync(join(tmpdir(), "kurt-repo-")));
+    process.env.KURT_HOME = home;
+    await git(["init", "-q", "-b", "main"], repo);
+    await git(["config", "user.email", "t@local"], repo);
+    await git(["config", "user.name", "t"], repo);
+    writeFileSync(join(repo, "x.txt"), "hi");
+    await git(["add", "-A"], repo);
+    await git(["commit", "-qm", "init"], repo);
+
+    const wt = await maybeWorktree({ worktree: true, workspacePath: repo });
+    expect(wt).not.toBeNull();
+    expect(wt!.root.startsWith(home)).toBe(true); // lives under ~/.kurt
+    expect(wt!.branch).toMatch(/^kurt\//);
+    expect(existsSync(join(wt!.root, "x.txt"))).toBe(true); // checked out from history
+
+    writeFileSync(join(wt!.root, "agent-output.txt"), "made by the agent");
+    const msg = await wt!.finish();
+    expect(msg).toContain("committed");
+    expect(existsSync(join(repo, "agent-output.txt"))).toBe(false); // main working dir untouched
   });
 });

@@ -16,7 +16,7 @@ import {
   type Message,
   type PermissionProvider,
 } from "kurt-agent";
-import { resolveConfig, makeSandbox, makeTools, modelFor, resolveWorkspace, systemPrompt, toolsForMode, type LaunchOptions } from "./agent.ts";
+import { resolveConfig, makeSandbox, makeTools, maybeWorktree, modelFor, resolveWorkspace, systemPrompt, toolsForMode, type LaunchOptions } from "./agent.ts";
 import { loadContextPrelude } from "./context-files.ts";
 import { Allowlist } from "./allowlist.ts";
 
@@ -62,7 +62,9 @@ export async function runChat(args: string[], opts: LaunchOptions = {}): Promise
     process.exit(1);
   }
 
-  const ws = resolveWorkspace(opts.workspacePath);
+  const worktree = await maybeWorktree(opts); // --worktree: isolate in a git worktree (throws if not a repo)
+  const ws = resolveWorkspace(worktree ? worktree.root : opts.workspacePath);
+  if (worktree) console.log(`(worktree: isolated on branch ${worktree.branch})`);
   const permission = cliPermission(await Allowlist.load(ws.root), opts.yes ?? false);
   const sandbox = makeSandbox();
   const codeTemp = new SessionWorkspace({ sessionId: "chat" });
@@ -138,5 +140,6 @@ export async function runChat(args: string[], opts: LaunchOptions = {}): Promise
     }
   } finally {
     codeTemp.dispose();
+    if (worktree) console.log(`\n${await worktree.finish()}`);
   }
 }

@@ -26,6 +26,8 @@ Options (for kurt / kurt chat):
   --workspace <path>        Working dir for the agent (default: current dir). Alias: --workplace
   --allow-write <path>      Extra writable dir beyond the workspace (repeatable)
   --yes, -y                 Auto-approve sensitive commands (skip approval prompts)
+  --worktree                Isolate this session in its own git worktree + branch
+                            (requires a git repo; commits to kurt/<id> on exit, never main)
 
 The agent's working dir (WORKSPACE_DIR) is fully writable; the sandbox blocks
 writes elsewhere unless --allow-write opens them (or the agent requests access).

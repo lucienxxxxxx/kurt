@@ -23,6 +23,7 @@ import {
   AskUserTool,
   UpdatePlanTool,
   ToolHub,
+  WorktreeManager,
   DuckDuckGoSearch,
   type SandboxProvider,
   type Tool,
@@ -32,9 +33,9 @@ import {
 } from "kurt-agent";
 import type { SessionWorkspace } from "kurt-agent";
 import { mkdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { loadConfig, type PersistedConfig } from "./config.ts";
-import { globalMemoryPath, projectMemoryPath } from "./paths.ts";
+import { globalMemoryPath, kurtHome, projectMemoryPath } from "./paths.ts";
 
 /**
  * The agent's working area: the whole working directory is writable. The agent
@@ -57,6 +58,51 @@ export function workspaceEnv(ws: Workspace): Record<string, string> {
   return { WORKSPACE_DIR: ws.root };
 }
 
+/** A per-session git worktree (process-level isolation for parallel/multi-agent work). */
+export interface WorktreeSession {
+  /** The worktree's working dir — use this as the agent's workspace. */
+  root: string;
+  /** The session branch (e.g. "kurt/abc123"). */
+  branch: string;
+  /** The shared repo this worktree belongs to. */
+  repoRoot: string;
+  /** Auto-commit the agent's changes to the branch at session end; returns a status line. */
+  finish(): Promise<string>;
+}
+
+/**
+ * If `--worktree` is set, create a per-session worktree under
+ * `~/.kurt/worktrees/<repo>-<id>/` on a fresh `kurt/<id>` branch and return its
+ * handle (the caller uses `.root` as the workspace, calls `.finish()` on exit).
+ * Throws if the target isn't a git repo. Returns null when `--worktree` is off.
+ */
+export async function maybeWorktree(opts: LaunchOptions): Promise<WorktreeSession | null> {
+  if (!opts.worktree) return null;
+  const requested = resolve(opts.workspacePath ?? process.cwd());
+  const repoRoot = await WorktreeManager.repoRoot(requested);
+  if (!repoRoot) {
+    throw new Error(
+      `--worktree requires a git repository (none at ${requested}). Run \`git init\` there, or drop --worktree.`,
+    );
+  }
+  const mgr = new WorktreeManager(repoRoot);
+  const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const branch = `kurt/${id}`;
+  const root = join(kurtHome(), "worktrees", `${mgr.repoName}-${id}`);
+  await mgr.create({ path: root, branch });
+  return {
+    root,
+    branch,
+    repoRoot,
+    finish: async () => {
+      const committed = await mgr.commitAll(root, `kurt: session ${id}`);
+      return committed
+        ? `worktree committed → ${branch}\n  merge:  git -C ${repoRoot} merge ${branch}\n  remove: git -C ${repoRoot} worktree remove ${root}`
+        : `worktree ${branch}: no changes to commit\n  remove: git -C ${repoRoot} worktree remove ${root}`;
+    },
+  };
+}
+
 /** Per-invocation launch options (parsed from CLI flags). */
 export interface LaunchOptions {
   /** --workspace / --workplace <path>; default = cwd. */
@@ -65,6 +111,8 @@ export interface LaunchOptions {
   allowWrite?: string[];
   /** --yes / -y: auto-approve sensitive commands (skip prompts). */
   yes?: boolean;
+  /** --worktree: isolate this session in a per-session git worktree + branch. */
+  worktree?: boolean;
 }
 
 /** Pull launch flags out of argv; the rest is positional (command + args). */
@@ -73,6 +121,7 @@ export function parseLaunchFlags(argv: string[]): { options: LaunchOptions; posi
   const allowWrite: string[] = [];
   let workspacePath: string | undefined;
   let yes = false;
+  let worktree = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     const eq = arg.indexOf("=");
@@ -83,10 +132,16 @@ export function parseLaunchFlags(argv: string[]): { options: LaunchOptions; posi
       const v = value();
       if (v) allowWrite.push(v);
     } else if (name === "yes" || arg === "-y") yes = true;
+    else if (name === "worktree") worktree = true;
     else positional.push(arg);
   }
   return {
-    options: { workspacePath, allowWrite: allowWrite.length ? allowWrite : undefined, yes: yes || undefined },
+    options: {
+      workspacePath,
+      allowWrite: allowWrite.length ? allowWrite : undefined,
+      yes: yes || undefined,
+      worktree: worktree || undefined,
+    },
     positional,
   };
 }
