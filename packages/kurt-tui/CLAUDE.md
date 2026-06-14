@@ -16,6 +16,7 @@
 
 ## 3. 工作流
 - 主工作流 = `project-module-workflow` skill(与 kurt-agent 一致):索引优先、遇疑必问、`feat/…`/`fix/…` 分支、门禁绿、rebase→ff-merge、收尾刷新 `PROJECT_INDEX.md`。
+- **强制收尾**:每次落 main 都要更新仓库根 [`PROGRESS.md`](../../PROGRESS.md)(单一"活进度":阶段/功能/未完成/债务/最后更新)。
 - 门禁:`bun run typecheck` + `bun test` 全绿(在 `kurt/` 根 `bun install` 之后)。
 - commit 结尾:`Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`。
 - 在单一 `kurt` 仓库上开 `feat/…` 分支开发;main 只放已验收工作。
