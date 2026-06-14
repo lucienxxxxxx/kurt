@@ -11,13 +11,17 @@ import {
   serializeForSummary,
   SessionWorkspace,
   ToolHub,
+  connectMcpServers,
+  summarizeStatuses,
   type AskProvider,
   type Event,
   type Message,
+  type McpRuntime,
   type PermissionProvider,
 } from "kurt-agent";
 import { resolveConfig, makeSandbox, makeTools, maybeWorktree, modelFor, resolveWorkspace, systemPrompt, toolsForMode, type LaunchOptions } from "./agent.ts";
 import { loadContextPrelude } from "./context-files.ts";
+import { loadMcpServers } from "./mcp-config.ts";
 import { Allowlist } from "./allowlist.ts";
 
 /** stdin-prompt for the agent's ask_user tool (pick a letter or type an answer). */
@@ -68,7 +72,14 @@ export async function runChat(args: string[], opts: LaunchOptions = {}): Promise
   const permission = cliPermission(await Allowlist.load(ws.root), opts.yes ?? false);
   const sandbox = makeSandbox();
   const codeTemp = new SessionWorkspace({ sessionId: "chat" });
-  const hub = new ToolHub(makeTools(sandbox, codeTemp, ws, opts.allowWrite ?? [], permission, cliAsk()));
+
+  // Connect MCP servers (their tools join the hub; failures degrade gracefully).
+  const mcp: McpRuntime = opts.noMcp
+    ? { tools: [], statuses: [], close: async () => {} }
+    : await connectMcpServers(await loadMcpServers(ws.root), { permission });
+  if (mcp.statuses.length) console.log(`(mcp: ${summarizeStatuses(mcp.statuses)})`);
+
+  const hub = new ToolHub([...makeTools(sandbox, codeTemp, ws, opts.allowWrite ?? [], permission, cliAsk()), ...mcp.tools]);
   const tools = toolsForMode(hub, cfg.mode); // chat/agent/plan tool subset
   const model = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey, cfg.maxTokens, {
     thinking: cfg.thinking,
@@ -140,6 +151,7 @@ export async function runChat(args: string[], opts: LaunchOptions = {}): Promise
     }
   } finally {
     codeTemp.dispose();
+    await mcp.close();
     if (worktree) console.log(`\n${await worktree.finish()}`);
   }
 }

@@ -106,6 +106,11 @@ describe("parseLaunchFlags", () => {
     expect(parseLaunchFlags(["--worktree"]).options.worktree).toBe(true);
     expect(parseLaunchFlags(["chat"]).options.worktree).toBeUndefined();
   });
+
+  test("--no-mcp is a boolean flag; default off", () => {
+    expect(parseLaunchFlags(["--no-mcp"]).options.noMcp).toBe(true);
+    expect(parseLaunchFlags(["chat"]).options.noMcp).toBeUndefined();
+  });
 });
 
 describe("maybeWorktree", () => {

@@ -28,11 +28,16 @@ Options (for kurt / kurt chat):
   --yes, -y                 Auto-approve sensitive commands (skip approval prompts)
   --worktree                Isolate this session in its own git worktree + branch
                             (requires a git repo; commits to kurt/<id> on exit, never main)
+  --no-mcp                  Skip connecting MCP servers for this launch
 
 The agent's working dir (WORKSPACE_DIR) is fully writable; the sandbox blocks
 writes elsewhere unless --allow-write opens them (or the agent requests access).
 Sensitive commands (rm/sudo/…) still ask for approval — independent of file
 writes; "always allow" is remembered in <workspace>/.kurt/allowlist.json.
+
+MCP servers are configured in ~/.kurt/mcp.json (global) and <workspace>/.kurt/mcp.json
+(project), using the { "mcpServers": {...} } schema. Their tools join agent mode;
+side-effecting ones ask for approval like shell commands. Use --no-mcp to skip them.
 
 Env: DEEPSEEK_API_KEY (required), DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DEEPSEEK_CONTEXT,
 DEEPSEEK_MAX_TOKENS (raise for large outputs, e.g. writing big files).

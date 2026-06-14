@@ -6,7 +6,11 @@
 ## 1. 项目是什么
 
 `kurt-agent` —— 一个**协议无关、引擎零 I/O** 的 AI Agent 核心引擎(**库**)。
-- 语言/运行时:**TypeScript on Bun**(Bun 装在 `~/.bun/bin`)。运行时无第三方依赖,只用 `@types/bun` + `typescript` 做开发期类型。
+- 语言/运行时:**TypeScript on Bun**(Bun 装在 `~/.bun/bin`)。开发期类型用 `@types/bun` + `typescript`。
+  - **运行时依赖原则:仍然零依赖。唯一例外 = `@modelcontextprotocol/sdk`(MCP 客户端,Phase 5)**,
+    用户 2026-06-14 明确批准放入本包(见 `src/mcp/`)。这是经过权衡的刻意决定(对比见 WORKLOG),
+    **不要把它当成"违规"删掉**。该 SDK 只在 `src/mcp/` 使用,`src/engine/` 依然零依赖、零 I/O。
+    再加新的运行时依赖前,先回到这条原则、先问用户。
 - 优先使用 Bun 原生能力:`Bun.file` / `Bun.write` / `Bun.spawn` / `bun test` / `bun run`,不要退回 Node/npm 等价物,除非明确要求。
 - **Monorepo(单一 git 仓库 `kurt`)**:本包在 `kurt/packages/kurt-agent`,兄弟包 `kurt/packages/kurt-tui`(Ink 终端前端 + `kurt` CLI)。前端是引擎的消费者(铁律 #2),依赖本包(workspace)。本包对外只暴露 `src/lib.ts`(public API);UI/Ink/React 等依赖只在 kurt-tui,引擎核心保持零运行时依赖。
 - 工作区命令在 `kurt/` 根 `bun install`(根持有 `bun.lock`);各包内 `bun test` / `bun run typecheck`。开发走 `kurt` 仓库的 `feat/…` 分支。
@@ -109,4 +113,9 @@ bun run typecheck  # tsc --noEmit
 - **Phase 3**:引擎绝不直接写 Memory.md。压缩必须保留最近一轮 tool_result 和未闭合 tool_call,否则配对断裂报错。Skills 渐进披露:预加载只注入 description。
 - **Phase 4**:厂商差异不得泄漏到引擎层;授权凭证归编排层。
 - **Phase 5**:Tool=引擎执行接口,MCP=tool 的远程 provider,Skill=编排层上下文注入机制。三者别混。
+  - **MCP 已落地(2026-06-14)**:`src/mcp/`(官方 SDK,stdio + Streamable HTTP)把远程 server 的工具
+    包成 `McpTool`(实现 `Tool`),由 `connectMcpServers()` 收集后注入 ToolHub —— 引擎零改动(铁律 #3)。
+    SDK/子进程/网络都是 I/O,封死在 `src/mcp/`,绝不进 `src/engine/`(铁律 #1)。非只读工具经
+    `PermissionProvider` 审批(沿用 shell 那套);只读工具(readOnlyHint)直接跑。配置在编排层
+    (kurt-tui `~/.kurt/mcp.json` + 项目 `.kurt/mcp.json`),引擎不感知。**Skill 尚未做。**
 - **Phase 7**:abort 级联(父中断→子中断);子 Agent 事件冒泡带来源标识。

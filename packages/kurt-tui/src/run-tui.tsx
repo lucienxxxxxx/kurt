@@ -7,6 +7,8 @@
 import { render } from "ink";
 import { runLoop, SessionWorkspace, ToolHub, type Event, type Message } from "kurt-agent";
 import { autoCompaction, compactHistory, serializeForSummary, type CompactionPolicy } from "kurt-agent";
+import { connectMcpServers, summarizeStatuses, type McpRuntime } from "kurt-agent";
+import { loadMcpServers } from "./mcp-config.ts";
 import { App, bannerString, type Compactor, type EngineRunner, type SessionController, type SessionState } from "./tui/index.ts";
 import {
   resolveConfig,
@@ -53,12 +55,20 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
   const askBridge = new AskBridge();
   const sandbox = makeSandbox();
   let codeTemp = new SessionWorkspace({ sessionId: "tui" });
+
+  // Connect MCP servers once (their tools join every hub the session builds). A
+  // failed server degrades to zero tools — it never blocks launch (铁律 #3: MCP
+  // tools are just more Tools in the hub; the engine is untouched).
+  const mcp: McpRuntime = opts.noMcp
+    ? { tools: [], statuses: [], close: async () => {} }
+    : await connectMcpServers(await loadMcpServers(ws.root), { permission });
+
   // All tools live in one hub; the runner hands each mode its allowed subset.
-  let hub = new ToolHub(makeTools(sandbox, codeTemp, ws, allowWrite, permission, askBridge));
+  let hub = new ToolHub([...makeTools(sandbox, codeTemp, ws, allowWrite, permission, askBridge), ...mcp.tools]);
   const newSession = (): void => {
     codeTemp.dispose();
     codeTemp = new SessionWorkspace({ sessionId: "tui" });
-    hub = new ToolHub(makeTools(sandbox, codeTemp, ws, allowWrite, permission, askBridge));
+    hub = new ToolHub([...makeTools(sandbox, codeTemp, ws, allowWrite, permission, askBridge), ...mcp.tools]);
   };
 
   // Preload global memory (~/.kurt/memory.md) + project rules (.kurt/rules.md).
@@ -162,6 +172,7 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
   process.stdout.write("\n" + bannerString(process.stdout.columns || 80) + "\n");
   process.stdout.write(`\x1b[2m  workspace: ${ws.root}${allowWrite.length ? `  (+write: ${allowWrite.join(", ")})` : ""}\x1b[0m\n`);
   if (worktree) process.stdout.write(`\x1b[2m  worktree:  isolated on branch ${worktree.branch} (of ${worktree.repoRoot})\x1b[0m\n`);
+  if (mcp.statuses.length) process.stdout.write(`\x1b[2m  mcp:       ${summarizeStatuses(mcp.statuses)}\x1b[0m\n`);
 
   const app = render(
     <App
@@ -181,6 +192,7 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
     await app.waitUntilExit();
   } finally {
     codeTemp.dispose();
+    await mcp.close();
     if (worktree) {
       try {
         process.stdout.write(`\n${await worktree.finish()}\n`);

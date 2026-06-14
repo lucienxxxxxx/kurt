@@ -113,6 +113,8 @@ export interface LaunchOptions {
   yes?: boolean;
   /** --worktree: isolate this session in a per-session git worktree + branch. */
   worktree?: boolean;
+  /** --no-mcp: skip connecting MCP servers for this launch. */
+  noMcp?: boolean;
 }
 
 /** Pull launch flags out of argv; the rest is positional (command + args). */
@@ -122,6 +124,7 @@ export function parseLaunchFlags(argv: string[]): { options: LaunchOptions; posi
   let workspacePath: string | undefined;
   let yes = false;
   let worktree = false;
+  let noMcp = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     const eq = arg.indexOf("=");
@@ -133,6 +136,7 @@ export function parseLaunchFlags(argv: string[]): { options: LaunchOptions; posi
       if (v) allowWrite.push(v);
     } else if (name === "yes" || arg === "-y") yes = true;
     else if (name === "worktree") worktree = true;
+    else if (name === "no-mcp") noMcp = true;
     else positional.push(arg);
   }
   return {
@@ -141,6 +145,7 @@ export function parseLaunchFlags(argv: string[]): { options: LaunchOptions; posi
       allowWrite: allowWrite.length ? allowWrite : undefined,
       yes: yes || undefined,
       worktree: worktree || undefined,
+      noMcp: noMcp || undefined,
     },
     positional,
   };

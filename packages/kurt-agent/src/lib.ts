@@ -14,6 +14,7 @@ export * from "./permission/index.ts";
 export * from "./ask/index.ts";
 export * from "./agent/index.ts";
 export * from "./worktree/index.ts";
+export * from "./mcp/index.ts";
 
 export { truncate, truncationNote, DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES } from "./truncate.ts";
 export type { TruncateOptions, Truncation } from "./truncate.ts";
