@@ -9,3 +9,5 @@ export {
   MODEL_CAPABILITIES,
 } from "./capabilities.ts";
 export type { ModelCapabilities, ThinkingCapability, CapableModel } from "./capabilities.ts";
+export { withRetry, isTransientModelError } from "./retry.ts";
+export type { RetryOptions } from "./retry.ts";

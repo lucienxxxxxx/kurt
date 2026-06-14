@@ -46,6 +46,10 @@ export interface CodeToolOptions {
   writablePaths?: string[];
   /** Extra env vars for the script (e.g. WORKSPACE_DIR). */
   env?: Record<string, string>;
+  /** Working directory the script RUNS in (default: the private temp dir).
+   * Set it to the workspace so the script's relative paths resolve there —
+   * models reliably trip over a temp-dir CWD. The script FILE stays in temp. */
+  cwd?: string;
   timeoutMs?: number;
   idleTimeoutMs?: number;
   maxOutputBytes?: number;
@@ -107,7 +111,7 @@ export class CodeTool implements Tool {
       const result = await this.#sandbox.exec(
         {
           cmd: lang.argv(interpreter, script),
-          cwd: codeDir,
+          cwd: this.#opts.cwd ?? codeDir,
           env: this.#opts.env,
           policy: {
             writablePaths: [this.#workspace.root, ...(this.#opts.writablePaths ?? [])],

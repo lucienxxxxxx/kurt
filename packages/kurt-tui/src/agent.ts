@@ -6,6 +6,7 @@
 
 import {
   OpenAICompatModel,
+  withRetry,
   capabilitiesFor,
   SeatbeltSandbox,
   DirectSandbox,
@@ -27,6 +28,7 @@ import {
   type Tool,
   type PermissionProvider,
   type AskProvider,
+  type ModelProvider,
 } from "kurt-agent";
 import type { SessionWorkspace } from "kurt-agent";
 import { mkdirSync } from "node:fs";
@@ -200,8 +202,8 @@ export function modelFor(
   apiKey: string,
   maxTokens?: number,
   reasoning: ReasoningOptions = {},
-): OpenAICompatModel {
-  return new OpenAICompatModel({
+): ModelProvider {
+  const model = new OpenAICompatModel({
     name: "deepseek",
     baseURL,
     model: id,
@@ -210,6 +212,9 @@ export function modelFor(
     thinking: reasoning.thinking,
     effort: reasoning.effort,
   });
+  // Wrap every model call (all modes + compaction + titling) so transient API
+  // failures (429/5xx/network) back off and retry instead of bubbling up.
+  return withRetry(model);
 }
 
 export function makeSandbox(): SandboxProvider {
@@ -242,7 +247,9 @@ export function makeTools(
     new GrepTool({ roots: writable }),
     new WriteFileTool({ roots: writable }),
     new ShellTool(sandbox, { cwd: ws.root, writablePaths: writable, env, permission }),
-    new CodeTool(sandbox, codeTemp, { writablePaths: writable, env }),
+    // Scripts run WITH the workspace as CWD (relative paths resolve there); the
+    // script files themselves stay in the session temp dir.
+    new CodeTool(sandbox, codeTemp, { writablePaths: writable, env, cwd: ws.root }),
     // brew runs UNSANDBOXED (network + system writes) via a Direct runner, gated
     // by approval for mutating subcommands.
     new BrewTool(new DirectSandbox(), { cwd: ws.root, permission }),
