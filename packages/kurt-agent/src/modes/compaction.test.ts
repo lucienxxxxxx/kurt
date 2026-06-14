@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { compactHistory, compactionSplit, serializeForSummary } from "./compaction.ts";
+import { autoCompaction, compactHistory, compactionSplit, serializeForSummary } from "./compaction.ts";
 import type { Message } from "../engine/index.ts";
 
 // A conversation with tool pairing inside the first user turn, across 3 turns.
@@ -49,5 +49,26 @@ describe("compaction", () => {
     const text = serializeForSummary(sampleHistory());
     expect(text).toContain("user: turn 1");
     expect(text).toContain("tool shell");
+  });
+});
+
+describe("autoCompaction policy", () => {
+  test("exposes the threshold and compacts via the injected summarizer (signal threaded)", async () => {
+    const seen: { signal?: AbortSignal } = {};
+    const policy = autoCompaction({
+      thresholdTokens: 1234,
+      summarize: async (_older, signal) => {
+        seen.signal = signal;
+        return "SUMMARY";
+      },
+    });
+    expect(policy.thresholdTokens).toBe(1234);
+
+    const ac = new AbortController();
+    const out = await policy.compact(sampleHistory(), ac.signal);
+    // Older turns collapse into a single summary message; recent turns kept.
+    expect(out.length).toBeLessThan(sampleHistory().length);
+    expect(out[0]!.content.some((b) => b.type === "text" && b.text.includes("SUMMARY"))).toBe(true);
+    expect(seen.signal).toBe(ac.signal); // engine's signal reaches the summarizer
   });
 });

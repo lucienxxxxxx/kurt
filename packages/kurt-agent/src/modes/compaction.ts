@@ -10,7 +10,7 @@
  * (auto-trigger) can later reuse the same summarize step.
  */
 
-import type { Message } from "../engine/index.ts";
+import type { CompactionPolicy, Message } from "../engine/index.ts";
 
 /**
  * Index to split at: messages[0..i) get summarized, [i..] are kept verbatim.
@@ -69,4 +69,30 @@ function safe(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+export interface AutoCompactionOptions {
+  /** Engine compacts when estimated tokens reach this. */
+  thresholdTokens: number;
+  /** How to summarize the older slice (calls a model); honor the signal. */
+  summarize: (older: Message[], signal: AbortSignal) => Promise<string>;
+  /** How many recent user turns to keep verbatim. Default 2. */
+  keepUserTurns?: number;
+}
+
+/**
+ * A `CompactionPolicy` that auto-triggers: the engine compares live token usage
+ * against `thresholdTokens` each turn and, when reached, calls `compact()`, which
+ * reuses {@link compactHistory} (same user-boundary cut → tool pairing preserved).
+ * The summarize step is injected by the orchestration layer.
+ */
+export function autoCompaction(opts: AutoCompactionOptions): CompactionPolicy {
+  const keep = opts.keepUserTurns ?? 2;
+  return {
+    thresholdTokens: opts.thresholdTokens,
+    async compact(messages: Message[], signal: AbortSignal): Promise<Message[]> {
+      const result = await compactHistory(messages, (older) => opts.summarize(older, signal), keep);
+      return result.messages;
+    },
+  };
 }

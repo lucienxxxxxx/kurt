@@ -7,6 +7,8 @@ import {
   runLoop,
   runStdoutMode,
   messagesFromEvents,
+  autoCompaction,
+  serializeForSummary,
   SessionWorkspace,
   ToolHub,
   type AskProvider,
@@ -73,6 +75,35 @@ export async function runChat(args: string[], opts: LaunchOptions = {}): Promise
   const system = systemPrompt(ws, cfg.mode) + (await loadContextPrelude(ws.root));
   const messages: Message[] = [];
 
+  // Auto-compaction at ~75% of the context limit (same as the TUI).
+  const compaction = autoCompaction({
+    thresholdTokens: Math.round(cfg.contextLimit * 0.75),
+    summarize: async (older, signal) => {
+      let text = "";
+      for await (const ev of model.stream(
+        {
+          system: "You compress conversations faithfully.",
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Summarize this transcript concisely, preserving key facts, decisions, paths, and open tasks:\n\n" + serializeForSummary(older),
+                },
+              ],
+            },
+          ],
+          tools: [],
+        },
+        signal,
+      )) {
+        if (ev.type === "text_delta") text += ev.text;
+      }
+      return text.trim() || "(summary unavailable)";
+    },
+  });
+
   async function turn(text: string): Promise<void> {
     messages.push({ role: "user", content: [{ type: "text", text }] });
     const captured: Event[] = [];
@@ -82,7 +113,7 @@ export async function runChat(args: string[], opts: LaunchOptions = {}): Promise
         yield e;
       }
     };
-    await runStdoutMode(tee(runLoop({ system, messages, tools, model })));
+    await runStdoutMode(tee(runLoop({ system, messages, tools, model, compaction })));
     const appended = messagesFromEvents(captured);
     if (appended.length > 0) messages.push(...appended);
     else messages.pop();

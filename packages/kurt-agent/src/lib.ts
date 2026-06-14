@@ -18,7 +18,7 @@ export { truncate, truncationNote, DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES } from "
 export type { TruncateOptions, Truncation } from "./truncate.ts";
 
 export { messagesFromEvents } from "./modes/history.ts";
-export { compactHistory, compactionSplit, serializeForSummary } from "./modes/compaction.ts";
-export type { CompactionResult } from "./modes/compaction.ts";
+export { compactHistory, compactionSplit, serializeForSummary, autoCompaction } from "./modes/compaction.ts";
+export type { CompactionResult, AutoCompactionOptions } from "./modes/compaction.ts";
 export { runStdoutMode } from "./modes/stdout.ts";
 export type { StdoutModeOptions } from "./modes/stdout.ts";

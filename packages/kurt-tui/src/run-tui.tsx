@@ -6,7 +6,7 @@
 
 import { render } from "ink";
 import { runLoop, SessionWorkspace, ToolHub, type Event, type Message } from "kurt-agent";
-import { compactHistory, serializeForSummary } from "kurt-agent";
+import { autoCompaction, compactHistory, serializeForSummary, type CompactionPolicy } from "kurt-agent";
 import { App, bannerString, type Compactor, type EngineRunner, type SessionController, type SessionState } from "./tui/index.ts";
 import { resolveConfig, makeSandbox, makeTools, modelFor, resolveWorkspace, systemPrompt, toolsForMode, type LaunchOptions } from "./agent.ts";
 import { saveConfig } from "./config.ts";
@@ -100,6 +100,30 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
     currentId: () => current.id,
   };
 
+  // Shared summarizer for both manual /compact and auto-compaction.
+  const summarize = async (older: Message[], signal: AbortSignal): Promise<string> => {
+    const model = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey!, cfg.maxTokens);
+    const prompt =
+      "Summarize the following conversation transcript concisely. Preserve key facts, " +
+      "decisions, file paths, code identifiers, and open tasks. No preamble.\n\n" +
+      serializeForSummary(older);
+    let text = "";
+    for await (const ev of model.stream(
+      { system: "You compress conversations faithfully.", messages: [{ role: "user", content: [{ type: "text", text: prompt }] }], tools: [] },
+      signal,
+    )) {
+      if (ev.type === "text_delta") text += ev.text;
+    }
+    return text.trim() || "(summary unavailable)";
+  };
+
+  // Auto-compaction: the engine fires it when estimated tokens cross ~75% of the
+  // context limit, so long sessions don't overflow the window (manual /compact still works).
+  const autoCompact: CompactionPolicy = autoCompaction({
+    thresholdTokens: Math.round(cfg.contextLimit * 0.75),
+    summarize,
+  });
+
   const run: EngineRunner = (messages: Message[], signal: AbortSignal, session: SessionState): AsyncIterable<Event> =>
     runLoop({
       system: systemPrompt(ws, session.mode) + prelude,
@@ -109,27 +133,11 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
         thinking: session.thinking,
         effort: session.effort,
       }),
+      compaction: autoCompact,
       signal,
     });
 
-  const compact: Compactor = async (messages, signal) => {
-    const model = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey!, cfg.maxTokens);
-    const summarize = async (older: Message[]): Promise<string> => {
-      const prompt =
-        "Summarize the following conversation transcript concisely. Preserve key facts, " +
-        "decisions, file paths, code identifiers, and open tasks. No preamble.\n\n" +
-        serializeForSummary(older);
-      let text = "";
-      for await (const ev of model.stream(
-        { system: "You compress conversations faithfully.", messages: [{ role: "user", content: [{ type: "text", text: prompt }] }], tools: [] },
-        signal,
-      )) {
-        if (ev.type === "text_delta") text += ev.text;
-      }
-      return text.trim() || "(summary unavailable)";
-    };
-    return compactHistory(messages, summarize, 2);
-  };
+  const compact: Compactor = (messages, signal) => compactHistory(messages, (older) => summarize(older, signal), 2);
 
   // Natural-flow: no alternate screen → native scrollback + mouse wheel work.
   process.stdout.write("\n" + bannerString(process.stdout.columns || 80) + "\n");
