@@ -22,6 +22,7 @@ import {
 import { resolveConfig, makeSandbox, makeTools, maybeWorktree, modelFor, resolveWorkspace, systemPrompt, toolsForMode, type LaunchOptions } from "./agent.ts";
 import { loadContextPrelude } from "./context-files.ts";
 import { loadMcpServers } from "./mcp-config.ts";
+import { loadSkills } from "./skills.ts";
 import { Allowlist } from "./allowlist.ts";
 
 /** stdin-prompt for the agent's ask_user tool (pick a letter or type an answer). */
@@ -79,13 +80,18 @@ export async function runChat(args: string[], opts: LaunchOptions = {}): Promise
     : await connectMcpServers(await loadMcpServers(ws.root), { permission });
   if (mcp.statuses.length) console.log(`(mcp: ${summarizeStatuses(mcp.statuses)})`);
 
-  const hub = new ToolHub([...makeTools(sandbox, codeTemp, ws, opts.allowWrite ?? [], permission, cliAsk()), ...mcp.tools]);
+  // Discover skills (descriptions → prompt catalog; `skill` tool loads bodies on demand).
+  const skills = await loadSkills(ws.root);
+  if (skills.metas.length) console.log(`(skills: ${skills.metas.map((s) => s.name).join(", ")})`);
+
+  const hub = new ToolHub([...makeTools(sandbox, codeTemp, ws, opts.allowWrite ?? [], permission, cliAsk(), skills.provider), ...mcp.tools]);
   const tools = toolsForMode(hub, cfg.mode); // chat/agent/plan tool subset
   const model = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey, cfg.maxTokens, {
     thinking: cfg.thinking,
     effort: cfg.effort,
   });
-  const system = systemPrompt(ws, cfg.mode) + (await loadContextPrelude(ws.root));
+  const system =
+    systemPrompt(ws, cfg.mode) + (await loadContextPrelude(ws.root)) + (skills.catalog ? "\n\n" + skills.catalog : "");
   const messages: Message[] = [];
 
   // Auto-compaction at ~75% of the context limit (same as the TUI).

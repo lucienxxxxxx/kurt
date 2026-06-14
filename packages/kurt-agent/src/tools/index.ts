@@ -12,6 +12,7 @@ export { MemoryTool } from "./memory.ts";
 export type { MemoryToolOptions } from "./memory.ts";
 export { AskUserTool } from "./ask-user.ts";
 export { UpdatePlanTool } from "./update-plan.ts";
+export { SkillTool } from "./skill.ts";
 export { isInside, resolveWithin } from "./fs-access.ts";
 export { ShellTool } from "./shell.ts";
 export type { ShellToolOptions } from "./shell.ts";

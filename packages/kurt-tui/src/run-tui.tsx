@@ -24,6 +24,7 @@ import {
 } from "./agent.ts";
 import { saveConfig } from "./config.ts";
 import { loadContextPrelude } from "./context-files.ts";
+import { loadSkills } from "./skills.ts";
 import { SessionStore, type SessionRecord } from "./session-store.ts";
 import { Allowlist } from "./allowlist.ts";
 import { PermissionBridge } from "./tui/permission.ts";
@@ -63,16 +64,20 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
     ? { tools: [], statuses: [], close: async () => {} }
     : await connectMcpServers(await loadMcpServers(ws.root), { permission });
 
+  // Discover skills (global + project). Descriptions go in the prompt catalog;
+  // the `skill` tool loads a body on demand (progressive disclosure).
+  const skills = await loadSkills(ws.root);
+
   // All tools live in one hub; the runner hands each mode its allowed subset.
-  let hub = new ToolHub([...makeTools(sandbox, codeTemp, ws, allowWrite, permission, askBridge), ...mcp.tools]);
+  let hub = new ToolHub([...makeTools(sandbox, codeTemp, ws, allowWrite, permission, askBridge, skills.provider), ...mcp.tools]);
   const newSession = (): void => {
     codeTemp.dispose();
     codeTemp = new SessionWorkspace({ sessionId: "tui" });
-    hub = new ToolHub([...makeTools(sandbox, codeTemp, ws, allowWrite, permission, askBridge), ...mcp.tools]);
+    hub = new ToolHub([...makeTools(sandbox, codeTemp, ws, allowWrite, permission, askBridge, skills.provider), ...mcp.tools]);
   };
 
-  // Preload global memory (~/.kurt/memory.md) + project rules (.kurt/rules.md).
-  const prelude = await loadContextPrelude(ws.root);
+  // Preload global memory (~/.kurt/memory.md) + project rules (.kurt/rules.md) + skill catalog.
+  const prelude = (await loadContextPrelude(ws.root)) + (skills.catalog ? "\n\n" + skills.catalog : "");
 
   // Saved conversations (stored globally, listed per workspace). A fresh session
   // starts in memory now and is persisted on the first turn.
@@ -173,6 +178,7 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
   process.stdout.write(`\x1b[2m  workspace: ${ws.root}${allowWrite.length ? `  (+write: ${allowWrite.join(", ")})` : ""}\x1b[0m\n`);
   if (worktree) process.stdout.write(`\x1b[2m  worktree:  isolated on branch ${worktree.branch} (of ${worktree.repoRoot})\x1b[0m\n`);
   if (mcp.statuses.length) process.stdout.write(`\x1b[2m  mcp:       ${summarizeStatuses(mcp.statuses)}\x1b[0m\n`);
+  if (skills.metas.length) process.stdout.write(`\x1b[2m  skills:    ${skills.metas.map((s) => s.name).join(", ")}\x1b[0m\n`);
 
   const app = render(
     <App

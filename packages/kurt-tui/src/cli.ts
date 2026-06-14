@@ -39,6 +39,11 @@ MCP servers are configured in ~/.kurt/mcp.json (global) and <workspace>/.kurt/mc
 (project), using the { "mcpServers": {...} } schema. Their tools join agent mode;
 side-effecting ones ask for approval like shell commands. Use --no-mcp to skip them.
 
+Skills are reusable procedures in ~/.kurt/skills/ (global) and <workspace>/.kurt/skills/
+(project), each a <name>/SKILL.md (or flat <name>.md) with optional name/description
+frontmatter. Only descriptions are preloaded; the agent loads a skill's full
+instructions on demand via the "skill" tool (available in every mode).
+
 Env: DEEPSEEK_API_KEY (required), DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DEEPSEEK_CONTEXT,
 DEEPSEEK_MAX_TOKENS (raise for large outputs, e.g. writing big files).
 Settings you change in the TUI (/model, /effort, /think, /mode) are remembered in

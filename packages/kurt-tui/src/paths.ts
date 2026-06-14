@@ -6,11 +6,13 @@
  *   ~/.kurt/sessions/        saved conversations (<id>.json)
  *   ~/.kurt/memory.md        global memory, preloaded into the system prompt
  *   ~/.kurt/mcp.json         global MCP servers ({ "mcpServers": {...} })
+ *   ~/.kurt/skills/          global skills (<name>/SKILL.md or <name>.md)
  *
  * Project-scoped state lives under <workspace>/.kurt/ instead:
  *   <workspace>/.kurt/allowlist.json   command allowlist (see allowlist.ts)
  *   <workspace>/.kurt/rules.md         project rules, preloaded into the prompt
  *   <workspace>/.kurt/mcp.json         project MCP servers (override global)
+ *   <workspace>/.kurt/skills/          project skills (override global by name)
  */
 
 import { homedir } from "node:os";
@@ -47,4 +49,14 @@ export function globalMcpConfigPath(): string {
 /** Project-scoped MCP server config under the workspace's .kurt/ (overrides global). */
 export function projectMcpConfigPath(workspaceRoot: string): string {
   return join(workspaceRoot, ".kurt", "mcp.json");
+}
+
+/** Global skills directory (~/.kurt/skills/). */
+export function globalSkillsDir(): string {
+  return join(kurtHome(), "skills");
+}
+
+/** Project-scoped skills directory under the workspace's .kurt/ (overrides global by name). */
+export function projectSkillsDir(workspaceRoot: string): string {
+  return join(workspaceRoot, ".kurt", "skills");
 }

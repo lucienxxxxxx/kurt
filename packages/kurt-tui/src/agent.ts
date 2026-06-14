@@ -22,6 +22,7 @@ import {
   MemoryTool,
   AskUserTool,
   UpdatePlanTool,
+  SkillTool,
   ToolHub,
   WorktreeManager,
   DuckDuckGoSearch,
@@ -30,6 +31,7 @@ import {
   type PermissionProvider,
   type AskProvider,
   type ModelProvider,
+  type SkillProvider,
 } from "kurt-agent";
 import type { SessionWorkspace } from "kurt-agent";
 import { mkdirSync } from "node:fs";
@@ -294,6 +296,7 @@ export function makeTools(
   allowWrite: string[] = [],
   permission?: PermissionProvider,
   askProvider?: AskProvider,
+  skills?: SkillProvider,
 ): Tool[] {
   // Shared, mutable writable-roots — request_write_access pushes to this and the
   // file/exec tools (which read it live) immediately see the new dir.
@@ -324,13 +327,15 @@ export function makeTools(
   if (askProvider) tools.push(new AskUserTool(askProvider));
   // The escalation tool only makes sense when there's an approver to ask.
   if (permission) tools.push(new RequestWriteAccessTool(writable, permission));
+  // The skill loader is only useful when at least one skill is discovered.
+  if (skills && skills.list().length > 0) tools.push(new SkillTool(skills));
   return tools;
 }
 
 /** Tool names each mode exposes ("all" = the whole hub). */
 export const TOOLS_BY_MODE: Record<Mode, readonly string[] | "all"> = {
-  chat: ["read_file", "ls", "grep", "web_search", "memory", "ask_user"],
-  plan: ["read_file", "ls", "grep", "web_search", "memory", "ask_user", "update_plan"],
+  chat: ["read_file", "ls", "grep", "web_search", "memory", "ask_user", "skill"],
+  plan: ["read_file", "ls", "grep", "web_search", "memory", "ask_user", "update_plan", "skill"],
   agent: "all",
 };
 
