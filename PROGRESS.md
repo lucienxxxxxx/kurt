@@ -4,15 +4,15 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-14 · `main` @ `8532b84`(Phase 5:MCP 接入)
-- **门禁**:kurt-agent **119** pass · kurt-tui **66** pass · typecheck 干净(MCP 用真实 stdio fixture server 集成测)
+- **最后更新**:2026-06-15 · `main` @ `d7e4655`(Phase 5 完成:MCP 接入 + Skills)
+- **门禁**:kurt-agent **124** pass · kurt-tui **72** pass · typecheck 干净(MCP 用真实 stdio fixture server 集成测)
 
 ---
 
 ## 一句话定位
 
-main 处在「**单机 TUI Agent,主线已相当完整可用,且能接外部 MCP 工具**」的阶段:七期里
-1、2、3 全部完成,4、6 主线完成,**5 的 MCP 接入已完成(Skills 未做)**;7 尚未开始。
+main 处在「**单机 TUI Agent,主线已相当完整可用,能接外部 MCP 工具、能加载 Skills**」的阶段:
+七期里 1、2、3、**5 全部完成**,4、6 主线完成;7 尚未开始。
 
 ## 七期路线图状态(main)
 
@@ -22,7 +22,7 @@ main 处在「**单机 TUI Agent,主线已相当完整可用,且能接外部 MCP
 | 2 | 真实工具 + 沙盒:Seatbelt/Direct、文件读写/shell/代码/搜索、会话临时目录 | ✅ 完成 |
 | 3 | 预加载 + 记忆 + 压缩 | ✅ 完成:预载 ✓ · agent 可写记忆 ✓ · 手动 `/compact` ✓ · **自动压缩 ✓**(`autoCompaction`,超 ~75% 上下文上限自动触发) |
 | 4 | 多厂家模型 + 授权 | 🚧 DeepSeek/OpenAI 兼容 ✓ · 能力元数据 ✓ · reasoning 回填 ✓ · **缺:更多厂家 + AuthProvider 登录** |
-| 5 | Skills 生命周期 + MCP 接入 | 🚧 **MCP 接入 ✓**(官方 SDK,stdio + Streamable HTTP,远程工具入 ToolHub,审批门控) · **Skills 未做** |
+| 5 | Skills 生命周期 + MCP 接入 | ✅ 完成:**MCP 接入 ✓**(官方 SDK,stdio + Streamable HTTP,远程工具入 ToolHub,审批门控) · **Skills ✓**(渐进披露:预载 description,`skill` 工具按需加载正文) |
 | 6 | 多模态前端(WebUI/TUI/桌面/移动) | 🚧 TUI 成熟 · **缺:WebUI / 桌面 / 移动** |
 | 7 | 多 Agent(SubAgentTool) | ⬜ main 未开始(雏形见 `feat/beehive`) |
 
@@ -45,6 +45,10 @@ main 处在「**单机 TUI Agent,主线已相当完整可用,且能接外部 MCP
   `mcp__<server>__<tool>`;非只读工具经 `PermissionProvider` 审批,只读(readOnlyHint)直接跑;
   单个 server 连接失败隔离降级(零工具,不阻塞启动)。配置在 `~/.kurt/mcp.json`(全局)+
   `<ws>/.kurt/mcp.json`(项目覆盖),`{ "mcpServers": {...} }` 通用 schema;`--no-mcp` 可跳过。
+- **Skills(Phase 5)**:渐进披露。`kurt-agent/src/skills/`(`SkillProvider` seam + `skillCatalog`,
+  只把 name+description 预载进系统提示)+ `tools/skill.ts`(`SkillTool`,只读,`skill({name})` 按需返回正文,
+  全模式可用)。发现/解析在 kurt-tui:`~/.kurt/skills/`(全局)+ `<ws>/.kurt/skills/`(项目覆盖),
+  每个 skill 是 `<name>/SKILL.md` 或扁平 `<name>.md`,带可选 name/description frontmatter。引擎不感知。
 - **编排抽象**:`Agent`(包 runLoop)+ `ToolHub`(name→Tool 注册表);`AskProvider` seam。
 - **TUI(kurt-tui)**:三模式 **chat/agent/plan**(按模式分配工具 + per-mode prompt);
   ask_user 选择题浮层;持久会话(`/sessions` 切换/删除/自动标题);命令审批 + 项目白名单;
@@ -52,12 +56,10 @@ main 处在「**单机 TUI Agent,主线已相当完整可用,且能接外部 MCP
 
 ## 未实现 / 下一步(按价值排序)
 
-1. **Phase 5 — Skills 生命周期**(MCP 已完成):Skill 渐进式加载(预载只注入 description,
-   按需展开正文)。**当前最大能力缺口。**
-2. **Phase 4 余项**:更多模型厂家(Anthropic / 本地);`AuthProvider`(登录授权,
-   目前 API key 只能走环境变量)。
-3. **Phase 6 余项**:WebUI / 桌面 / 移动前端(目前只有终端 TUI)。
-4. **Phase 7 — 多 Agent 编排**:worktree 隔离地基(`WorktreeManager`)已就位;
+1. **Phase 4 余项**:更多模型厂家(Anthropic / 本地);`AuthProvider`(登录授权,
+   目前 API key 只能走环境变量)。**当前最大缺口。**
+2. **Phase 6 余项**:WebUI / 桌面 / 移动前端(目前只有终端 TUI)。
+3. **Phase 7 — 多 Agent 编排**:worktree 隔离地基(`WorktreeManager`)已就位;
    待:把 worktree 分配给并行 agent + 集成/合并编排(蜂群雏形在 `feat/beehive` 可复用)。
 
 ## 已知债务 / 搁置项
@@ -79,3 +81,7 @@ main 处在「**单机 TUI Agent,主线已相当完整可用,且能接外部 MCP
 - **MCP 工具只在 agent 模式可见**:chat/plan 取的是固定工具名单(`TOOLS_BY_MODE`),MCP 工具是动态名,
   目前不进 chat/plan —— 即便是只读 MCP 工具(readOnlyHint)。后续可让 `toolsForMode` 放只读 MCP 工具进 chat/plan。
 - MCP 服务器无 TUI 内发现命令(只在启动横幅打印连接状态);后续可加 `/mcp` 列出已连服务器+工具。
+- **Skills v1 只加载正文(无捆绑资源/脚本)**:`skill` 工具只返回 `SKILL.md` 正文;若 skill 目录里还带脚本/模板,
+  模型需自行 read(且它们在 `~/.kurt/skills/` 工作区外,要 request_write_access)。后续可让 `skill` 顺带列出
+  捆绑文件+目录路径,或支持 skill 携带可执行步骤。Skills 同样无 TUI 内 `/skills` 发现命令(只启动横幅打印名字)。
+- Skills 与 MCP 工具都在每次启动时同步发现/连接,会话期间新增不会热加载(需重启);量大时启动略慢。

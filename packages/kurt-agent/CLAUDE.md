@@ -61,7 +61,7 @@
 | 2 | 真实工具 + 沙盒:SandboxProvider + Seatbelt/Direct;文件读写/shell/代码执行/网络搜索;会话临时目录 | ✅ 完成 | 1 |
 | 3 | 预加载 + 长期记忆(Memory.md)+ 压缩 | 🚧 手动压缩核心已落地(`src/modes/compaction.ts`:`compactHistory`,只在 user 边界切分保配对);待:预加载 + Memory.md + 自动触发(CompactionPolicy seam) | 1 |
 | 4 | 多厂家 ModelProvider(Anthropic/OpenAI/本地)+ 登录授权 | 🚧 OpenAI 兼容(DeepSeek)已落地+真机验证;引擎加了 thinking/usage 事件;待:更多厂家 + AuthProvider | 1 |
-| 5 | Skills 完整生命周期 + MCP 接入 | ⬜ | 2,3,4 |
+| 5 | Skills 完整生命周期 + MCP 接入 | ✅ 完成(MCP `src/mcp/` + Skills `src/skills/`+`tools/skill.ts`) | 2,3,4 |
 | 6 | 多模态前端(WebUI/TUI/桌面/移动) | 🚧 TUI 已建为兄弟项目 **kurt-tui**(Ink:logo/对话视口/状态栏/markdown/命令面板/滚动/compact);待:WebUI/桌面/移动 | 引擎稳定 |
 | 7 | 多 Agent(SubAgentTool 走 `ToolContext.emit` seam;`Map<sessionId,EngineInstance>`) | ⬜ | 1 的预留位 + 6 |
 
@@ -117,5 +117,9 @@ bun run typecheck  # tsc --noEmit
     包成 `McpTool`(实现 `Tool`),由 `connectMcpServers()` 收集后注入 ToolHub —— 引擎零改动(铁律 #3)。
     SDK/子进程/网络都是 I/O,封死在 `src/mcp/`,绝不进 `src/engine/`(铁律 #1)。非只读工具经
     `PermissionProvider` 审批(沿用 shell 那套);只读工具(readOnlyHint)直接跑。配置在编排层
-    (kurt-tui `~/.kurt/mcp.json` + 项目 `.kurt/mcp.json`),引擎不感知。**Skill 尚未做。**
+    (kurt-tui `~/.kurt/mcp.json` + 项目 `.kurt/mcp.json`),引擎不感知。
+  - **Skills 已落地(2026-06-14)**:渐进披露 —— `src/skills/`(`SkillProvider` seam + `skillCatalog`,
+    只预载 name+description 进系统提示)+ `tools/skill.ts`(`SkillTool`,只读,`skill({name})` 按需返回正文)。
+    文件发现/解析在编排层(kurt-tui `~/.kurt/skills/` + 项目 `.kurt/skills/`,`<name>/SKILL.md` 或扁平 `<name>.md`)。
+    Skill ≠ Tool ≠ MCP:Skill 是上下文注入(数据),`skill` 只是个薄检索工具。引擎不感知。
 - **Phase 7**:abort 级联(父中断→子中断);子 Agent 事件冒泡带来源标识。

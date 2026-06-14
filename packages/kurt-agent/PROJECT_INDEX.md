@@ -3,8 +3,8 @@
 > Cached architecture map. **Read this first**; scan the tree only for the files
 > this map points you to. Keep it fresh: update on every structural change.
 > Maintained via the `project-module-workflow` skill (see CLAUDE.md §3).
-> Last synced: 2026-06-14, after Phase 5 MCP integration (`src/mcp/`, official SDK,
-> stdio + Streamable HTTP; remote tools wrapped as `Tool`s into the ToolHub).
+> Last synced: 2026-06-15, after Phase 5 complete: MCP integration (`src/mcp/`) +
+> Skills (`src/skills/` + `tools/skill.ts`, progressive disclosure).
 
 ## 1. Overview
 A protocol-agnostic, **zero-I/O** AI agent engine (a **library**) in TypeScript on Bun.
@@ -20,7 +20,7 @@ front-end + `kurt` CLI) consumes it. Public API is `src/lib.ts`.
 - Run demos: `bun run dev` · `bun run demo:abort` · `bun run demo:error` · `bun run demo:sandbox`
 - Live chat (stdout) vs a real LLM: `bun run chat ["prompt"]` (needs `DEEPSEEK_API_KEY`).
 - Public API for consumers (kurt-tui): `src/lib.ts` (re-exports engine/providers/tools/sandbox/session/search + history/compaction/stdout).
-- Gate before any merge: **`bun run typecheck && bun test`** (currently 119 tests pass; MCP tests round-trip a local stdio fixture server, still offline/hermetic).
+- Gate before any merge: **`bun run typecheck && bun test`** (currently 124 tests pass; MCP tests round-trip a local stdio fixture server, still offline/hermetic).
 
 ## 3. Architecture & invariants
 Three layers, three iron rules (full text in `CLAUDE.md` §2 — do not break them):
@@ -48,7 +48,7 @@ and the loop continues.
 | `src/engine/loop.ts` | Agentic loop; pairs tool_call/result; abort handling | `runLoop`, `RunLoopOptions` | types, tool, model, compaction, async-queue |
 | `src/engine/async-queue.ts` | Single-consumer channel powering `ToolContext.emit` | `AsyncEventQueue` | — |
 | `src/providers/` | `ModelProvider` impls + model metadata | `MockModel` (scripted, no deps); `OpenAICompatModel` (DeepSeek/OpenAI Chat Completions over SSE, key injected; `implements CapableModel`, shapes the request body from its `capabilities` — thinking on/off, mapped `reasoning_effort`, omits sampling params in thinking mode, and replays `reasoning_content` on tool-calling turns when `thinking.replayReasoning`); `capabilities.ts` (`ModelCapabilities`/`CapableModel`, `capabilitiesFor`, `mapEffort`, `replayReasoning`, DeepSeek V4 table) | engine types |
-| `src/tools/` | `Tool` impls — **all side effects live here** | `ReadFileTool` (confined + truncate + offset/limit), `LsTool`, `GrepTool` (pure-fs, workspace-confined), `WriteFileTool` (serialized FIFO queue, no size cap), `ShellTool`, `CodeTool`, `BrewTool` (unsandboxed Direct runner, mutating subcommands gated), `MemoryTool` (agent-writable memory at fixed global/project files; view/append/replace), `AskUserTool` (`ask_user` — agent asks the user via an injected `AskProvider`), `UpdatePlanTool` (`update_plan` — stateless checklist for plan mode), `WebSearchTool`, `RequestWriteAccessTool`. `fs-access.ts` = shared `isInside`/`resolveWithin`; read/ls/grep/write share the live `writable` roots array (request_write_access grants apply immediately) | engine, sandbox, session, search, permission, `../truncate` |
+| `src/tools/` | `Tool` impls — **all side effects live here** | `ReadFileTool` (confined + truncate + offset/limit), `LsTool`, `GrepTool` (pure-fs, workspace-confined), `WriteFileTool` (serialized FIFO queue, no size cap), `ShellTool`, `CodeTool`, `BrewTool` (unsandboxed Direct runner, mutating subcommands gated), `MemoryTool` (agent-writable memory at fixed global/project files; view/append/replace), `AskUserTool` (`ask_user` — agent asks the user via an injected `AskProvider`), `UpdatePlanTool` (`update_plan` — stateless checklist for plan mode), `SkillTool` (`skill` — loads a named skill's body on demand from an injected `SkillProvider`; read-only, no approval), `WebSearchTool`, `RequestWriteAccessTool`. `fs-access.ts` = shared `isInside`/`resolveWithin`; read/ls/grep/write share the live `writable` roots array (request_write_access grants apply immediately) | engine, sandbox, session, search, permission, `../truncate` |
 | `src/truncate.ts` | Shared read-output cap (lines OR bytes, whichever first) | `truncate`, `truncationNote` | — |
 | `src/sandbox/` | Subprocess isolation behind `SandboxProvider` | `SeatbeltSandbox`, `DirectSandbox`, `buildProfile`; `run-process.ts` (detached spawn → group-kill; idle-timeout 90s + hard cap 10min; output cap; live `onOutput` streaming; abort) | — |
 | `src/session/` | Per-session scratch dir lifecycle | `SessionWorkspace` (`.root`, `.dir()`, `.dispose()`) | — |
@@ -58,6 +58,7 @@ and the loop continues.
 | `src/agent/` | Composition shells around the engine | `Agent` ({model,system,tools}+`run()`→runLoop+`with()`); `ToolHub` (name→Tool registry; `get(names)`/`all()`). Engine untouched | engine, tools |
 | `src/mcp/` | **MCP = remote provider of `Tool`s** (Phase 5; the one place the SDK is used) | `McpTool` (wraps a remote tool as `Tool`; flattens content; non-read-only calls gated via `PermissionProvider`); `connectMcpServer`/`connectMcpServers` (stdio + Streamable HTTP; namespaced `mcp__<server>__<tool>`; per-server failures isolated → `statuses`; aggregate `close()`); `summarizeStatuses`; `expandEnv` (`${VAR}`). `_fixtures/echo-server.ts` = test-only local server | engine (types/Tool), permission, `@modelcontextprotocol/sdk` |
 | `src/worktree/` | Per-session git worktree isolation (Phase 7 groundwork) | `WorktreeManager` (create/list/isDirty/commitAll/remove via git subprocess) | — (git CLI) |
+| `src/skills/` | **Skill = progressive-disclosure context** (Phase 5; not a Tool, not engine) | `SkillProvider`/`SkillMeta` seam (front-end reads files); `skillCatalog(metas)` (description-only prompt section). The loader tool is `tools/skill.ts` | engine types (via tool) |
 | `src/modes/` | Modal layer + reusable orchestration helpers | `runStdoutMode` (`stdout.ts`); `messagesFromEvents` (`history.ts`); `compactHistory`/`compactionSplit`/`serializeForSummary` (`compaction.ts`, cuts only at user boundaries → preserves tool pairing) | engine types |
 | `src/lib.ts` | **Public API barrel** (what kurt-tui imports via `"kurt-agent"`) | re-exports the above | all |
 | `src/demos/` | Runnable scenarios | `abort.ts`, `error.ts`, `sandbox.ts` | everything |
@@ -76,6 +77,7 @@ and the loop continues.
 - **Front-end / TUI** → lives in the sibling package **`packages/kurt-tui`** (Ink), which consumes this lib. A minimal in-repo mode lives at `src/modes/stdout.ts` (clone its shape for new built-in modes).
 - **Compaction** (Phase 3) → implement `CompactionPolicy`; the seam is already wired in `loop.ts` (engine decides *when* via `thresholdTokens`, policy decides *how* via `compact`).
 - **Use a remote MCP server's tools** (Phase 5) → `src/mcp/`: `connectMcpServers(servers, {permission})` → `{tools, statuses, close}`; add `tools` to the ToolHub. Config (which servers) lives in the front-end (kurt-tui `~/.kurt/mcp.json` + project `.kurt/mcp.json`), not the engine. Read-only tools (readOnlyHint) run freely; others ask approval.
+- **Add a skill (reusable procedure)** (Phase 5) → `src/skills/` is the seam: implement `SkillProvider` (front-end reads `~/.kurt/skills/` + project `.kurt/skills/`), inject it into `SkillTool`, and append `skillCatalog(provider.list())` to the system prompt. Progressive disclosure: descriptions preloaded, body via the `skill` tool. Skill ≠ Tool ≠ MCP — a skill is data (instructions), the tool is a thin loader.
 - **Sub-agents** (Phase 7) → a `SubAgentTool` that runs its own `runLoop` and bubbles events via `ToolContext.emit`; no engine change.
 - **Tests** live next to code as `*.test.ts` (`src/engine/loop.test.ts`, `src/sandbox/seatbelt.test.ts`, `src/tools/tools.test.ts`). Run all: `bun test`.
 
@@ -88,7 +90,7 @@ and the loop continues.
 - Docs: `CLAUDE.md` = rules + roadmap; `WORKLOG.md` = per-phase log; **this file** = architecture map.
 
 ## 7. Status / roadmap
-- **Done:** Phase 1 (minimal closed loop), Phase 2 (real tools + sandbox), Phase 3 (preload + agent-writable memory + manual & **auto** compaction).
-- **In progress:** Phase 4 — `OpenAICompatModel` live-verified vs DeepSeek + capabilities + reasoning replay + withRetry (remaining: more vendors + AuthProvider). Phase 5 — **MCP接入 done** (`src/mcp/`); **Skills not yet**. Phase 6 — TUI mature as sibling package **`packages/kurt-tui`** (remaining: WebUI/desktop/mobile). Phase 7 — worktree isolation groundwork landed (`src/worktree/`); beehive prototype on `feat/beehive` only.
-- **Remaining:** Phase 4 (more vendors + AuthProvider) · Phase 5 (**Skills** lifecycle) · Phase 6 frontends · Phase 7 (multi-agent orchestration).
+- **Done:** Phase 1 (minimal closed loop), Phase 2 (real tools + sandbox), Phase 3 (preload + agent-writable memory + manual & **auto** compaction), Phase 5 (**MCP接入** `src/mcp/` + **Skills** `src/skills/`+`tools/skill.ts`, progressive disclosure).
+- **In progress:** Phase 4 — `OpenAICompatModel` live-verified vs DeepSeek + capabilities + reasoning replay + withRetry (remaining: more vendors + AuthProvider). Phase 6 — TUI mature as sibling package **`packages/kurt-tui`** (remaining: WebUI/desktop/mobile). Phase 7 — worktree isolation groundwork landed (`src/worktree/`); beehive prototype on `feat/beehive` only.
+- **Remaining:** Phase 4 (more vendors + AuthProvider) · Phase 6 frontends · Phase 7 (multi-agent orchestration).
 - Full roadmap + per-phase constraints: `CLAUDE.md` §4 and §8. Live status: repo-root `PROGRESS.md`.

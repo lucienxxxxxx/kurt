@@ -4,6 +4,38 @@
 
 ---
 
+## 第五期(下半):Skills 生命周期 — ✅ (2026-06-15) → Phase 5 完成
+
+**用户要求**:做完 Phase 5 的另一半 —— Skills 渐进式加载。
+
+**设计(照 CLAUDE.md §5/§8)**:Skill ≠ Tool ≠ MCP。Skill 是"可复用流程(指令)"的**上下文注入**:
+只预载 name+description(系统提示里的 catalog),正文按需在模型调用 `skill` 工具时才拉进上下文。
+机制做成 search/ask 那样的注入 seam —— `SkillProvider` 接口在引擎包,文件读取/解析在编排层。
+
+**交付物**:
+- **kurt-agent**:`src/skills/`(`SkillProvider`/`SkillMeta` seam + `skillCatalog(metas)` 出"只含描述"的提示段);
+  `tools/skill.ts`(`SkillTool`,只读、无审批;`skill({name})` 返回正文带 `# Skill: <name>` 头;
+  把可用 skill 名做成 inputSchema 的 `enum`;未知名→干净报错列出可用项)。引擎零改动。
+- **kurt-tui**(编排层负责发现+解析):`skills.ts`(`parseSkill` 解析 frontmatter+正文,容错;
+  `loadSkills(ws)` 扫 `~/.kurt/skills/`(全局)+ `<ws>/.kurt/skills/`(项目覆盖),
+  支持 `<name>/SKILL.md` 与扁平 `<name>.md`,缺 frontmatter 则 name=目录名、description=首行)→ `{provider,catalog,metas}`;
+  `paths.ts` 加两个目录;`agent.ts` `makeTools` 加 `skills?` 参数注册 `SkillTool`、`TOOLS_BY_MODE` 给 chat/plan/agent 都加 `skill`;
+  `run-tui`/`run-chat` 把 catalog 拼进系统提示 prelude、启动横幅打印 skill 名;CLI usage 补 Skills 说明。
+
+**关键决策 / 踩坑**:
+- **Skill ≠ Tool**:每个 skill 不做成一个 tool(会污染工具表、和"只预载描述"矛盾),而是统一一个 `skill` 加载器 + 提示里的 catalog。
+- **全模式可用**:`skill` 是只读检索,chat/plan/agent 都放(不像写工具只在 agent)。
+- **踩坑**:CLI USAGE 是反引号模板串,文案里写 `` `skill` `` 反引号会提前终止模板 → typecheck 报错;改成 `"skill"`。
+- **降级**:无 skills 目录/解析失败 → 空 provider + 空 catalog + 不注册工具,绝不抛、不影响启动。
+- v1 只加载正文,捆绑资源/脚本未做(债务已记 PROGRESS)。
+
+**验收结果**:
+- `bun run typecheck` 干净两包;`bun test` **kurt-agent 124 / kurt-tui 72**,全绿。
+- 端到端冒烟:写 skill 文件 → `loadSkills` → `makeTools` 注册 → `toolsForMode` 三模式都含 `skill` → 执行返回正文,通过。
+- **引擎/模态零改动**:`git diff main -- src/engine src/modes` 为空 → 铁律 #1/#3 成立。
+
+---
+
 ## 第五期(上半):MCP 接入 — ✅ (2026-06-14)
 
 **用户要求**:开始 Phase 5,先做 MCP 接入(Skills 随后)。经提问确认:transport 做 stdio + Streamable HTTP 两种;

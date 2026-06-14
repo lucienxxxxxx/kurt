@@ -1,7 +1,7 @@
 # PROJECT_INDEX — kurt-tui
 
 > Cached architecture map. Read this first; scan only what it points to.
-> Last synced: 2026-06-14, after Phase 5 MCP wiring (mcp.json config → connect → ToolHub; `--no-mcp`).
+> Last synced: 2026-06-15, after Phase 5: MCP wiring (mcp.json → ToolHub; `--no-mcp`) + Skills (skills/ dirs → catalog + `skill` tool).
 
 ## 1. Overview
 Ink terminal UI for `kurt-agent`. A front-end consumer: subscribes to the engine
@@ -16,11 +16,12 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 - Global launcher: `kurt` (a `~/.bun/bin/kurt` wrapper → `src/cli.ts`). Subcommands: `kurt` (TUI), `kurt chat`, `kurt config [set|path]`, `kurt help`.
 - Flags (tui/chat): `--workspace`/`--workplace <path>` (working dir, default cwd) · `--allow-write <path>` (repeatable) · `--yes`/`-y` (auto-approve sensitive commands) · `--worktree` (isolate in a per-session git worktree+branch) · `--no-mcp` (skip MCP servers).
 - **MCP** (Phase 5): servers configured in `~/.kurt/mcp.json` (global) + `<ws>/.kurt/mcp.json` (project, overrides) using the `{ "mcpServers": {...} }` schema. Connected at launch (`mcp-config.ts` → `connectMcpServers` in kurt-agent); their tools join the hub (agent mode); side-effecting tools ask approval; status printed at launch. Implementation lives in kurt-agent's `src/mcp/`.
+- **Skills** (Phase 5): reusable procedures in `~/.kurt/skills/` (global) + `<ws>/.kurt/skills/` (project, overrides), each `<name>/SKILL.md` or flat `<name>.md` with optional name/description frontmatter. `skills.ts` (`loadSkills`) builds a `SkillProvider` + the prompt catalog (descriptions only); the `skill` tool (kurt-agent) loads a body on demand (available in every mode). Names printed at launch.
 - **Approval**: sensitive commands (rm/sudo/…) prompt allow/always/deny in the TUI (stdin in chat). "Always" persists the rule key to `<workspace>/.kurt/allowlist.json` (per-project). Classifier lives in `kurt-agent` (`classifyCommand`).
 - **Write outside the workspace**: the agent calls `request_write_access` (same approval prompt); on allow, the dir is opened for write_file/shell/run_code for the rest of the session (`makeTools` shares one mutable writable-roots array). "Always" persists `write-access:<dir>` in the allowlist.
 - **Working dir**: the agent works inside one workspace — `WORKSPACE_DIR` (the whole dir, **fully writable, no approval**). Injected into the system prompt AND as env to shell/run_code. No `import/`/`export/` subdirs are created. Sandbox blocks writes *outside* the workspace (+ `--allow-write` dirs). File writes and command approval are **independent**: in-workspace writes never prompt; sensitive commands always do.
 - Settings (`model/effort/thinking/mode`) persist to `~/.kurt/config.json` (override path with `KURT_CONFIG_PATH`). Precedence: persisted > env > default. API key is env-only.
-- Gate before merge: **`bun run typecheck && bun test`** (currently 66 tests, offline).
+- Gate before merge: **`bun run typecheck && bun test`** (currently 72 tests, offline).
 
 ## 3. Architecture
 - Depends on `kurt-agent` only through its public API (`"kurt-agent"` → its `src/lib.ts`):
@@ -39,10 +40,11 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 | `src/cli.ts` | **CLI entry / bin `kurt`**: dispatches `tui` (default) / `chat` / `config` / `help` | — | `./run-tui`, `./run-chat`, `./config` |
 | `src/run-tui.tsx` | Launch the TUI: prints banner once, wires runner+compactor+newSession, builds the `SessionController` (store + titling) + memory/rules preload, mounts `<App>` | `runTui` | `kurt-agent`, `./agent`, `./config`, `./session-store`, `./context-files`, `./tui` |
 | `src/run-chat.ts` | Stdout REPL/one-shot using the same runtime as the TUI (+ memory/rules preload) | `runChat` | `kurt-agent`, `./agent`, `./context-files` |
-| `src/agent.ts` | Shared runtime: `resolveSettings`/`resolveConfig`, `resolveWorkspace`+`workspaceEnv`, `systemPrompt(ws,mode)` (per-mode guidance), `Mode`/`normalizeMode` (legacy "ask"→"chat"), `makeSandbox`/`makeTools(…,permission,askProvider)` (wires all tools incl. ask_user/update_plan)/`modelFor(…,ReasoningOptions)`, **`TOOLS_BY_MODE`/`toolsForMode(hub,mode)`** (chat=read-only+ask_user · plan=+update_plan · agent=all), `parseLaunchFlags` | (those) | `kurt-agent`, `./config` |
+| `src/agent.ts` | Shared runtime: `resolveSettings`/`resolveConfig`, `resolveWorkspace`+`workspaceEnv`, `systemPrompt(ws,mode)` (per-mode guidance), `Mode`/`normalizeMode` (legacy "ask"→"chat"), `makeSandbox`/`makeTools(…,permission,askProvider,skills?)` (wires all tools incl. ask_user/update_plan/skill)/`modelFor(…,ReasoningOptions)`, **`TOOLS_BY_MODE`/`toolsForMode(hub,mode)`** (chat=read-only+ask_user+skill · plan=+update_plan · agent=all), `parseLaunchFlags` (`--worktree`/`--no-mcp`) | (those) | `kurt-agent`, `./config` |
 | `src/config.ts` | Persisted user settings at `~/.kurt/config.json` (path via `kurtHome()`): `loadConfig`/`saveConfig`/`configPath`/`sanitize` | (those) | `./paths` |
-| `src/paths.ts` | `~/.kurt/` layout: `kurtHome` (KURT_HOME override), `sessionsDir`, `globalMemoryPath`, `projectRulesPath(ws)`, `projectMemoryPath(ws)`, `globalMcpConfigPath`/`projectMcpConfigPath(ws)` | (those) | — |
+| `src/paths.ts` | `~/.kurt/` layout: `kurtHome` (KURT_HOME override), `sessionsDir`, `globalMemoryPath`, `projectRulesPath(ws)`, `projectMemoryPath(ws)`, `globalMcpConfigPath`/`projectMcpConfigPath(ws)`, `globalSkillsDir`/`projectSkillsDir(ws)` | (those) | — |
 | `src/mcp-config.ts` | Load + merge MCP server config: `parseMcpConfig` (tolerant `{mcpServers}` parse) + `loadMcpServers(ws)` (global `~/.kurt/mcp.json` ∪ project `<ws>/.kurt/mcp.json`, project wins). Connecting/using them is kurt-agent's `connectMcpServers` | `parseMcpConfig`, `loadMcpServers` | `kurt-agent` (types), `./paths` |
+| `src/skills.ts` | Discover + parse skills: `parseSkill` (frontmatter+body, tolerant) + `loadSkills(ws)` (scan `~/.kurt/skills/` ∪ `<ws>/.kurt/skills/`, `<name>/SKILL.md` or flat `<name>.md`, project wins) → `{ provider, catalog, metas }`. Catalog goes in the prompt; the `skill` tool (kurt-agent) loads bodies | `parseSkill`, `loadSkills` | `kurt-agent` (`skillCatalog`/types), `./paths` |
 | `src/session-store.ts` | Persist conversations to `~/.kurt/sessions/<id>.json` (global, tagged by workspace): `SessionStore` create/save/load/`list(ws?)`/remove; `SessionMeta`/`SessionRecord` | `SessionStore` | `kurt-agent` (Message), `./paths` |
 | `src/context-files.ts` | `loadContextPrelude(ws)` → reads `~/.kurt/memory.md` (global) + `<ws>/.kurt/memory.md` (project, agent-written) + `<ws>/.kurt/rules.md` (user rules) into a system-prompt prelude | `loadContextPrelude` | `./paths` |
 | `src/tui/app.tsx` | Root Ink component: `committed` (→ `<Static>` scrollback) + `live` (current turn) + session state, command palette, drives the loop, `/compact`, `/sessions` picker, `/new`, `/clear`; autosave + auto-title via `SessionController` | `App`, `EngineRunner`, `Compactor`, `SessionState`, `SessionController` | ink, react, kurt-agent, sibling files |
@@ -77,6 +79,7 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 - **Change working paths / sandbox writable dirs / system prompt** → `agent.ts` (`resolveWorkspace`, `makeTools`, `systemPrompt`); CLI flags in `cli.ts` (`parseLaunchFlags`).
 - **Change the approval prompt / allowlist** → `tui/approval.tsx` (UI), `tui/permission.ts` (bridge), `allowlist.ts` (storage); the *classifier* is in `kurt-agent` (`classifyCommand`).
 - **MCP servers (config / which servers / lifecycle)** → `mcp-config.ts` (load+merge `mcp.json`) + `paths.ts` (file locations); wired in `run-tui.tsx`/`run-chat.ts` (connect → add tools to hub → close on exit). The client/adapter/transports are in kurt-agent `src/mcp/`.
+- **Skills (discovery / parsing / catalog)** → `skills.ts` (`loadSkills`/`parseSkill`) + `paths.ts` (skills dirs); wired in `run-tui.tsx`/`run-chat.ts` (provider → `makeTools`; catalog appended to the prompt prelude). The `skill` tool + `skillCatalog` are in kurt-agent `src/skills/`/`tools/skill.ts`. Mode gating: `skill` is in all of chat/plan/agent (`TOOLS_BY_MODE`).
 - **New engine capability needed** → implement in `kurt-agent`, export from its `src/lib.ts`, then consume here.
 - Tests: `src/tui/*.test.ts(x)` (entries/commands/markdown/tool-format + an Ink render of `App`).
 
