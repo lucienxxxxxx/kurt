@@ -4,15 +4,15 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-12 · `main` @ `5947f69`(worktree 隔离 `--worktree`)
-- **门禁**:kurt-agent **100** pass · kurt-tui **60** pass · typecheck 干净(worktree 用真实 git 集成测)
+- **最后更新**:2026-06-14 · `main` @ `8532b84`(Phase 5:MCP 接入)
+- **门禁**:kurt-agent **119** pass · kurt-tui **66** pass · typecheck 干净(MCP 用真实 stdio fixture server 集成测)
 
 ---
 
 ## 一句话定位
 
-main 处在「**单机 TUI Agent,主线已相当完整可用**」的阶段:七期里 1、2、3 全部完成,
-4、6 主线完成;5、7 尚未开始。
+main 处在「**单机 TUI Agent,主线已相当完整可用,且能接外部 MCP 工具**」的阶段:七期里
+1、2、3 全部完成,4、6 主线完成,**5 的 MCP 接入已完成(Skills 未做)**;7 尚未开始。
 
 ## 七期路线图状态(main)
 
@@ -22,7 +22,7 @@ main 处在「**单机 TUI Agent,主线已相当完整可用**」的阶段:七�
 | 2 | 真实工具 + 沙盒:Seatbelt/Direct、文件读写/shell/代码/搜索、会话临时目录 | ✅ 完成 |
 | 3 | 预加载 + 记忆 + 压缩 | ✅ 完成:预载 ✓ · agent 可写记忆 ✓ · 手动 `/compact` ✓ · **自动压缩 ✓**(`autoCompaction`,超 ~75% 上下文上限自动触发) |
 | 4 | 多厂家模型 + 授权 | 🚧 DeepSeek/OpenAI 兼容 ✓ · 能力元数据 ✓ · reasoning 回填 ✓ · **缺:更多厂家 + AuthProvider 登录** |
-| 5 | Skills 生命周期 + MCP 接入 | ⬜ 未开始 |
+| 5 | Skills 生命周期 + MCP 接入 | 🚧 **MCP 接入 ✓**(官方 SDK,stdio + Streamable HTTP,远程工具入 ToolHub,审批门控) · **Skills 未做** |
 | 6 | 多模态前端(WebUI/TUI/桌面/移动) | 🚧 TUI 成熟 · **缺:WebUI / 桌面 / 移动** |
 | 7 | 多 Agent(SubAgentTool) | ⬜ main 未开始(雏形见 `feat/beehive`) |
 
@@ -40,6 +40,11 @@ main 处在「**单机 TUI Agent,主线已相当完整可用**」的阶段:七�
 - **沙盒**:Seatbelt/Direct;空闲+硬上限超时;输出截断;进程组中断;实时流式输出。
 - **并发隔离**:`--worktree` → 每会话独立 git worktree + `kurt/<id>` 分支(在 `~/.kurt/worktrees/`),
   退出自动 commit 到该分支(绝不碰 main),打印合并提示。`WorktreeManager`(kurt-agent)为多 Agent 协同的复用地基。
+- **MCP 接入(Phase 5)**:`kurt-agent/src/mcp/`(官方 `@modelcontextprotocol/sdk`,stdio + Streamable HTTP)
+  把远程 server 的工具包成 `McpTool`(实现 `Tool`)注入 ToolHub —— 引擎零改动。工具名命名空间化
+  `mcp__<server>__<tool>`;非只读工具经 `PermissionProvider` 审批,只读(readOnlyHint)直接跑;
+  单个 server 连接失败隔离降级(零工具,不阻塞启动)。配置在 `~/.kurt/mcp.json`(全局)+
+  `<ws>/.kurt/mcp.json`(项目覆盖),`{ "mcpServers": {...} }` 通用 schema;`--no-mcp` 可跳过。
 - **编排抽象**:`Agent`(包 runLoop)+ `ToolHub`(name→Tool 注册表);`AskProvider` seam。
 - **TUI(kurt-tui)**:三模式 **chat/agent/plan**(按模式分配工具 + per-mode prompt);
   ask_user 选择题浮层;持久会话(`/sessions` 切换/删除/自动标题);命令审批 + 项目白名单;
@@ -47,8 +52,8 @@ main 处在「**单机 TUI Agent,主线已相当完整可用**」的阶段:七�
 
 ## 未实现 / 下一步(按价值排序)
 
-1. **Phase 5 — MCP 接入 + Skills**(完全空白):把外部 MCP server 的工具挂进 `ToolHub`;
-   Skill 渐进式加载。**当前最大能力缺口。**
+1. **Phase 5 — Skills 生命周期**(MCP 已完成):Skill 渐进式加载(预载只注入 description,
+   按需展开正文)。**当前最大能力缺口。**
 2. **Phase 4 余项**:更多模型厂家(Anthropic / 本地);`AuthProvider`(登录授权,
    目前 API key 只能走环境变量)。
 3. **Phase 6 余项**:WebUI / 桌面 / 移动前端(目前只有终端 TUI)。
@@ -69,3 +74,8 @@ main 处在「**单机 TUI Agent,主线已相当完整可用**」的阶段:七�
   占用锁 + memory `O_APPEND`(见对话记录,待排期)。
 - `--worktree` 退出自动 commit 会在仓库留下 `kurt/<id>` 分支 + `~/.kurt/worktrees/` 下的 worktree
   目录,需用户自行 merge/清理(提示已打印);后续可加 `kurt worktree list|prune` 管理命令。
+- **kurt-agent 不再"零运行时依赖"**:为 MCP 引入 `@modelcontextprotocol/sdk`(用户 2026-06-14 明确批准),
+  仅在 `src/mcp/` 使用,`src/engine/` 仍零依赖零 I/O。已记入 `kurt-agent/CLAUDE.md` §1/§8,**不要当违规删**。
+- **MCP 工具只在 agent 模式可见**:chat/plan 取的是固定工具名单(`TOOLS_BY_MODE`),MCP 工具是动态名,
+  目前不进 chat/plan —— 即便是只读 MCP 工具(readOnlyHint)。后续可让 `toolsForMode` 放只读 MCP 工具进 chat/plan。
+- MCP 服务器无 TUI 内发现命令(只在启动横幅打印连接状态);后续可加 `/mcp` 列出已连服务器+工具。

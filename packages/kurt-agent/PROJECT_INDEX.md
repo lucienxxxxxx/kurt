@@ -3,8 +3,8 @@
 > Cached architecture map. **Read this first**; scan the tree only for the files
 > this map points you to. Keep it fresh: update on every structural change.
 > Maintained via the `project-module-workflow` skill (see CLAUDE.md §3).
-> Last synced: 2026-06-11, after the Agent/ToolHub abstraction + ask_user/update_plan
-> tools (modes built on top in kurt-tui).
+> Last synced: 2026-06-14, after Phase 5 MCP integration (`src/mcp/`, official SDK,
+> stdio + Streamable HTTP; remote tools wrapped as `Tool`s into the ToolHub).
 
 ## 1. Overview
 A protocol-agnostic, **zero-I/O** AI agent engine (a **library**) in TypeScript on Bun.
@@ -14,13 +14,13 @@ single-repo **`kurt`** bun-workspace monorepo; the sibling `packages/kurt-tui` (
 front-end + `kurt` CLI) consumes it. Public API is `src/lib.ts`.
 
 ## 2. Stack & commands
-- Language / runtime: TypeScript on **Bun**. Engine core has **no runtime deps** (UI deps live in kurt-tui).
+- Language / runtime: TypeScript on **Bun**. Engine core (`src/engine/`) has **no runtime deps**. One package-level runtime dep, user-approved 2026-06-14 and confined to `src/mcp/`: `@modelcontextprotocol/sdk` (MCP client). UI deps live in kurt-tui.
 - Install: `bun install` **at the repo root `kurt/`** (two levels up; it owns `bun.lock`).
 - Per-package: `bun test` · `bun run typecheck` (`tsc --noEmit`).
 - Run demos: `bun run dev` · `bun run demo:abort` · `bun run demo:error` · `bun run demo:sandbox`
 - Live chat (stdout) vs a real LLM: `bun run chat ["prompt"]` (needs `DEEPSEEK_API_KEY`).
 - Public API for consumers (kurt-tui): `src/lib.ts` (re-exports engine/providers/tools/sandbox/session/search + history/compaction/stdout).
-- Gate before any merge: **`bun run typecheck && bun test`** (currently 89 tests pass, all offline).
+- Gate before any merge: **`bun run typecheck && bun test`** (currently 119 tests pass; MCP tests round-trip a local stdio fixture server, still offline/hermetic).
 
 ## 3. Architecture & invariants
 Three layers, three iron rules (full text in `CLAUDE.md` §2 — do not break them):
@@ -56,6 +56,8 @@ and the loop continues.
 | `src/permission/` | Approval seam for sensitive commands | `PermissionProvider`/`PermissionDecision`/`PermissionRequest`, `classifyCommand` (pure rules → key+explanation+risk), `allowAll`/`denyAll`. ShellTool consults it; the front-end supplies the prompt/whitelist | — (pure) |
 | `src/ask/` | Seam for the `ask_user` tool (agent → user) | `AskProvider`, `AskRequest` (front-end implements; mirrors permission) | — (pure) |
 | `src/agent/` | Composition shells around the engine | `Agent` ({model,system,tools}+`run()`→runLoop+`with()`); `ToolHub` (name→Tool registry; `get(names)`/`all()`). Engine untouched | engine, tools |
+| `src/mcp/` | **MCP = remote provider of `Tool`s** (Phase 5; the one place the SDK is used) | `McpTool` (wraps a remote tool as `Tool`; flattens content; non-read-only calls gated via `PermissionProvider`); `connectMcpServer`/`connectMcpServers` (stdio + Streamable HTTP; namespaced `mcp__<server>__<tool>`; per-server failures isolated → `statuses`; aggregate `close()`); `summarizeStatuses`; `expandEnv` (`${VAR}`). `_fixtures/echo-server.ts` = test-only local server | engine (types/Tool), permission, `@modelcontextprotocol/sdk` |
+| `src/worktree/` | Per-session git worktree isolation (Phase 7 groundwork) | `WorktreeManager` (create/list/isDirty/commitAll/remove via git subprocess) | — (git CLI) |
 | `src/modes/` | Modal layer + reusable orchestration helpers | `runStdoutMode` (`stdout.ts`); `messagesFromEvents` (`history.ts`); `compactHistory`/`compactionSplit`/`serializeForSummary` (`compaction.ts`, cuts only at user boundaries → preserves tool pairing) | engine types |
 | `src/lib.ts` | **Public API barrel** (what kurt-tui imports via `"kurt-agent"`) | re-exports the above | all |
 | `src/demos/` | Runnable scenarios | `abort.ts`, `error.ts`, `sandbox.ts` | everything |
@@ -73,6 +75,7 @@ and the loop continues.
 - **Write outside the workspace** → the agent calls `request_write_access` (a Tool) → approval → the dir is pushed to the shared writable-roots array; file/exec tools read it live.
 - **Front-end / TUI** → lives in the sibling package **`packages/kurt-tui`** (Ink), which consumes this lib. A minimal in-repo mode lives at `src/modes/stdout.ts` (clone its shape for new built-in modes).
 - **Compaction** (Phase 3) → implement `CompactionPolicy`; the seam is already wired in `loop.ts` (engine decides *when* via `thresholdTokens`, policy decides *how* via `compact`).
+- **Use a remote MCP server's tools** (Phase 5) → `src/mcp/`: `connectMcpServers(servers, {permission})` → `{tools, statuses, close}`; add `tools` to the ToolHub. Config (which servers) lives in the front-end (kurt-tui `~/.kurt/mcp.json` + project `.kurt/mcp.json`), not the engine. Read-only tools (readOnlyHint) run freely; others ask approval.
 - **Sub-agents** (Phase 7) → a `SubAgentTool` that runs its own `runLoop` and bubbles events via `ToolContext.emit`; no engine change.
 - **Tests** live next to code as `*.test.ts` (`src/engine/loop.test.ts`, `src/sandbox/seatbelt.test.ts`, `src/tools/tools.test.ts`). Run all: `bun test`.
 
@@ -85,7 +88,7 @@ and the loop continues.
 - Docs: `CLAUDE.md` = rules + roadmap; `WORKLOG.md` = per-phase log; **this file** = architecture map.
 
 ## 7. Status / roadmap
-- **Done:** Phase 1 (minimal closed loop), Phase 2 (real tools + sandbox).
-- **In progress:** Phase 4 — `OpenAICompatModel` live-verified vs DeepSeek; engine gained thinking/usage events. Phase 3 — manual compaction core landed (`compactHistory`). Phase 6 — TUI shipped as sibling package **`packages/kurt-tui`**.
-- **Remaining:** Phase 3 (preload + Memory.md + auto-compaction) · Phase 4 (more vendors + AuthProvider) · Phase 5 (Skills + MCP) · more Phase-6 frontends · Phase 7 (multi-agent).
-- Full roadmap + per-phase constraints: `CLAUDE.md` §4 and §8.
+- **Done:** Phase 1 (minimal closed loop), Phase 2 (real tools + sandbox), Phase 3 (preload + agent-writable memory + manual & **auto** compaction).
+- **In progress:** Phase 4 — `OpenAICompatModel` live-verified vs DeepSeek + capabilities + reasoning replay + withRetry (remaining: more vendors + AuthProvider). Phase 5 — **MCP接入 done** (`src/mcp/`); **Skills not yet**. Phase 6 — TUI mature as sibling package **`packages/kurt-tui`** (remaining: WebUI/desktop/mobile). Phase 7 — worktree isolation groundwork landed (`src/worktree/`); beehive prototype on `feat/beehive` only.
+- **Remaining:** Phase 4 (more vendors + AuthProvider) · Phase 5 (**Skills** lifecycle) · Phase 6 frontends · Phase 7 (multi-agent orchestration).
+- Full roadmap + per-phase constraints: `CLAUDE.md` §4 and §8. Live status: repo-root `PROGRESS.md`.

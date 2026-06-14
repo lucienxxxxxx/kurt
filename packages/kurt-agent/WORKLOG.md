@@ -4,6 +4,50 @@
 
 ---
 
+## 第五期(上半):MCP 接入 — ✅ (2026-06-14)
+
+**用户要求**:开始 Phase 5,先做 MCP 接入(Skills 随后)。经提问确认:transport 做 stdio + Streamable HTTP 两种;
+MCP 客户端**用官方 `@modelcontextprotocol/sdk`,并明确批准把该依赖放进 kurt-agent**(放宽本包"零运行时依赖"属性)。
+
+**手写 vs 官方 SDK 的对比(决策依据,呼应 CLAUDE.md §1)**:
+- 手写零依赖:保住 kurt-agent 零依赖属性、和项目一贯手写风格(SSE/git/搜索)一致、MCP 留在引擎包供未来前端复用;
+  代价 = 自己 own 协议正确性,尤其 Streamable HTTP transport 工作量大。
+- 官方 SDK:代码最少、规范最全(HTTP/SSE 回退、会话续传、协议协商、通知);代价 = 引入第三方依赖 + 传递依赖(182 包)。
+- **用户拍板:用 SDK 且放进 kurt-agent**。据此把 SDK 封死在 `src/mcp/`,`src/engine/` 仍零依赖零 I/O;
+  在 CLAUDE.md §1/§8 记下这是经批准的刻意例外,不得当违规删除。
+
+**交付物**:
+- **kurt-agent `src/mcp/`(MCP = 远程 Tool provider,引擎零改动)**:
+  - `mcp-tool.ts`:`McpTool implements Tool` —— 把一个远程工具适配成引擎 `Tool`;`flattenContent` 把 MCP content 块
+    (text/image/audio/resource)拍平成文本;**非只读工具经 `PermissionProvider` 审批**(沿用 shell 那套),
+    只读(`readOnlyHint`)直接跑;abort 透传、异常转 `isError` 不崩。`namespacedName` 生成 `mcp__<server>__<tool>`
+    (sanitize 到 `^[A-Za-z0-9_-]`,截断 64,符合 OpenAI/DeepSeek 工具名约束)。
+  - `client.ts`:`connectMcpServer` —— stdio(`StdioClientTransport`)+ Streamable HTTP(`StreamableHTTPClientTransport`);
+    initialize 握手 → `tools/list` → 每个工具建 `McpTool`(`call` 闭包持有 SDK client,把 SDK 与适配器解耦);
+    连接超时(默认 15s);失败隔离(返回 `ok:false`+error,零工具,绝不抛);`${VAR}` 环境变量展开。
+  - `runtime.ts`:`connectMcpServers` 并行连所有 server,收集工具(跨 server 去重)、`statuses`、聚合 `close()`;
+    `summarizeStatuses` 出启动横幅一行。
+  - `_fixtures/echo-server.ts`:测试专用本地 stdio MCP server(低层 `Server`,无 zod 授权;echo/touch/boom 三工具)。
+- **kurt-tui(编排层持有配置 + 生命周期)**:`mcp-config.ts`(`parseMcpConfig` 容错解析 + `loadMcpServers` 合并
+  全局 `~/.kurt/mcp.json` 与项目 `<ws>/.kurt/mcp.json`,项目覆盖);`paths.ts` 加两个路径;`run-tui.tsx`/`run-chat.ts`
+  启动时连一次、工具进每个 hub、横幅打印状态、退出 `close()`;`--no-mcp` 跳过;CLI usage 补 MCP 说明。
+
+**关键决策 / 踩坑**:
+- **MCP 工具只进 agent 模式**:`TOOLS_BY_MODE` 的 chat/plan 是固定名单,MCP 是动态名,自然落在 agent="all" 里;
+  只读 MCP 工具进 chat/plan 留作后续(债务已记)。
+- **适配器与 SDK 解耦**:`McpTool` 只依赖一个 `call(args,signal)` 闭包,不直接 import SDK —— 适配器可纯单测,SDK 只在 client/runtime 出现。
+- **失败必须降级不阻塞**:单个 server spawn 失败/连接关闭 → 该 server 零工具 + 错误进 `statuses`,其余照常;启动永不被一个坏配置卡死。
+- 子进程 `stderr:"ignore"`(server 的日志不污染 TUI);只给子进程一个最小安全 env 白名单 + 配置里的 env(展开 `${VAR}`)。
+
+**验收结果**:
+- `bun run typecheck` 干净两包;`bun test` **kurt-agent 119 / kurt-tui 66**,全绿。
+- **真实 stdio 往返**:`runtime.test.ts` spawn 本地 fixture server,`tools/list` + `tools/call` 经 `McpTool` 全程跑通
+  (echo 只读直跑、touch 非只读 deny 拦截 / allow 放行、boom 错误结果),全 hermetic 无网络。
+- 端到端冒烟(配置文件 → `loadMcpServers` → `connectMcpServers` → ToolHub → 执行 + 审批门控)实跑通过。
+- **引擎/模态零改动**:`git diff main -- src/engine src/modes` 为空 → 铁律 #1/#3 成立。
+
+---
+
 ## Agent/ToolHub 抽象 + 模式(chat/agent/plan)可用 + ask_user/update_plan — ✅ (2026-06-11)
 
 **用户要求**:抽象 Agent(model/context 等构建参数)+ 共享 tool_hub,各 Agent 按需分配不同 tool;新增 `ask_user`(agent 主动提问,TUI 选择题 ABCD + 可直接输入);把 chat/agent/plan 三模式做成可用。经提问确认:chat=只读+ask_user+memory;plan=+`update_plan`(不执行/不写);agent=全开放;模式命名 chat/agent/plan,新 tool 名 `ask_user`。
