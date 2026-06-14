@@ -4,8 +4,8 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-12 · `main` @ `4d7fb07`(自动压缩 + withRetry + run_code CWD)
-- **门禁**:kurt-agent **96** pass · kurt-tui **56** pass · typecheck 干净(全离线)
+- **最后更新**:2026-06-12 · `main` @ `5947f69`(worktree 隔离 `--worktree`)
+- **门禁**:kurt-agent **100** pass · kurt-tui **60** pass · typecheck 干净(worktree 用真实 git 集成测)
 
 ---
 
@@ -38,6 +38,8 @@ main 处在「**单机 TUI Agent,主线已相当完整可用**」的阶段:七�
   shell · run_code(沙盒,**以工作区为 CWD**) · brew(授权) · web_search · memory(可读写) ·
   ask_user · update_plan · request_write_access;`truncate` 截断库;`fs-access` 路径限定。
 - **沙盒**:Seatbelt/Direct;空闲+硬上限超时;输出截断;进程组中断;实时流式输出。
+- **并发隔离**:`--worktree` → 每会话独立 git worktree + `kurt/<id>` 分支(在 `~/.kurt/worktrees/`),
+  退出自动 commit 到该分支(绝不碰 main),打印合并提示。`WorktreeManager`(kurt-agent)为多 Agent 协同的复用地基。
 - **编排抽象**:`Agent`(包 runLoop)+ `ToolHub`(name→Tool 注册表);`AskProvider` seam。
 - **TUI(kurt-tui)**:三模式 **chat/agent/plan**(按模式分配工具 + per-mode prompt);
   ask_user 选择题浮层;持久会话(`/sessions` 切换/删除/自动标题);命令审批 + 项目白名单;
@@ -50,7 +52,8 @@ main 处在「**单机 TUI Agent,主线已相当完整可用**」的阶段:七�
 2. **Phase 4 余项**:更多模型厂家(Anthropic / 本地);`AuthProvider`(登录授权,
    目前 API key 只能走环境变量)。
 3. **Phase 6 余项**:WebUI / 桌面 / 移动前端(目前只有终端 TUI)。
-4. **Phase 7 — 多 Agent**:main 空白(雏形在 `feat/beehive`)。
+4. **Phase 7 — 多 Agent 编排**:worktree 隔离地基(`WorktreeManager`)已就位;
+   待:把 worktree 分配给并行 agent + 集成/合并编排(蜂群雏形在 `feat/beehive` 可复用)。
 
 ## 已知债务 / 搁置项
 
@@ -60,3 +63,9 @@ main 处在「**单机 TUI Agent,主线已相当完整可用**」的阶段:七�
 - `~/.kurt/sessions` 的 `list()` 扫目录解析每个会话文件;会话很多时略慢(量大再加 index)。
 - 自动压缩阈值绑定的是 `cfg.contextLimit`(状态栏显示值,默认 128k),非模型真实 1M 窗口——
   与用户所见一致,但若把 contextLimit 调到 1M 则触发会很晚。
+- **全局状态并发竞态(未做,刻意跳过)**:`~/.kurt/config.json`、`memory.md`、`sessions/<id>.json`
+  跨进程都是"读-改-写整文件覆盖",无锁——同一 session 多终端会**静默互相覆盖历史**,并发 memory
+  append 可能丢一条。worktree 隔离不覆盖这类(那是工作区文件冲突)。小硬化方案:原子写 + session
+  占用锁 + memory `O_APPEND`(见对话记录,待排期)。
+- `--worktree` 退出自动 commit 会在仓库留下 `kurt/<id>` 分支 + `~/.kurt/worktrees/` 下的 worktree
+  目录,需用户自行 merge/清理(提示已打印);后续可加 `kurt worktree list|prune` 管理命令。
