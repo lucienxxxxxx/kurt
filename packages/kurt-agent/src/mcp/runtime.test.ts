@@ -9,6 +9,7 @@ import { connectMcpServers, summarizeStatuses } from "./runtime.ts";
 import type { McpServers } from "./types.ts";
 import type { PermissionProvider } from "../permission/index.ts";
 import type { Tool } from "../engine/index.ts";
+import { startHttpEchoServer } from "./_fixtures/echo-http-server.ts";
 
 const FIXTURE = new URL("./_fixtures/echo-server.ts", import.meta.url).pathname;
 
@@ -77,6 +78,36 @@ describe("connectMcpServers (real stdio server)", () => {
       expect(res.content).toBe("touched /tmp/x");
     } finally {
       await rt.close();
+    }
+  }, 20_000);
+});
+
+describe("connectMcpServers (real Streamable HTTP server)", () => {
+  test("lists and round-trips tools over HTTP transport", async () => {
+    const http = await startHttpEchoServer();
+    const rt = await connectMcpServers({ web: { type: "http", url: http.url } });
+    try {
+      expect(rt.statuses).toEqual([{ name: "web", ok: true, toolCount: 3, error: undefined }]);
+      expect(rt.tools.map((t) => t.spec.name).sort()).toEqual(["mcp__web__boom", "mcp__web__echo", "mcp__web__touch"]);
+      const res = await byName(rt.tools, "mcp__web__echo").execute({ message: "over http" }, ctx());
+      expect(res.content).toBe("echo: over http");
+      expect(res.isError).toBe(false);
+    } finally {
+      await rt.close();
+      await http.close();
+    }
+  }, 20_000);
+
+  test("propagates an error result over HTTP", async () => {
+    const http = await startHttpEchoServer();
+    const rt = await connectMcpServers({ web: { type: "http", url: http.url } });
+    try {
+      const res = await byName(rt.tools, "mcp__web__boom").execute({}, ctx());
+      expect(res.isError).toBe(true);
+      expect(res.content).toBe("kaboom");
+    } finally {
+      await rt.close();
+      await http.close();
     }
   }, 20_000);
 });

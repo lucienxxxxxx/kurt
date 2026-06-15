@@ -9,7 +9,7 @@
  */
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StdioClientTransport, getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool, JSONSchema } from "../engine/index.ts";
@@ -109,11 +109,12 @@ function makeTransport(config: McpServerConfig): Transport {
       requestInit: config.headers ? { headers: expandRecord(config.headers) } : undefined,
     });
   }
-  // stdio (default)
+  // stdio (default). Base on the SDK's platform-aware safe-inherit env (so servers
+  // that need PATH/HOME/proxy/etc. work), then overlay the configured env.
   return new StdioClientTransport({
     command: config.command,
     args: config.args,
-    env: { ...inheritedEnv(), ...(config.env ? expandRecord(config.env) : {}) },
+    env: { ...getDefaultEnvironment(), ...(config.env ? expandRecord(config.env) : {}) },
     cwd: config.cwd,
     stderr: "ignore",
   });
@@ -147,15 +148,4 @@ function expandRecord(rec: Record<string, string>): Record<string, string> {
 
 export function expandEnv(value: string): string {
   return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_m, name: string) => process.env[name] ?? "");
-}
-
-/** A minimal safe env for spawned servers (mirrors the SDK's default-inherit set). */
-function inheritedEnv(): Record<string, string> {
-  const keep = ["HOME", "PATH", "USER", "SHELL", "TERM", "TMPDIR", "LANG", "LC_ALL"];
-  const out: Record<string, string> = {};
-  for (const k of keep) {
-    const v = process.env[k];
-    if (v != null) out[k] = v;
-  }
-  return out;
 }
