@@ -4,15 +4,15 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-15 · `main` @ `67df170`(Bug 修复轮 B1–B5;下一步 Phase 6 WebUI)
-- **门禁**:kurt-agent **133** pass · kurt-tui **78** pass · typecheck 干净(MCP stdio+HTTP、worktree、并发锁均有真实集成测)
+- **最后更新**:2026-06-15 · `main` @ `ea073ae`(Phase 6.0:桌面端 kurt-app 脚手架)
+- **门禁**:kurt-agent **133** pass · kurt-tui **78** pass · kurt-app:`bun run build`(tsc+vite)✓ + `cargo check`(Tauri/Rust)✓ · typecheck 干净
 
 ---
 
 ## 一句话定位
 
-main 处在「**单机 TUI Agent,主线已相当完整可用,能接外部 MCP 工具、能加载 Skills**」的阶段:
-七期里 1、2、3、**5 全部完成**,4、6 主线完成;7 尚未开始。
+main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(Phase 6)**」的阶段:
+七期里 1、2、3、**5 全部完成**,4 主线完成;**6 进行中**(桌面端 kurt-app,Tauri,见下方子阶段表);7 尚未开始。
 
 ## 七期路线图状态(main)
 
@@ -23,8 +23,22 @@ main 处在「**单机 TUI Agent,主线已相当完整可用,能接外部 MCP �
 | 3 | 预加载 + 记忆 + 压缩 | ✅ 完成:预载 ✓ · agent 可写记忆 ✓ · 手动 `/compact` ✓ · **自动压缩 ✓**(`autoCompaction`,超 ~75% 上下文上限自动触发) |
 | 4 | 多厂家模型 + 授权 | 🚧 DeepSeek/OpenAI 兼容 ✓ · 能力元数据 ✓ · reasoning 回填 ✓ · **缺:更多厂家 + AuthProvider 登录** |
 | 5 | Skills 生命周期 + MCP 接入 | ✅ 完成:**MCP 接入 ✓**(官方 SDK,stdio + Streamable HTTP,远程工具入 ToolHub,审批门控) · **Skills ✓**(渐进披露:预载 description,`skill` 工具按需加载正文) |
-| 6 | 多模态前端(WebUI/TUI/桌面/移动) | 🚧 TUI 成熟 · **缺:WebUI / 桌面 / 移动** |
+| 6 | 多模态前端(WebUI/TUI/桌面/移动) | 🚧 TUI 成熟 · **macOS 桌面端进行中**(`kurt-app`,Tauri v2,见下方子阶段表)· 缺:Windows/WebUI/移动 |
 | 7 | 多 Agent(SubAgentTool) | ⬜ main 未开始(雏形见 `feat/beehive`) |
+
+### Phase 6 子阶段进度(桌面端 `packages/kurt-app`,macOS 优先)
+
+> 架构:kurt-app(Tauri v2 + React + Vite + Tailwind + shadcn + Zustand + TanStack Query)= 引擎前端消费者(铁律 #2);
+> 经 `kurt-bridge`(Bun,本地 HTTP+SSE)访问 kurt-agent —— 引擎零改动。kurt-app 不是 bun-workspace 成员(自带 deps+lock)。
+> v1 范围 = 核心优先(对话+真实流式运行+会话+model/effort+主题+中英文+折叠/暂停/停止/排队);projects/skills 浏览、详情面板等随后。
+
+| 子阶段 | 内容 | 状态 |
+|---|---|---|
+| 6.0 | 脚手架:Tauri v2 + React + Vite 起架;改名 kurt-app/Kurt;`kurt-app/{CLAUDE,PROJECT_INDEX,MANUAL_TESTS}.md`;Phase 6 进度机制 | ✅ 完成(`bun run build` ✓ · `cargo check` ✓ · GUI 开窗待人工确认 `MANUAL_TESTS §6.0`) |
+| 6.1 | 静态 UI 对齐(mock 数据):Tailwind+shadcn+tokens、侧栏/线程渲染器/输入区+菜单/主题/中英文 | ⬜ 下一步 |
+| 6.2 | `packages/kurt-bridge`(Bun):`Event`→`Step` over HTTP/SSE、会话 CRUD、集成测试 | ⬜ |
+| 6.3 | app↔bridge 接通:Tauri spawn bridge、Zustand+TanStack Query、真实流式运行 | ⬜ |
+| 6.4 | 加固+打包:API key 设置、审批弹窗、持久化、编译自包含 sidecar + 签名 `.app` | ⬜ |
 
 ## 已实现(main)
 
