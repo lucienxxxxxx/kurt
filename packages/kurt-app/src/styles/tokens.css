@@ -1,0 +1,74 @@
+/* =============================================================
+ * Kurt — Design Tokens (copied verbatim from prototype/tokens.css)
+ * Single source of truth for colors, typography, radii, themes.
+ * ============================================================= */
+
+:root {
+  /* --- Brand --- */
+  --accent: #E8503A;
+  --accent-soft: rgba(232,80,58,0.12);
+  --accent-press: #cf432e;
+  --green: #46c07a;
+
+  /* --- Radii --- */
+  --radius: 12px;
+
+  /* --- Font stacks --- */
+  --font-sans:  -apple-system, "SF Pro Text", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+  --font-serif: "Source Serif 4", "Source Serif Pro", "Noto Serif SC", Georgia, "Songti SC", "STSong", serif;
+  --font-mono:  "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
+}
+
+/* LIGHT theme (default) */
+html[data-theme="light"] {
+  --bg-window:   #ecebe7;
+  --bg-sidebar:  #f4f2ee;
+  --bg-main:     #fbfaf8;
+  --bg-elevated: #ffffff;
+  --bg-hover:    rgba(0,0,0,0.045);
+  --bg-active:   rgba(0,0,0,0.07);
+
+  --text:        #211f1d;
+  --text-soft:   #555049;
+  --text-muted:  #97918a;
+  --text-faint:  #b7b1a9;
+
+  --border:        #e3e0da;
+  --border-strong: #d6d2cb;
+
+  --tool-bg:   #f2efe8;
+  --tool-head: #e9e6e0;
+  --tool-text: #34302b;
+
+  --shadow-win: 0 24px 60px rgba(0,0,0,0.18), 0 4px 14px rgba(0,0,0,0.10);
+  --timeline:   #d8d4cd;
+  --query-bg:     #ffffff;
+  --query-border: #e6e2db;
+}
+
+/* DARK theme */
+html[data-theme="dark"] {
+  --bg-window:   #0c0c0d;
+  --bg-sidebar:  #161618;
+  --bg-main:     #1c1c1e;
+  --bg-elevated: #242427;
+  --bg-hover:    rgba(255,255,255,0.05);
+  --bg-active:   rgba(255,255,255,0.08);
+
+  --text:        #ececec;
+  --text-soft:   #c4c2bf;
+  --text-muted:  #8a8782;
+  --text-faint:  #5f5d59;
+
+  --border:        #2a2a2c;
+  --border-strong: #38383a;
+
+  --tool-bg:   #111113;
+  --tool-head: #18181a;
+  --tool-text: #cfcdc9;
+
+  --shadow-win: 0 24px 60px rgba(0,0,0,0.55), 0 4px 14px rgba(0,0,0,0.4);
+  --timeline:   #303032;
+  --query-bg:     #161618;
+  --query-border: #2c2c2e;
+}

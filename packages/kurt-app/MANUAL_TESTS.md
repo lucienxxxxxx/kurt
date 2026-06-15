@@ -24,3 +24,35 @@ Prereq: `cd packages/kurt-app && bun install` (done once).
 
 Result: **PASS** (2026-06-15, user) — window opened titled "Kurt"; greet IPC returned
 "Hello, 123! You've been greeted from Rust!". The starter content is replaced by the real UI in 6.1.
+
+---
+
+## Phase 6.1 — Static UI parity (mock data)
+
+Run `bun run tauri dev`. The real UI replaces the starter. Compare against
+`prototype/index.html` (open it in a browser side-by-side). Everything is mock /
+faked-streaming for now — no real agent yet (that's 6.3).
+
+1. **Sidebar** → traffic lights + search, "Kurt" wordmark (Amita serif), a red
+   "New chat", Projects/Skills, a "Recent" list of 8, profile "lew / Pro" + gear.
+2. **Thread (session s1 loads by default)** → right-aligned user query bubble; a
+   thinking step ("Thought for 5s", click to expand/collapse); text in serif-headed
+   markdown; a "Bash" tool card with **IN/OUT** rows; a `file_organizer` skill card;
+   a Read line. Matches the prototype's spacing/fonts/colors.
+3. **Send a task** (type in the composer, Enter) → steps stream in one by one
+   (thinking → web_search skill → Bash tools → Read → bullet summary), with the
+   typing cursor on the live step. Send again while running → it **queues** (timeline
+   chip in the composer); the square **stop** button appears; cancel a queued item.
+4. **Tool OUT truncation** → a long OUT row is clipped with "…"; click it → a
+   **detail panel** slides in on the right. Click a Read file link → file preview
+   panel. Multiple panels → tabs.
+5. **Theme** → open Settings (gear) → Appearance → toggle Light/Dark; whole app
+   recolors via `data-theme`; reopen app → choice persisted.
+6. **Language** → Settings → Appearance → 中文 / English segmented control; all UI
+   strings AND conversation content switch; persisted across relaunch.
+7. **Empty state** → New chat → logo + "Give Kurt a task" + 3 suggestion chips
+   (clicking one fills the composer).
+
+Result: ____ (date / pass-fail / notes). Known: menus are custom popovers (shadcn
+swap is later); icons are inline SVG (lucide swap later) — both intentional.
+
