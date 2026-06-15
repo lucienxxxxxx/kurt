@@ -1,7 +1,7 @@
 # PROJECT_INDEX — kurt-tui
 
 > Cached architecture map. Read this first; scan only what it points to.
-> Last synced: 2026-06-15, after Phase 5: MCP wiring (mcp.json → ToolHub; `--no-mcp`) + Skills (skills/ dirs → catalog + `skill` tool).
+> Last synced: 2026-06-15, after the B1–B5 bug sweep: atomic writes + session occupancy lock, `kurt worktree list|prune`, autoCompactThreshold. (Phase 5 MCP + Skills complete before that.)
 
 ## 1. Overview
 Ink terminal UI for `kurt-agent`. A front-end consumer: subscribes to the engine
@@ -21,7 +21,7 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 - **Write outside the workspace**: the agent calls `request_write_access` (same approval prompt); on allow, the dir is opened for write_file/shell/run_code for the rest of the session (`makeTools` shares one mutable writable-roots array). "Always" persists `write-access:<dir>` in the allowlist.
 - **Working dir**: the agent works inside one workspace — `WORKSPACE_DIR` (the whole dir, **fully writable, no approval**). Injected into the system prompt AND as env to shell/run_code. No `import/`/`export/` subdirs are created. Sandbox blocks writes *outside* the workspace (+ `--allow-write` dirs). File writes and command approval are **independent**: in-workspace writes never prompt; sensitive commands always do.
 - Settings (`model/effort/thinking/mode`) persist to `~/.kurt/config.json` (override path with `KURT_CONFIG_PATH`). Precedence: persisted > env > default. API key is env-only.
-- Gate before merge: **`bun run typecheck && bun test`** (currently 72 tests, offline).
+- Gate before merge: **`bun run typecheck && bun test`** (currently 78 tests, offline).
 
 ## 3. Architecture
 - Depends on `kurt-agent` only through its public API (`"kurt-agent"` → its `src/lib.ts`):
@@ -37,15 +37,15 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 ## 4. Module map
 | Path | Responsibility | Key exports | Depends on |
 |------|----------------|-------------|------------|
-| `src/cli.ts` | **CLI entry / bin `kurt`**: dispatches `tui` (default) / `chat` / `config` / `help` | — | `./run-tui`, `./run-chat`, `./config` |
+| `src/cli.ts` | **CLI entry / bin `kurt`**: dispatches `tui` (default) / `chat` / `config` / `worktree` (list\|prune) / `help` | — | `./run-tui`, `./run-chat`, `./config`, `kurt-agent` (WorktreeManager) |
 | `src/run-tui.tsx` | Launch the TUI: prints banner once, wires runner+compactor+newSession, builds the `SessionController` (store + titling) + memory/rules preload, mounts `<App>` | `runTui` | `kurt-agent`, `./agent`, `./config`, `./session-store`, `./context-files`, `./tui` |
 | `src/run-chat.ts` | Stdout REPL/one-shot using the same runtime as the TUI (+ memory/rules preload) | `runChat` | `kurt-agent`, `./agent`, `./context-files` |
-| `src/agent.ts` | Shared runtime: `resolveSettings`/`resolveConfig`, `resolveWorkspace`+`workspaceEnv`, `systemPrompt(ws,mode)` (per-mode guidance), `Mode`/`normalizeMode` (legacy "ask"→"chat"), `makeSandbox`/`makeTools(…,permission,askProvider,skills?)` (wires all tools incl. ask_user/update_plan/skill)/`modelFor(…,ReasoningOptions)`, **`TOOLS_BY_MODE`/`toolsForMode(hub,mode)`** (chat=read-only+ask_user+skill · plan=+update_plan · agent=all), `parseLaunchFlags` (`--worktree`/`--no-mcp`) | (those) | `kurt-agent`, `./config` |
+| `src/agent.ts` | Shared runtime: `resolveSettings`/`resolveConfig`, `resolveWorkspace`+`workspaceEnv`, `systemPrompt(ws,mode)` (per-mode guidance), `Mode`/`normalizeMode` (legacy "ask"→"chat"), `makeSandbox`/`makeTools(…,permission,askProvider,skills?)` (wires all tools incl. ask_user/update_plan/skill)/`modelFor(…,ReasoningOptions)`, **`TOOLS_BY_MODE`/`toolsForMode(hub,mode)`** (chat=read-only+ask_user+skill · plan=+update_plan · agent=all), `parseLaunchFlags` (`--worktree`/`--no-mcp`), `autoCompactThreshold(modelId,limit)` (75% of min(limit, model real window)) | (those) | `kurt-agent`, `./config` |
 | `src/config.ts` | Persisted user settings at `~/.kurt/config.json` (path via `kurtHome()`): `loadConfig`/`saveConfig`/`configPath`/`sanitize` | (those) | `./paths` |
 | `src/paths.ts` | `~/.kurt/` layout: `kurtHome` (KURT_HOME override), `sessionsDir`, `globalMemoryPath`, `projectRulesPath(ws)`, `projectMemoryPath(ws)`, `globalMcpConfigPath`/`projectMcpConfigPath(ws)`, `globalSkillsDir`/`projectSkillsDir(ws)` | (those) | — |
 | `src/mcp-config.ts` | Load + merge MCP server config: `parseMcpConfig` (tolerant `{mcpServers}` parse) + `loadMcpServers(ws)` (global `~/.kurt/mcp.json` ∪ project `<ws>/.kurt/mcp.json`, project wins). Connecting/using them is kurt-agent's `connectMcpServers` | `parseMcpConfig`, `loadMcpServers` | `kurt-agent` (types), `./paths` |
 | `src/skills.ts` | Discover + parse skills: `parseSkill` (frontmatter+body, tolerant) + `loadSkills(ws)` (scan `~/.kurt/skills/` ∪ `<ws>/.kurt/skills/`, `<name>/SKILL.md` or flat `<name>.md`, project wins) → `{ provider, catalog, metas }`. Catalog goes in the prompt; the `skill` tool (kurt-agent) loads bodies | `parseSkill`, `loadSkills` | `kurt-agent` (`skillCatalog`/types), `./paths` |
-| `src/session-store.ts` | Persist conversations to `~/.kurt/sessions/<id>.json` (global, tagged by workspace): `SessionStore` create/save/load/`list(ws?)`/remove; `SessionMeta`/`SessionRecord` | `SessionStore` | `kurt-agent` (Message), `./paths` |
+| `src/session-store.ts` | Persist conversations to `~/.kurt/sessions/<id>.json` (global, tagged by workspace): `SessionStore` create/save(atomic)/load/`list(ws?)`/remove; **occupancy lock** (acquireLock/releaseLock via `<id>.lock`, liveness-based staleness) so two terminals can't clobber one session | `SessionStore` | `kurt-agent` (Message, atomicWrite), `./paths` |
 | `src/context-files.ts` | `loadContextPrelude(ws)` → reads `~/.kurt/memory.md` (global) + `<ws>/.kurt/memory.md` (project, agent-written) + `<ws>/.kurt/rules.md` (user rules) into a system-prompt prelude | `loadContextPrelude` | `./paths` |
 | `src/tui/app.tsx` | Root Ink component: `committed` (→ `<Static>` scrollback) + `live` (current turn) + session state, command palette, drives the loop, `/compact`, `/sessions` picker, `/new`, `/clear`; autosave + auto-title via `SessionController` | `App`, `EngineRunner`, `Compactor`, `SessionState`, `SessionController` | ink, react, kurt-agent, sibling files |
 | `src/tui/session-view.ts` | `entriesFromMessages` — rebuild display entries from saved `Message[]` (resume repaint; renders thinking/text/tool blocks) | `entriesFromMessages` | `kurt-agent`, `./entries` |

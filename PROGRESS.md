@@ -4,8 +4,8 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-15 · `main` @ `d7e4655`(Phase 5 完成:MCP 接入 + Skills)
-- **门禁**:kurt-agent **124** pass · kurt-tui **72** pass · typecheck 干净(MCP 用真实 stdio fixture server 集成测)
+- **最后更新**:2026-06-15 · `main` @ `67df170`(Bug 修复轮 B1–B5;下一步 Phase 6 WebUI)
+- **门禁**:kurt-agent **133** pass · kurt-tui **78** pass · typecheck 干净(MCP stdio+HTTP、worktree、并发锁均有真实集成测)
 
 ---
 
@@ -38,8 +38,13 @@ main 处在「**单机 TUI Agent,主线已相当完整可用,能接外部 MCP �
   shell · run_code(沙盒,**以工作区为 CWD**) · brew(授权) · web_search · memory(可读写) ·
   ask_user · update_plan · request_write_access;`truncate` 截断库;`fs-access` 路径限定。
 - **沙盒**:Seatbelt/Direct;空闲+硬上限超时;输出截断;进程组中断;实时流式输出。
+- **并发安全(2026-06-15 硬化)**:全局状态(`config.json`/`sessions/<id>.json`/`memory.md`/`allowlist.json`)
+  统一走**原子写**(temp+rename,`atomicWrite`),读者绝不会读到半截文件;会话有**占用锁**
+  (`<id>.lock`,基于进程存活判定陈旧,崩溃自动回收)——同一 session 第二个终端打开会被拒(提示 `/new`),
+  不再静默覆盖历史。
 - **并发隔离**:`--worktree` → 每会话独立 git worktree + `kurt/<id>` 分支(在 `~/.kurt/worktrees/`),
-  退出自动 commit 到该分支(绝不碰 main),打印合并提示。`WorktreeManager`(kurt-agent)为多 Agent 协同的复用地基。
+  退出自动 commit 到该分支(绝不碰 main),打印合并提示。`WorktreeManager`(kurt-agent)为多 Agent 协同的复用地基;
+  `kurt worktree list|prune` 管理/清理(prune 只删已合并且干净的,绝不丢未集成的工作)。
 - **MCP 接入(Phase 5)**:`kurt-agent/src/mcp/`(官方 `@modelcontextprotocol/sdk`,stdio + Streamable HTTP)
   把远程 server 的工具包成 `McpTool`(实现 `Tool`)注入 ToolHub —— 引擎零改动。工具名命名空间化
   `mcp__<server>__<tool>`;非只读工具经 `PermissionProvider` 审批,只读(readOnlyHint)直接跑;
@@ -62,26 +67,29 @@ main 处在「**单机 TUI Agent,主线已相当完整可用,能接外部 MCP �
 3. **Phase 7 — 多 Agent 编排**:worktree 隔离地基(`WorktreeManager`)已就位;
    待:把 worktree 分配给并行 agent + 集成/合并编排(蜂群雏形在 `feat/beehive` 可复用)。
 
+## 已修复(2026-06-15 Bug 修复轮 B1–B5)
+
+- **B1 全局状态并发竞态 → 修复**:原子写 + 会话占用锁(见上方"并发安全")。数据丢失风险消除。
+- **B2 MCP HTTP transport 未验证 → 修复**:加了真实 Streamable HTTP server fixture(Bun.serve + SDK web-standard transport),
+  `tools/list`+`tools/call`+错误传播全过;路径本就正确,无潜伏 bug。
+- **B3 MCP stdio env 白名单过窄 → 修复**:改用 SDK 的 `getDefaultEnvironment()`(平台感知)再叠加配置 env,
+  不再因缺环境变量神秘 "connection closed"。
+- **B4 自动压缩阈值 → 修复**:`autoCompactThreshold` 取 `min(contextLimit, 模型真实窗口)` 的 75%,绝不晚于真实窗口触发。
+- **B5 worktree 残留 → 修复**:新增 `kurt worktree list|prune`(prune 只删已合并且干净的)。
+
 ## 已知债务 / 搁置项
 
 - **`feat/beehive`(本地 + `origin/feat/beehive`)= 蜂群模式雏形(Phase 7),已从 main 回退、搁置。**
   含蜂王/工蜂/DAG 调度 + 四轮实测加固。**未合入 main**(用户要求隔离)。
   注:其中的 `withRetry` 与 `run_code` CWD 修复已单独捡回 main(见上方"已实现")。
 - `~/.kurt/sessions` 的 `list()` 扫目录解析每个会话文件;会话很多时略慢(量大再加 index)。
-- 自动压缩阈值绑定的是 `cfg.contextLimit`(状态栏显示值,默认 128k),非模型真实 1M 窗口——
-  与用户所见一致,但若把 contextLimit 调到 1M 则触发会很晚。
-- **全局状态并发竞态(未做,刻意跳过)**:`~/.kurt/config.json`、`memory.md`、`sessions/<id>.json`
-  跨进程都是"读-改-写整文件覆盖",无锁——同一 session 多终端会**静默互相覆盖历史**,并发 memory
-  append 可能丢一条。worktree 隔离不覆盖这类(那是工作区文件冲突)。小硬化方案:原子写 + session
-  占用锁 + memory `O_APPEND`(见对话记录,待排期)。
-- `--worktree` 退出自动 commit 会在仓库留下 `kurt/<id>` 分支 + `~/.kurt/worktrees/` 下的 worktree
-  目录,需用户自行 merge/清理(提示已打印);后续可加 `kurt worktree list|prune` 管理命令。
 - **kurt-agent 不再"零运行时依赖"**:为 MCP 引入 `@modelcontextprotocol/sdk`(用户 2026-06-14 明确批准),
   仅在 `src/mcp/` 使用,`src/engine/` 仍零依赖零 I/O。已记入 `kurt-agent/CLAUDE.md` §1/§8,**不要当违规删**。
 - **MCP 工具只在 agent 模式可见**:chat/plan 取的是固定工具名单(`TOOLS_BY_MODE`),MCP 工具是动态名,
   目前不进 chat/plan —— 即便是只读 MCP 工具(readOnlyHint)。后续可让 `toolsForMode` 放只读 MCP 工具进 chat/plan。
-- MCP 服务器无 TUI 内发现命令(只在启动横幅打印连接状态);后续可加 `/mcp` 列出已连服务器+工具。
+- **无 TUI 内 `/mcp`、`/skills` 发现命令**(只在启动横幅打印);后续可加,列出已连服务器/工具与已加载 skill。
 - **Skills v1 只加载正文(无捆绑资源/脚本)**:`skill` 工具只返回 `SKILL.md` 正文;若 skill 目录里还带脚本/模板,
-  模型需自行 read(且它们在 `~/.kurt/skills/` 工作区外,要 request_write_access)。后续可让 `skill` 顺带列出
-  捆绑文件+目录路径,或支持 skill 携带可执行步骤。Skills 同样无 TUI 内 `/skills` 发现命令(只启动横幅打印名字)。
+  模型需自行 read(且它们在 `~/.kurt/skills/` 工作区外,要 request_write_access)。后续可让 `skill` 顺带列出捆绑文件+目录路径。
 - Skills 与 MCP 工具都在每次启动时同步发现/连接,会话期间新增不会热加载(需重启);量大时启动略慢。
+- `packages/kurt-app/`(未跟踪)= Phase 6 WebUI 高保真原型 + 对接文档(Tauri+React+Vite+Tailwind+shadcn),
+  无 `package.json` 故 workspace 忽略、不影响构建;Phase 6 开工时落地。

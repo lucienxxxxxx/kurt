@@ -3,8 +3,9 @@
 > Cached architecture map. **Read this first**; scan the tree only for the files
 > this map points you to. Keep it fresh: update on every structural change.
 > Maintained via the `project-module-workflow` skill (see CLAUDE.md §3).
-> Last synced: 2026-06-15, after Phase 5 complete: MCP integration (`src/mcp/`) +
-> Skills (`src/skills/` + `tools/skill.ts`, progressive disclosure).
+> Last synced: 2026-06-15, after the B1–B5 bug-fix sweep: atomicWrite
+> (`src/fs-atomic.ts`), MCP HTTP round-trip test + SDK-default env, worktree
+> list/prune. (Phase 5 — MCP + Skills — complete before that.)
 
 ## 1. Overview
 A protocol-agnostic, **zero-I/O** AI agent engine (a **library**) in TypeScript on Bun.
@@ -20,7 +21,7 @@ front-end + `kurt` CLI) consumes it. Public API is `src/lib.ts`.
 - Run demos: `bun run dev` · `bun run demo:abort` · `bun run demo:error` · `bun run demo:sandbox`
 - Live chat (stdout) vs a real LLM: `bun run chat ["prompt"]` (needs `DEEPSEEK_API_KEY`).
 - Public API for consumers (kurt-tui): `src/lib.ts` (re-exports engine/providers/tools/sandbox/session/search + history/compaction/stdout).
-- Gate before any merge: **`bun run typecheck && bun test`** (currently 124 tests pass; MCP tests round-trip a local stdio fixture server, still offline/hermetic).
+- Gate before any merge: **`bun run typecheck && bun test`** (currently 133 tests pass; MCP tests round-trip local stdio **and** Streamable HTTP fixture servers, still offline/hermetic).
 
 ## 3. Architecture & invariants
 Three layers, three iron rules (full text in `CLAUDE.md` §2 — do not break them):
@@ -57,7 +58,8 @@ and the loop continues.
 | `src/ask/` | Seam for the `ask_user` tool (agent → user) | `AskProvider`, `AskRequest` (front-end implements; mirrors permission) | — (pure) |
 | `src/agent/` | Composition shells around the engine | `Agent` ({model,system,tools}+`run()`→runLoop+`with()`); `ToolHub` (name→Tool registry; `get(names)`/`all()`). Engine untouched | engine, tools |
 | `src/mcp/` | **MCP = remote provider of `Tool`s** (Phase 5; the one place the SDK is used) | `McpTool` (wraps a remote tool as `Tool`; flattens content; non-read-only calls gated via `PermissionProvider`); `connectMcpServer`/`connectMcpServers` (stdio + Streamable HTTP; namespaced `mcp__<server>__<tool>`; per-server failures isolated → `statuses`; aggregate `close()`); `summarizeStatuses`; `expandEnv` (`${VAR}`). `_fixtures/echo-server.ts` = test-only local server | engine (types/Tool), permission, `@modelcontextprotocol/sdk` |
-| `src/worktree/` | Per-session git worktree isolation (Phase 7 groundwork) | `WorktreeManager` (create/list/isDirty/commitAll/remove via git subprocess) | — (git CLI) |
+| `src/worktree/` | Per-session git worktree isolation (Phase 7 groundwork) | `WorktreeManager` (create/list/isDirty/commitAll/remove; + currentBranch/isMerged/deleteBranch/listManaged/**pruneManaged** for `kurt worktree prune` — removes only merged+clean) via git subprocess | — (git CLI) |
+| `src/fs-atomic.ts` | Crash-/concurrency-safe whole-file write (temp + rename) | `atomicWrite(path, data)` — used by memory writes + kurt-tui's config/sessions/allowlist | — |
 | `src/skills/` | **Skill = progressive-disclosure context** (Phase 5; not a Tool, not engine) | `SkillProvider`/`SkillMeta` seam (front-end reads files); `skillCatalog(metas)` (description-only prompt section). The loader tool is `tools/skill.ts` | engine types (via tool) |
 | `src/modes/` | Modal layer + reusable orchestration helpers | `runStdoutMode` (`stdout.ts`); `messagesFromEvents` (`history.ts`); `compactHistory`/`compactionSplit`/`serializeForSummary` (`compaction.ts`, cuts only at user boundaries → preserves tool pairing) | engine types |
 | `src/lib.ts` | **Public API barrel** (what kurt-tui imports via `"kurt-agent"`) | re-exports the above | all |

@@ -4,6 +4,36 @@
 
 ---
 
+## Bug 修复轮 B1–B5 — ✅ (2026-06-15)
+
+**用户要求**:进 Phase 6(WebUI)前,先把进度检查里列出的所有 bug 修掉。
+
+**B1 — 全局状态并发竞态(高,数据丢失)**:`config.json`/`sessions/<id>.json`/`memory.md`/`allowlist.json`
+都是无锁"读-改-写整文件",两个进程会(a)留下半截文件 或(b)同一 session 两个终端静默互相覆盖历史。
+- `atomicWrite`(kurt-agent `src/fs-atomic.ts`,导出):temp+rename,读者永不见半截文件。memory/config/sessions/allowlist 全改用它。
+- `SessionStore` 占用锁:`<id>.lock`(`flag:"wx"`),陈旧判定用**进程存活**(`kill(pid,0)`→ESRCH),崩溃锁自动回收,无超时启发式。
+  run-tui 持有活动会话锁;打开被另一**活进程**占用的会话会被拒(提示 `/new`);切换/删除/退出释放。
+
+**B2 — MCP HTTP transport 未验证**:之前只有 stdio fixture 做真实往返。加了进程内 HTTP fixture
+(`Bun.serve` + SDK `WebStandardStreamableHTTPServerTransport`,无状态 JSON 模式),`connectMcpServers` 走 HTTP
+`tools/list`+`tools/call`+错误传播全过 —— 路径本就正确,无潜伏 bug。顺手把 echo/touch/boom 三工具抽到 `_fixtures/echo-tools.ts`(stdio+HTTP 共用)。
+
+**B3 — MCP stdio env 白名单过窄**:之前用硬编码白名单**替换**了 SDK 默认 env,缺 env 的 server 会神秘 "connection closed"。
+改用 SDK `getDefaultEnvironment()`(平台感知)再叠加配置 env。
+
+**B4 — 自动压缩阈值**:之前绑 `cfg.contextLimit`(显示值),调高会晚触发、可能溢出真实窗口。
+`autoCompactThreshold(modelId, contextLimit)` = `min(contextLimit, capabilities.maxContextTokens)` 的 75%,绝不晚于真实窗口。
+
+**B5 — worktree 残留**:`WorktreeManager` 加 `currentBranch/isMerged/deleteBranch/listManaged/pruneManaged`;
+CLI 加 `kurt worktree list|prune`(prune **只删已合并且干净**的,脏的/未合并的保留并报告 —— 永不丢未集成的工作)。
+
+**验收**:`bun run typecheck` 干净两包;`bun test` **kurt-agent 133 / kurt-tui 78** 全绿(原子写 20 路并发、
+会话锁活/死判定、MCP stdio+HTTP 真实往返、worktree prune 合并/未合并区分,均真实集成测)。
+`git diff main -- src/engine src/modes` 为空 → 铁律 #1/#3 守住。**踩坑**:CLI USAGE 反引号模板里写
+`` `skill` `` 会提前结束模板字符串 → typecheck 报错(已改 `"skill"`)。
+
+---
+
 ## 第五期(下半):Skills 生命周期 — ✅ (2026-06-15) → Phase 5 完成
 
 **用户要求**:做完 Phase 5 的另一半 —— Skills 渐进式加载。
