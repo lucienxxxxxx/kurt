@@ -6,8 +6,8 @@
  * The API key is NEVER persisted here — it stays in the environment.
  */
 
-import { dirname, join } from "node:path";
-import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import { atomicWrite } from "kurt-agent";
 import { kurtHome } from "./paths.ts";
 
 export interface PersistedConfig {
@@ -40,8 +40,7 @@ export async function loadConfig(): Promise<PersistedConfig> {
 /** Merge a patch into the saved config and write it back. */
 export async function saveConfig(patch: PersistedConfig): Promise<void> {
   const next = { ...(await loadConfig()), ...sanitize(patch as Record<string, unknown>) };
-  await mkdir(dirname(configPath()), { recursive: true });
-  await Bun.write(configPath(), JSON.stringify(next, null, 2) + "\n");
+  await atomicWrite(configPath(), JSON.stringify(next, null, 2) + "\n");
 }
 
 /** Keep only known keys (ignore junk / stale fields). Exported for tests. */

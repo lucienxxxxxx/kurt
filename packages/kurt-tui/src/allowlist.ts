@@ -4,8 +4,8 @@
  * that kind of command in this project. Visible + commit-able + auditable.
  */
 
-import { mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+import { atomicWrite } from "kurt-agent";
 
 export class Allowlist {
   #path: string;
@@ -47,7 +47,6 @@ export class Allowlist {
 
   async add(key: string): Promise<void> {
     this.#keys.add(key);
-    await mkdir(dirname(this.#path), { recursive: true });
-    await Bun.write(this.#path, JSON.stringify({ allow: [...this.#keys] }, null, 2) + "\n");
+    await atomicWrite(this.#path, JSON.stringify({ allow: [...this.#keys] }, null, 2) + "\n");
   }
 }

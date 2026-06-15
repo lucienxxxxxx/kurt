@@ -8,9 +8,8 @@
  * so there's no path-traversal surface). The engine is untouched.
  */
 
-import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
 import type { Tool, ToolContext, ToolResult, ToolSpec } from "../engine/index.ts";
+import { atomicWrite } from "../fs-atomic.ts";
 
 const DEFAULT_MAX_BYTES = 32_000;
 
@@ -95,8 +94,7 @@ export class MemoryTool implements Tool {
     }
 
     try {
-      await mkdir(dirname(path), { recursive: true });
-      await Bun.write(path, next);
+      await atomicWrite(path, next);
     } catch (err) {
       return {
         content: `Failed to update ${label} memory: ${err instanceof Error ? err.message : String(err)}`,

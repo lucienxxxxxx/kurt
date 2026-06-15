@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Message } from "kurt-agent";
@@ -56,5 +56,39 @@ describe("SessionStore", () => {
   test("list returns empty when the dir doesn't exist yet", async () => {
     const fresh = new SessionStore(join(dir, "nope"));
     expect(await fresh.list()).toEqual([]);
+  });
+
+  test("save writes atomically (no leftover .tmp files)", async () => {
+    const rec = store.create("/ws", "m");
+    rec.messages = [userMsg("x")];
+    await store.save(rec);
+    expect(readdirSync(dir).some((f) => f.endsWith(".tmp"))).toBe(false);
+    expect(existsSync(join(dir, `${rec.id}.json`))).toBe(true);
+  });
+});
+
+describe("SessionStore occupancy locks", () => {
+  test("acquire once succeeds; a second live holder is refused; release frees it", () => {
+    const rec = store.create("/ws", "m");
+    expect(store.acquireLock(rec.id)).toBe(true);
+    expect(store.acquireLock(rec.id)).toBe(false); // a live holder (this pid) already has it
+    store.releaseLock(rec.id);
+    expect(store.acquireLock(rec.id)).toBe(true); // freed → reclaimable
+    store.releaseLock(rec.id);
+  });
+
+  test("a dead process's lock is reclaimed (liveness-based staleness)", () => {
+    const id = "stale-session";
+    // Forge a lock owned by a pid that's (almost certainly) not alive.
+    writeFileSync(join(dir, `${id}.lock`), JSON.stringify({ pid: 2147483647, ts: Date.now() }));
+    expect(store.acquireLock(id)).toBe(true); // dead owner → stale → reclaimed
+    store.releaseLock(id);
+  });
+
+  test("remove also clears the lock file", async () => {
+    const rec = store.create("/ws", "m");
+    store.acquireLock(rec.id);
+    await store.remove(rec.id);
+    expect(existsSync(join(dir, `${rec.id}.lock`))).toBe(false);
   });
 });

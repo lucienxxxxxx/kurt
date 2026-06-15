@@ -17,6 +17,7 @@ export * from "./worktree/index.ts";
 export * from "./mcp/index.ts";
 export * from "./skills/index.ts";
 
+export { atomicWrite } from "./fs-atomic.ts";
 export { truncate, truncationNote, DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES } from "./truncate.ts";
 export type { TruncateOptions, Truncation } from "./truncate.ts";
 

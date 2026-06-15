@@ -7,9 +7,9 @@
  * `Message[]`). No engine dependency beyond the `Message` type.
  */
 
-import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Message } from "kurt-agent";
+import { atomicWrite, type Message } from "kurt-agent";
 import { sessionsDir } from "./paths.ts";
 
 /** Listing-sized session info (no message bodies). */
@@ -54,8 +54,8 @@ export class SessionStore {
   async save(rec: SessionRecord): Promise<void> {
     rec.updatedAt = stamp();
     rec.messageCount = rec.messages.length;
-    mkdirSync(this.#dir, { recursive: true });
-    await Bun.write(this.#file(rec.id), JSON.stringify(rec, null, 2));
+    // Atomic: a concurrent reader never sees a half-written session file.
+    await atomicWrite(this.#file(rec.id), JSON.stringify(rec, null, 2));
   }
 
   async load(id: string): Promise<SessionRecord | null> {
@@ -88,6 +88,64 @@ export class SessionStore {
 
   async remove(id: string): Promise<void> {
     rmSync(this.#file(id), { force: true });
+    this.releaseLock(id);
+  }
+
+  // ── Occupancy locks ──────────────────────────────────────────────────────
+  // Two terminals editing the SAME session id would silently overwrite each
+  // other's history (each autosaves its own in-memory messages). A lock file
+  // marks a session as "open here"; another process refuses to open it (and
+  // forks a new session instead). Staleness is decided by process liveness, so
+  // a crashed kurt's lock is reclaimed automatically — no timeout heuristics.
+
+  /** Try to claim a session. Returns false if another LIVE process holds it. */
+  acquireLock(id: string): boolean {
+    mkdirSync(this.#dir, { recursive: true });
+    const lock = this.#lock(id);
+    const payload = JSON.stringify({ pid: process.pid, ts: Date.now() });
+    try {
+      writeFileSync(lock, payload, { flag: "wx" }); // wx = fail if it already exists
+      return true;
+    } catch {
+      if (!this.#lockIsStale(lock)) return false; // held by a live process
+      try {
+        writeFileSync(lock, payload, { flag: "w" }); // reclaim a dead process's lock
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  /** Release a session lock we own (no-op if it's not ours / already gone). */
+  releaseLock(id: string): void {
+    const lock = this.#lock(id);
+    try {
+      const { pid } = JSON.parse(readFileSync(lock, "utf8")) as { pid?: number };
+      if (pid === process.pid) unlinkSync(lock);
+    } catch {
+      /* not ours / unreadable / already gone */
+    }
+  }
+
+  /** A lock is stale if its owning process is no longer alive (or it's unreadable). */
+  #lockIsStale(lock: string): boolean {
+    try {
+      const { pid } = JSON.parse(readFileSync(lock, "utf8")) as { pid?: number };
+      if (typeof pid !== "number") return true;
+      try {
+        process.kill(pid, 0); // signal 0 = liveness probe (doesn't kill)
+        return false; // alive
+      } catch (err) {
+        return (err as NodeJS.ErrnoException).code === "ESRCH"; // ESRCH = no such process → stale; EPERM = alive
+      }
+    } catch {
+      return true; // unreadable/corrupt lock → treat as stale
+    }
+  }
+
+  #lock(id: string): string {
+    return join(this.#dir, `${id}.lock`);
   }
 
   #file(id: string): string {

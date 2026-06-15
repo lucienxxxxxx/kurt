@@ -84,6 +84,17 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
   const store = new SessionStore();
   let current = store.create(ws.root, cfg.modelId);
 
+  // Occupancy lock: hold a lock on the active session so a second terminal can't
+  // open the same one and silently overwrite its history. Released/reclaimed on
+  // switch and exit (and auto-reclaimed if this process dies — liveness-based).
+  let heldLockId: string | null = null;
+  const releaseHeld = (): void => {
+    if (heldLockId) store.releaseLock(heldLockId);
+    heldLockId = null;
+  };
+  store.acquireLock(current.id); // fresh unique id → always succeeds
+  heldLockId = current.id;
+
   const makeTitle = async (messages: Message[]): Promise<string> => {
     const firstUser = messages.find((m) => m.role === "user");
     const fallback =
@@ -113,16 +124,28 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
     open: async (id): Promise<SessionRecord> => {
       const rec = await store.load(id);
       if (!rec) throw new Error(`session not found: ${id}`);
+      if (!store.acquireLock(id)) {
+        throw new Error(`session "${id}" is open in another terminal — not switching. Use /new for a fresh one.`);
+      }
+      releaseHeld();
+      heldLockId = id;
       current = rec;
       return rec;
     },
-    remove: (id) => store.remove(id),
+    remove: async (id) => {
+      await store.remove(id);
+      if (heldLockId === id) heldLockId = null;
+    },
     save: async (messages) => {
       current.messages = messages;
       await store.save(current);
     },
     startNew: async () => {
-      current = store.create(ws.root, cfg.modelId);
+      const next = store.create(ws.root, cfg.modelId);
+      store.acquireLock(next.id); // fresh unique id → succeeds
+      releaseHeld();
+      heldLockId = next.id;
+      current = next;
     },
     ensureTitle: async (messages) => {
       if (current.title) return current.title;
@@ -197,6 +220,7 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
   try {
     await app.waitUntilExit();
   } finally {
+    releaseHeld(); // free the session lock so it can be reopened
     codeTemp.dispose();
     await mcp.close();
     if (worktree) {
