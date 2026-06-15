@@ -80,4 +80,39 @@ describe("WorktreeManager", () => {
     expect(existsSync(path)).toBe(false);
     expect((await mgr.list()).some((w) => w.path === path)).toBe(false);
   });
+
+  test("listManaged returns only kurt/* worktrees, excluding the main one", async () => {
+    const mgr = new WorktreeManager(repo);
+    await mgr.create({ path: join(wtBase, "m1"), branch: "kurt/m1" });
+    const managed = await mgr.listManaged();
+    expect(managed.map((w) => w.branch)).toEqual(["kurt/m1"]);
+    expect(managed.some((w) => w.path === repo)).toBe(false); // never the main worktree
+  });
+
+  test("pruneManaged removes merged+clean worktrees but keeps unmerged ones", async () => {
+    const mgr = new WorktreeManager(repo);
+
+    // Worktree A: commit work, then merge its branch into main → safe to prune.
+    const a = join(wtBase, "merged");
+    await mgr.create({ path: a, branch: "kurt/merged" });
+    writeFileSync(join(a, "a.txt"), "work\n");
+    await mgr.commitAll(a, "work on A");
+    await git(["merge", "--no-edit", "kurt/merged"], repo); // main now contains it
+
+    // Worktree B: commit work, do NOT merge → must be kept.
+    const b = join(wtBase, "unmerged");
+    await mgr.create({ path: b, branch: "kurt/unmerged" });
+    writeFileSync(join(b, "b.txt"), "work\n");
+    await mgr.commitAll(b, "work on B");
+
+    const report = await mgr.pruneManaged({ base: "main" });
+    const byBranch = Object.fromEntries(report.map((e) => [e.branch, e]));
+    expect(byBranch["kurt/merged"]?.action).toBe("removed");
+    expect(byBranch["kurt/unmerged"]?.action).toBe("kept");
+    expect(byBranch["kurt/unmerged"]?.reason).toContain("not merged");
+
+    // The merged worktree + branch are gone; the unmerged one survives.
+    expect(existsSync(a)).toBe(false);
+    expect((await mgr.listManaged()).map((w) => w.branch)).toEqual(["kurt/unmerged"]);
+  });
 });

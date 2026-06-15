@@ -21,6 +21,14 @@ export interface WorktreeInfo {
   head: string;
 }
 
+/** Outcome of pruning one managed worktree. */
+export interface PruneEntry {
+  branch: string;
+  path: string;
+  action: "removed" | "kept";
+  reason: string;
+}
+
 export class WorktreeManager {
   #repoRoot: string;
 
@@ -112,6 +120,59 @@ export class WorktreeManager {
     args.push(worktreePath);
     const r = await git(args, this.#repoRoot);
     if (r.code !== 0) throw new Error(`git worktree remove failed: ${r.stderr || r.stdout}`);
+  }
+
+  /** The branch checked out at the repo root (the integration target), or "". */
+  async currentBranch(): Promise<string> {
+    const r = await git(["rev-parse", "--abbrev-ref", "HEAD"], this.#repoRoot);
+    return r.code === 0 ? r.stdout : "";
+  }
+
+  /** True if `branch` is fully contained in `base` (deleting it would lose nothing). */
+  async isMerged(branch: string, base: string): Promise<boolean> {
+    const r = await git(["merge-base", "--is-ancestor", branch, base], this.#repoRoot);
+    return r.code === 0;
+  }
+
+  /** Delete a branch (`-d` refuses unmerged; `force` uses `-D`). */
+  async deleteBranch(branch: string, force = false): Promise<void> {
+    const r = await git(["branch", force ? "-D" : "-d", branch], this.#repoRoot);
+    if (r.code !== 0) throw new Error(`git branch delete failed: ${r.stderr || r.stdout}`);
+  }
+
+  /** kurt-managed worktrees (branch under `prefix`), excluding the main worktree. */
+  async listManaged(prefix = "kurt/"): Promise<WorktreeInfo[]> {
+    return (await this.list()).filter((w) => w.branch.startsWith(prefix) && w.path !== this.#repoRoot);
+  }
+
+  /**
+   * Remove kurt-managed worktrees whose branch is merged into `base` and clean —
+   * the safe ones (no work lost). Dirty or unmerged ones are kept and reported,
+   * so this can never discard unintegrated work.
+   */
+  async pruneManaged(opts: { base?: string; prefix?: string } = {}): Promise<PruneEntry[]> {
+    const prefix = opts.prefix ?? "kurt/";
+    const base = opts.base || (await this.currentBranch());
+    const report: PruneEntry[] = [];
+    for (const wt of await this.listManaged(prefix)) {
+      const entry = { branch: wt.branch, path: wt.path };
+      if (await this.isDirty(wt.path)) {
+        report.push({ ...entry, action: "kept", reason: "uncommitted changes" });
+        continue;
+      }
+      if (base && !(await this.isMerged(wt.branch, base))) {
+        report.push({ ...entry, action: "kept", reason: `not merged into ${base}` });
+        continue;
+      }
+      try {
+        await this.remove(wt.path);
+        await this.deleteBranch(wt.branch);
+        report.push({ ...entry, action: "removed", reason: base ? `merged into ${base}` : "removed" });
+      } catch (err) {
+        report.push({ ...entry, action: "kept", reason: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    return report;
   }
 }
 

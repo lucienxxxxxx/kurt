@@ -11,6 +11,7 @@ import { runTui } from "./run-tui.tsx";
 import { runChat } from "./run-chat.ts";
 import { configPath, loadConfig, saveConfig, type PersistedConfig } from "./config.ts";
 import { parseLaunchFlags } from "./agent.ts";
+import { WorktreeManager } from "kurt-agent";
 
 const USAGE = `kurt — terminal agent
 
@@ -20,6 +21,8 @@ Usage:
   kurt config               Show saved settings and the config file path
   kurt config set <k> <v>   Set a setting (model | baseURL | context | effort | thinking | mode)
   kurt config path          Print the config file path
+  kurt worktree list        List kurt session worktrees for this repo + their state
+  kurt worktree prune       Remove worktrees whose branch is merged & clean (safe)
   kurt help                 Show this help
 
 Options (for kurt / kurt chat):
@@ -76,6 +79,43 @@ async function runConfig(args: string[]): Promise<void> {
   console.log(Object.keys(cfg).length ? JSON.stringify(cfg, null, 2) : "(empty — using defaults)");
 }
 
+async function runWorktree(args: string[]): Promise<void> {
+  const [sub] = args;
+  const repoRoot = await WorktreeManager.repoRoot(process.cwd());
+  if (!repoRoot) {
+    console.error("Not in a git repository. `kurt worktree` manages per-session worktrees of a repo.");
+    process.exit(1);
+  }
+  const mgr = new WorktreeManager(repoRoot);
+
+  if (sub === "prune") {
+    const report = await mgr.pruneManaged();
+    if (report.length === 0) {
+      console.log("No kurt worktrees to prune.");
+      return;
+    }
+    for (const e of report) {
+      console.log(`${e.action === "removed" ? "✓ removed" : "· kept   "}  ${e.branch}  (${e.reason})`);
+    }
+    const kept = report.filter((e) => e.action === "kept").length;
+    if (kept > 0) console.log(`\n${kept} kept (merge or discard them, then re-run prune).`);
+    return;
+  }
+
+  // default: list
+  const managed = await mgr.listManaged();
+  if (managed.length === 0) {
+    console.log("No kurt worktrees.");
+    return;
+  }
+  const base = await mgr.currentBranch();
+  for (const w of managed) {
+    const dirty = await mgr.isDirty(w.path);
+    const state = dirty ? "dirty" : base && (await mgr.isMerged(w.branch, base)) ? "merged" : "unmerged";
+    console.log(`${w.branch}\t[${state}]\t${w.path}`);
+  }
+}
+
 function coerce(key: string, value: string): PersistedConfig | null {
   switch (key) {
     case "model":
@@ -105,6 +145,9 @@ switch (cmd) {
     break;
   case "config":
     await runConfig(rest);
+    break;
+  case "worktree":
+    await runWorktree(rest);
     break;
   case "help":
   case "-h":
