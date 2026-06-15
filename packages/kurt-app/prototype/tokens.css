@@ -1,0 +1,119 @@
+/* =============================================================
+ * Kurt — Design Tokens
+ * -------------------------------------------------------------
+ * Single source of truth for colors, typography, radii, shadows,
+ * and theming. The prototype loads this file directly.
+ *
+ * When porting to the real app (Tauri + Vite + React + Tailwind
+ * + shadcn/ui), there are two clean options:
+ *
+ *   A) Keep this file as-is and import it once at the top of
+ *      `src/main.tsx`. shadcn already reads CSS variables, so
+ *      `--bg-main`, `--accent`, etc. are usable from any
+ *      `className="bg-[var(--bg-main)]"` or Tailwind arbitrary
+ *      value. Zero work.
+ *
+ *   B) Map these into `tailwind.config.ts` for full IntelliSense.
+ *      Sketch (drop into `theme.extend`):
+ *
+ *        colors: {
+ *          accent: { DEFAULT: "var(--accent)", soft: "var(--accent-soft)", press: "var(--accent-press)" },
+ *          bg:     { window:"var(--bg-window)", sidebar:"var(--bg-sidebar)", main:"var(--bg-main)", elevated:"var(--bg-elevated)" },
+ *          fg:     { DEFAULT:"var(--text)", soft:"var(--text-soft)", muted:"var(--text-muted)", faint:"var(--text-faint)" },
+ *          border: { DEFAULT:"var(--border)", strong:"var(--border-strong)" },
+ *          tool:   { bg:"var(--tool-bg)", text:"var(--tool-text)" },
+ *        },
+ *        fontFamily: {
+ *          sans:  ["var(--font-sans)"],
+ *          serif: ["var(--font-serif)"],   // titles
+ *          mono:  ["var(--font-mono)"],
+ *          brand: ["Amita", "cursive"],
+ *        },
+ *        borderRadius: { DEFAULT: "var(--radius)" },
+ *
+ *      Then `className="bg-bg-main text-fg border-border"`, etc.
+ *
+ * For shadcn/ui's own token names (--background, --foreground,
+ * --primary, --muted, --card, --border, --ring), see the mapping
+ * comments below — wire them in `app/globals.css` so shadcn
+ * primitives (Button, DropdownMenu, ScrollArea…) pick up our
+ * palette automatically.
+ * ============================================================= */
+
+:root {
+  /* --- Brand --- */
+  --accent: #E8503A;                /* shadcn: --primary */
+  --accent-soft: rgba(232,80,58,0.12);
+  --accent-press: #cf432e;          /* hover/active state for primary */
+  --green: #46c07a;                 /* success / tool-success */
+
+  /* --- Radii --- */
+  --radius: 12px;                   /* shadcn: --radius (rounded-lg) */
+
+  /* --- Font stacks ---
+   * `serif` is applied to titles only (see CSS rules in index.html);
+   * Amita is loaded via Google Fonts for the brand wordmark. */
+  --font-sans:  -apple-system, "SF Pro Text", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+  --font-serif: "Source Serif 4", "Source Serif Pro", "Noto Serif SC", Georgia, "Songti SC", "STSong", serif;
+  --font-mono:  "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
+}
+
+/* =============================================================
+ * LIGHT theme (default)
+ * shadcn equivalents in comments — wire these in globals.css
+ * via @layer base { :root { --background: ... } }
+ * ============================================================= */
+html[data-theme="light"] {
+  --bg-window:   #ecebe7;          /* outer desktop shell */
+  --bg-sidebar:  #f4f2ee;          /* shadcn: --muted */
+  --bg-main:     #fbfaf8;          /* shadcn: --background */
+  --bg-elevated: #ffffff;          /* shadcn: --card / --popover */
+  --bg-hover:    rgba(0,0,0,0.045);
+  --bg-active:   rgba(0,0,0,0.07);  /* shadcn: --accent (subtle) */
+
+  --text:        #211f1d;          /* shadcn: --foreground */
+  --text-soft:   #555049;
+  --text-muted:  #97918a;          /* shadcn: --muted-foreground */
+  --text-faint:  #b7b1a9;
+
+  --border:        #e3e0da;        /* shadcn: --border */
+  --border-strong: #d6d2cb;        /* shadcn: --input */
+
+  --tool-bg:   #f2efe8;
+  --tool-head: #e9e6e0;
+  --tool-text: #34302b;
+
+  --shadow-win: 0 24px 60px rgba(0,0,0,0.18), 0 4px 14px rgba(0,0,0,0.10);
+  --timeline:   #d8d4cd;
+  --query-bg:     #ffffff;
+  --query-border: #e6e2db;
+}
+
+/* =============================================================
+ * DARK theme
+ * ============================================================= */
+html[data-theme="dark"] {
+  --bg-window:   #0c0c0d;
+  --bg-sidebar:  #161618;
+  --bg-main:     #1c1c1e;
+  --bg-elevated: #242427;
+  --bg-hover:    rgba(255,255,255,0.05);
+  --bg-active:   rgba(255,255,255,0.08);
+
+  --text:        #ececec;
+  --text-soft:   #c4c2bf;
+  --text-muted:  #8a8782;
+  --text-faint:  #5f5d59;
+
+  --border:        #2a2a2c;
+  --border-strong: #38383a;
+
+  --tool-bg:   #111113;
+  --tool-head: #18181a;
+  --tool-text: #cfcdc9;
+
+  --shadow-win: 0 24px 60px rgba(0,0,0,0.55), 0 4px 14px rgba(0,0,0,0.4);
+  --timeline:   #303032;
+  --query-bg:     #161618;
+  --query-border: #2c2c2e;
+}
