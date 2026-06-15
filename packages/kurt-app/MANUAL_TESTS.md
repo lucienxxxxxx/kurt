@@ -22,4 +22,5 @@ Prereq: `cd packages/kurt-app && bun install` (done once).
 3. Close the window / Ctrl-C the dev process.
    → **Expect:** clean exit, no orphaned process.
 
-Result: ____ (date / pass-fail). The starter content is replaced by the real UI in 6.1.
+Result: **PASS** (2026-06-15, user) — window opened titled "Kurt"; greet IPC returned
+"Hello, 123! You've been greeted from Rust!". The starter content is replaced by the real UI in 6.1.
