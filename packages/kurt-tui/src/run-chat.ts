@@ -19,7 +19,7 @@ import {
   type McpRuntime,
   type PermissionProvider,
 } from "kurt-agent";
-import { resolveConfig, makeSandbox, makeTools, maybeWorktree, modelFor, resolveWorkspace, systemPrompt, toolsForMode, type LaunchOptions } from "./agent.ts";
+import { resolveConfig, makeSandbox, makeTools, maybeWorktree, modelFor, resolveWorkspace, systemPrompt, toolsForMode, autoCompactThreshold, type LaunchOptions } from "./agent.ts";
 import { loadContextPrelude } from "./context-files.ts";
 import { loadMcpServers } from "./mcp-config.ts";
 import { loadSkills } from "./skills.ts";
@@ -96,7 +96,7 @@ export async function runChat(args: string[], opts: LaunchOptions = {}): Promise
 
   // Auto-compaction at ~75% of the context limit (same as the TUI).
   const compaction = autoCompaction({
-    thresholdTokens: Math.round(cfg.contextLimit * 0.75),
+    thresholdTokens: autoCompactThreshold(cfg.modelId, cfg.contextLimit),
     summarize: async (older, signal) => {
       let text = "";
       for await (const ev of model.stream(

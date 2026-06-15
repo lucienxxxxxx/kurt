@@ -284,6 +284,17 @@ export function makeSandbox(): SandboxProvider {
 }
 
 /**
+ * Auto-compaction trigger = 75% of the EFFECTIVE context window, i.e. the smaller
+ * of the configured contextLimit and the model's real maximum (from capabilities).
+ * Clamping to the real max means a high `contextLimit` (status-bar display) can't
+ * push the trigger so late that we overflow what the model can actually hold.
+ */
+export function autoCompactThreshold(modelId: string, contextLimit: number): number {
+  const real = capabilitiesFor(modelId).maxContextTokens;
+  return Math.round(Math.min(contextLimit, real) * 0.75);
+}
+
+/**
  * Build the sandboxed tool set rooted at the workspace.
  * @param codeTemp  ephemeral SessionWorkspace for run_code scripts (kept out of the user's dir)
  * @param ws        the agent's working area (WORKSPACE_DIR + import/export)

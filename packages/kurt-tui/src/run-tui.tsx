@@ -19,6 +19,7 @@ import {
   resolveWorkspace,
   systemPrompt,
   toolsForMode,
+  autoCompactThreshold,
   type LaunchOptions,
   type WorktreeSession,
 } from "./agent.ts";
@@ -177,7 +178,7 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
   // Auto-compaction: the engine fires it when estimated tokens cross ~75% of the
   // context limit, so long sessions don't overflow the window (manual /compact still works).
   const autoCompact: CompactionPolicy = autoCompaction({
-    thresholdTokens: Math.round(cfg.contextLimit * 0.75),
+    thresholdTokens: autoCompactThreshold(cfg.modelId, cfg.contextLimit),
     summarize,
   });
 

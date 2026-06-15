@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { ToolHub, type Tool } from "kurt-agent";
 import { maybeWorktree } from "./agent.ts";
 import {
+  autoCompactThreshold,
   normalizeMode,
   parseLaunchFlags,
   resolveWorkspace,
@@ -110,6 +111,19 @@ describe("parseLaunchFlags", () => {
   test("--no-mcp is a boolean flag; default off", () => {
     expect(parseLaunchFlags(["--no-mcp"]).options.noMcp).toBe(true);
     expect(parseLaunchFlags(["chat"]).options.noMcp).toBeUndefined();
+  });
+});
+
+describe("autoCompactThreshold", () => {
+  test("75% of the configured limit when it's within the model's window", () => {
+    expect(autoCompactThreshold("deepseek-v4-flash", 128_000)).toBe(96_000); // 128k < 1M → honor config
+  });
+
+  test("clamps to the model's real max so it can't trigger past the real window", () => {
+    // deepseek-v4-flash real window = 1,048,576; a 4M display limit must clamp.
+    expect(autoCompactThreshold("deepseek-v4-flash", 4_000_000)).toBe(Math.round(1_048_576 * 0.75));
+    // unknown model real window = 128k; a 1M display limit clamps to it.
+    expect(autoCompactThreshold("some-unknown-model", 1_000_000)).toBe(96_000);
   });
 });
 
