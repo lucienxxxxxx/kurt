@@ -7,7 +7,7 @@
  * event (to be SSE-upserted by _id on the client). No I/O — unit-testable.
  */
 
-import type { Event } from "kurt-agent";
+import type { Event, Message } from "kurt-agent";
 import type { Step } from "./types.ts";
 
 export class StepAccumulator {
@@ -110,6 +110,49 @@ export class StepAccumulator {
     const idx = this.#toolIndex.get(callId);
     return idx === undefined ? undefined : this.#steps[idx];
   }
+}
+
+/**
+ * Reconstruct a saved conversation's `Message[]` into `Step[]` for reload — the
+ * inverse of how the live loop builds steps from events. Shares the tool-subtype
+ * mapping with StepAccumulator (one source of truth). Streamed thinking isn't
+ * persisted as a separate block unless the provider replayed it, so reloaded
+ * thinking may be absent; that's expected.
+ */
+export function messagesToSteps(messages: Message[]): Step[] {
+  const steps: Step[] = [];
+  const toolByUseId = new Map<string, Step>();
+  let id = 0;
+  const nextId = () => ++id;
+
+  for (const msg of messages) {
+    if (msg.role === "user") {
+      const text = msg.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
+      if (text) steps.push({ _id: nextId(), type: "user", text });
+      continue;
+    }
+    if (msg.role === "assistant") {
+      for (const b of msg.content) {
+        if (b.type === "thinking" && b.text) steps.push({ _id: nextId(), type: "thinking", text: b.text });
+        else if (b.type === "text" && b.text) steps.push({ _id: nextId(), type: "text", text: b.text });
+        else if (b.type === "tool_use") {
+          const step = newToolStep(nextId(), b.name, b.input);
+          toolByUseId.set(b.id, step);
+          steps.push(step);
+        }
+      }
+      continue;
+    }
+    // role === "tool": attach each result to its matching tool/skill step.
+    for (const b of msg.content) {
+      if (b.type !== "tool_result") continue;
+      const step = toolByUseId.get(b.toolUseId);
+      if (!step) continue;
+      if (step.type === "tool") { step.out = b.content; step.isError = b.isError; }
+      else if (step.type === "skill") { step.output = stripSkillHeader(b.content); step.isError = b.isError; }
+    }
+  }
+  return steps;
 }
 
 /** Map a tool_call to the right step subtype (read_file → read, skill → skill, else tool). */

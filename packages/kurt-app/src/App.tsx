@@ -1,13 +1,11 @@
-/** App root. UI state + thread rendering (ported from prototype/app.jsx). Runs are
- *  driven by the real engine via kurt-bridge (SSE) — see startRun. Sidebar recents
- *  remain the mock demos for now (browsable); a "New chat" send executes a REAL
- *  agent run. Live session list/reload from the bridge comes in the next increment. */
+/** App root. UI state + thread rendering (layout ported from prototype/app.jsx).
+ *  Runs and sessions are real, via kurt-bridge: startRun streams a turn over SSE;
+ *  the sidebar lists the bridge's sessions and loading one reconstructs its steps. */
 
-import { useEffect, useRef, useState } from "react";
-import type { Lang, Loc, Panel, QueuedMsg, RawStep, Step, Theme } from "./types.ts";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Lang, Loc, Panel, QueuedMsg, SessionMeta, Step, Theme } from "./types.ts";
 import { T, tr } from "./i18n/strings.ts";
-import { sessions, recents, FILE_CONTENT } from "./mocks/agent.ts";
-import { runStream } from "./lib/bridge.ts";
+import { runStream, listSessions, getSession } from "./lib/bridge.ts";
 import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
@@ -18,7 +16,6 @@ import logo from "./assets/kurt_logo.svg";
 
 let _uid = 1000;
 const uid = () => ++_uid;
-const withIds = (steps: RawStep[]): Step[] => steps.map((s) => ({ ...s, _id: uid() }) as Step);
 
 const persisted = <V extends string>(key: string, fallback: V): V => {
   try { const v = localStorage.getItem(key); return v === null ? fallback : (v as V); } catch { return fallback; }
@@ -29,9 +26,10 @@ export default function App() {
   const [lang, setLang] = useState<Lang>(() => persisted<Lang>("kurt-lang", "zh"));
   const [view, setView] = useState<"chat" | "settings">("chat");
 
-  const [thread, setThread] = useState<Step[]>(() => withIds(sessions.s1!.steps));
-  const [activeId, setActiveId] = useState<string | null>("s1");
-  const [titleEntry, setTitleEntry] = useState<Loc>(sessions.s1!.title);
+  const [thread, setThread] = useState<Step[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [titleEntry, setTitleEntry] = useState<Loc>(T.convNew);
+  const [sessionList, setSessionList] = useState<SessionMeta[]>([]);
 
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const [input, setInput] = useState("");
@@ -44,9 +42,6 @@ export default function App() {
   const [panels, setPanels] = useState<Panel[]>([]);
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
 
-  // Bridge run plumbing: abort the in-flight run; the real session id for this
-  // chat (so follow-up turns continue it); bridge step _id → app _id (bridge
-  // numbers restart at 1 per run, so we remap to keep thread ids globally unique).
   const abortRef = useRef<AbortController | null>(null);
   const realSessionRef = useRef<string | null>(null);
 
@@ -56,6 +51,14 @@ export default function App() {
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => { const el = scrollRef.current; if (el && running) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [thread, liveId, running]);
   useEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = 0; }, [activeId]);
+
+  const refreshSessions = useCallback(async (): Promise<void> => {
+    try {
+      const list = await listSessions(await resolveBridgeUrl());
+      setSessionList(list.map((s) => ({ id: s.id, title: s.title || tr(T.convNew, "en"), icon: "chat" })));
+    } catch { /* bridge not ready — leave the list as-is */ }
+  }, []);
+  useEffect(() => { void refreshSessions(); }, [refreshSessions]);
 
   const upsert = (step: Step): void =>
     setThread((t) => {
@@ -69,7 +72,6 @@ export default function App() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setRunning(true);
-    setRunningId(activeId);
     const idMap = new Map<number, number>();
     try {
       const base = await resolveBridgeUrl();
@@ -77,7 +79,7 @@ export default function App() {
         base,
         { sessionId: realSessionRef.current ?? undefined, text },
         {
-          onSession: (id) => { realSessionRef.current = id; },
+          onSession: (id) => { realSessionRef.current = id; setActiveId(id); setRunningId(id); },
           onStep: (bridgeStep) => {
             let appId = idMap.get(bridgeStep._id);
             if (appId === undefined) { appId = uid(); idMap.set(bridgeStep._id, appId); }
@@ -91,7 +93,6 @@ export default function App() {
     } finally {
       abortRef.current = null;
       setLiveId(null);
-      // Drain one queued message (continues the same real session).
       const [next, ...rest] = queuedMsgsRef.current;
       if (next) {
         queuedMsgsRef.current = rest;
@@ -101,6 +102,7 @@ export default function App() {
       } else {
         setRunning(false);
         setRunningId(null);
+        void refreshSessions(); // the new/updated session now shows in the sidebar
       }
     }
   };
@@ -147,9 +149,9 @@ export default function App() {
     });
   };
   const openFile = (file: string): void => {
-    const content = FILE_CONTENT[file] ?? `# ${file}\n\n(No preview available)`;
+    // Real file preview (serving content from the bridge) is a later touch.
     const isCode = /\.(js|ts|json|py|rs|css)$/.test(file);
-    openPanel({ id: "file:" + file, type: "file", title: file.split("/").pop()!, subtitle: file, content, forceCode: isCode });
+    openPanel({ id: "file:" + file, type: "file", title: file.split("/").pop()!, subtitle: file, content: `# ${file}\n\n(No preview available yet)`, forceCode: isCode });
   };
   const openToolOutput = (info: OpenOutput): void => {
     openPanel({ id: "output:" + info.stepId, type: "output", title: info.name, subtitle: info.title, content: info.content, forceCode: true });
@@ -157,15 +159,18 @@ export default function App() {
 
   const toggleStep = (id: number): void => setCollapsed((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
-  const loadSession = (id: string): void => {
+  const loadSession = async (id: string): Promise<void> => {
     stopRun();
-    const sess = sessions[id];
-    if (!sess) return;
-    realSessionRef.current = null; // mock demos aren't real bridge sessions
-    setView("chat");
-    setThread(withIds(sess.steps));
-    setActiveId(id); setTitleEntry(sess.title);
-    setCollapsed(new Set()); setPanels([]); setActivePanelId(null);
+    try {
+      const detail = await getSession(await resolveBridgeUrl(), id);
+      if (!detail) return;
+      realSessionRef.current = id;
+      setView("chat");
+      setThread(detail.steps);
+      setActiveId(id);
+      setTitleEntry(detail.title || T.convNew);
+      setCollapsed(new Set()); setPanels([]); setActivePanelId(null);
+    } catch { /* ignore */ }
   };
   const newChat = (): void => {
     stopRun();
@@ -186,7 +191,7 @@ export default function App() {
 
   return (
     <div className="window">
-      <Sidebar recents={recents} activeId={activeId} runningId={runningId} onPick={loadSession} onNewChat={newChat}
+      <Sidebar recents={sessionList} activeId={activeId} runningId={runningId} onPick={loadSession} onNewChat={newChat}
         lang={lang} onOpenSettings={() => setView(view === "settings" ? "chat" : "settings")} />
 
       <div className="main">

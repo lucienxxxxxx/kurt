@@ -8,6 +8,7 @@
  */
 
 export type Step =
+  | { _id: number; type: "user"; text: string } // only in reloaded sessions (live runs don't emit user steps)
   | { _id: number; type: "thinking"; sec?: number; text: string }
   | { _id: number; type: "text"; text: string }
   | { _id: number; type: "tool"; name: string; title: string; cmd: string; out: string; isError?: boolean }

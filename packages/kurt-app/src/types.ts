@@ -31,7 +31,7 @@ export type RawStep = WithoutId<Step> & { _id?: number };
 
 export interface SessionMeta {
   id: string;
-  title: LocalizedString;
+  title: Loc;
   icon: string;
 }
 

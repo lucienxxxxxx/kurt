@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { StepAccumulator } from "./events.ts";
+import type { Message } from "kurt-agent";
+import { StepAccumulator, messagesToSteps } from "./events.ts";
 
 describe("StepAccumulator", () => {
   test("thinking deltas accumulate into one step; closed with elapsed sec on next event", () => {
@@ -64,5 +65,37 @@ describe("StepAccumulator", () => {
     const acc = new StepAccumulator();
     expect(acc.apply({ type: "tool_output", id: "nope", text: "x" })).toEqual([]);
     expect(acc.apply({ type: "tool_result", id: "nope", content: "x", isError: false })).toEqual([]);
+  });
+});
+
+describe("messagesToSteps (reload reconstruction)", () => {
+  test("rebuilds user/thinking/text/tool steps and attaches tool results", () => {
+    const messages: Message[] = [
+      { role: "user", content: [{ type: "text", text: "tidy up" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "thinking", text: "plan it" },
+          { type: "text", text: "On it." },
+          { type: "tool_use", id: "t1", name: "shell", input: { command: "ls" } },
+        ],
+      },
+      { role: "tool", content: [{ type: "tool_result", toolUseId: "t1", content: "a\nb", isError: false }] },
+      { role: "assistant", content: [{ type: "text", text: "Done." }] },
+    ];
+    const steps = messagesToSteps(messages);
+    expect(steps.map((s) => s.type)).toEqual(["user", "thinking", "text", "tool", "text"]);
+    expect(steps[0]).toMatchObject({ type: "user", text: "tidy up" });
+    expect(steps[3]).toMatchObject({ type: "tool", name: "shell", cmd: "ls", out: "a\nb", isError: false });
+    expect(steps.map((s) => s._id)).toEqual([1, 2, 3, 4, 5]); // unique ids
+  });
+
+  test("read_file → read step; empty user message skipped", () => {
+    const messages: Message[] = [
+      { role: "user", content: [] },
+      { role: "assistant", content: [{ type: "tool_use", id: "r1", name: "read_file", input: { path: "/a", offset: 1, limit: 5 } }] },
+    ];
+    const steps = messagesToSteps(messages);
+    expect(steps).toEqual([{ _id: 1, type: "read", file: "/a", lines: "1-5" }]);
   });
 });

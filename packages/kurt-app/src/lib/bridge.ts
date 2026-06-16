@@ -22,6 +22,14 @@ export interface SessionInfo {
   messageCount: number;
 }
 
+/** GET /sessions/:id — metadata + the conversation reconstructed into steps. */
+export interface SessionDetail {
+  id: string;
+  title: string;
+  updatedAt: number;
+  steps: Step[];
+}
+
 export interface RunHandlers {
   onSession?: (id: string, title: string) => void;
   onStep?: (step: Step) => void;
@@ -95,6 +103,11 @@ export async function listSessions(baseUrl: string, workspace?: string): Promise
   const url = workspace ? `${baseUrl}/sessions?workspace=${encodeURIComponent(workspace)}` : `${baseUrl}/sessions`;
   const res = await fetch(url);
   return res.ok ? ((await res.json()) as SessionInfo[]) : [];
+}
+
+export async function getSession(baseUrl: string, id: string): Promise<SessionDetail | null> {
+  const res = await fetch(`${baseUrl}/sessions/${encodeURIComponent(id)}`);
+  return res.ok ? ((await res.json()) as SessionDetail) : null;
 }
 
 export async function deleteSession(baseUrl: string, id: string): Promise<void> {

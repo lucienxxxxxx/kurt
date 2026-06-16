@@ -101,10 +101,11 @@ describe("bridge server /run (SSE)", () => {
     const list = (await (await fetch(h.url + `/sessions?workspace=${encodeURIComponent(ws)}`)).json()) as { id: string; messageCount: number }[];
     expect(list.some((s) => s.id === id)).toBe(true);
 
-    // second turn on the same session → history grows
+    // second turn on the same session → history grows; reload returns reconstructed steps
     await run(h.url, { sessionId: id, text: "again" });
-    const rec = (await (await fetch(h.url + `/sessions/${encodeURIComponent(id)}`)).json()) as { messages: unknown[] };
-    expect(rec.messages.length).toBeGreaterThanOrEqual(4); // user+assistant ×2 turns
+    const rec = (await (await fetch(h.url + `/sessions/${encodeURIComponent(id)}`)).json()) as { steps: { type: string }[] };
+    expect(rec.steps.length).toBeGreaterThanOrEqual(4); // user+text ×2 turns
+    expect(rec.steps.filter((s) => s.type === "user")).toHaveLength(2);
   }, 20_000);
 
   test("DELETE removes a session", async () => {

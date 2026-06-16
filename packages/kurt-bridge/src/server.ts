@@ -12,6 +12,7 @@
  */
 
 import { runTurn, type Runtime } from "./runtime.ts";
+import { messagesToSteps } from "./events.ts";
 import type { RunFrame, SessionInfo } from "./types.ts";
 
 export interface ServerHandle {
@@ -45,7 +46,8 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
 
       if (pathname === "/sessions") {
         if (req.method === "GET") {
-          const workspace = url.searchParams.get("workspace") ?? undefined;
+          // Default to THIS bridge's workspace so the desktop sees just its own history.
+          const workspace = url.searchParams.get("workspace") ?? rt.workspace;
           return json((await rt.store.list(workspace)).map(toInfo));
         }
         if (req.method === "POST") {
@@ -60,7 +62,9 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
         const id = decodeURIComponent(m[1]!);
         if (req.method === "GET") {
           const rec = await rt.store.load(id);
-          return rec ? json(rec) : json({ error: "not found" }, 404);
+          if (!rec) return json({ error: "not found" }, 404);
+          // Reconstruct the stored messages into renderable steps for the desktop.
+          return json({ id: rec.id, title: rec.title, updatedAt: rec.updatedAt, steps: messagesToSteps(rec.messages) });
         }
         if (req.method === "DELETE") {
           await rt.store.remove(id);
