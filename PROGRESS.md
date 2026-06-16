@@ -4,8 +4,8 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-17 · `main` @ `eea01e1`(修 request_write_access「无此工具」:移入全模式可用的 READ_ONLY 基集 + 接受 `path` 别名;前置 `762c5af` 桌面端打磨)
-- **门禁**:kurt-agent **145** · kurt-tui **70** · kurt-bridge **22** · kurt-app build+**Vitest 20**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
+- **最后更新**:2026-06-17 · `main` @ `b7d1e3e`(桌面端打磨:用户消息支持 markdown + 授权框改为输入框上方内联面板;前置 `eea01e1` 修 request_write_access)
+- **门禁**:kurt-agent **145** · kurt-tui **70** · kurt-bridge **22** · kurt-app build+**Vitest 26**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
 
@@ -43,6 +43,7 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
 | 6.4c | **API key + 模型/effort ✓**:Settings →「模型 / API」面板配置 key(`~/.kurt/desktop.json` 0600,实时重建模型);composer 模型菜单列真实模型(`/info`)、模型/effort 随 `/run` 驱动真实 per-run 配置(`rt.modelFor`)。 | ✅ 完成 |
 | 6.4-打磨 | composer 新增 **chat/agent/plan 模式**(bridge 按模式过滤工具 + per-mode prompt)、**thinking 开关**、bridge 加 **request_write_access** + update_plan;窗口可拖动(`core:window:allow-start-dragging`);用户↔回复间距加大 | ✅ 完成 |
 | 6.4-修 | **request_write_access「无此工具」修复**:① 从 agent-only 移入全模式 READ_ONLY 基集(审批门控,只读模式下仅放开工作区外目录的**读**);② 接受模型常传的 `{"path":…}` 作为 `directory` 别名;③ prompt 去掉「仅 agent 模式」措辞。回归测试覆盖 path/directory/deny/invalid + 全模式可见。**注意:bridge 不热重载,需完全退出并重启 `tauri dev` 才生效。** | ✅ 完成 |
+| 6.4-打磨2 | **用户消息支持 markdown**(用户气泡走与 agent 回复相同的 `MdBlock`:粗体/行内码/标题/列表/代码块);**授权框改内联面板**:不再是居中遮罩弹窗,而是渲染在 composer 内、输入框正上方,等宽、同 16px 圆角,从输入框背后向上升起(`approvalRise`),其余窗口保持可交互。Markdown.test + Approval.test(断言非 overlay)。 | ✅ 完成 |
 | 6.4d | 打包:`bun build --compile` bridge → Tauri sidecar 二进制 + 代码签名/公证 `.app` | ⏸ 暂缓(用户选择)—— 桌面端**功能已完整**,停在 `tauri dev` 形态;打包时再做(需 Apple 签名身份,或先出未签名本地构建) |
 
 ## 已实现(main)
