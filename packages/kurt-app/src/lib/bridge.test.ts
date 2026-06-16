@@ -1,0 +1,74 @@
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { runStream, listSessions, type RunFrame } from "./bridge.ts";
+import type { Step } from "../types.ts";
+
+afterEach(() => vi.restoreAllMocks());
+
+function sseResponse(frames: RunFrame[]): Response {
+  const enc = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(c) {
+      for (const f of frames) c.enqueue(enc.encode(`data: ${JSON.stringify(f)}\n\n`));
+      c.close();
+    },
+  });
+  return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+}
+
+describe("runStream", () => {
+  test("dispatches session, step (upsert by _id), usage frames; resolves on done", async () => {
+    const frames: RunFrame[] = [
+      { kind: "session", id: "s1", title: "do it" },
+      { kind: "step", step: { _id: 1, type: "thinking", text: "hmm" } },
+      { kind: "step", step: { _id: 2, type: "text", text: "Hello" } },
+      { kind: "step", step: { _id: 2, type: "text", text: "Hello world" } }, // same _id, updated
+      { kind: "usage", inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      { kind: "done" },
+    ];
+    vi.stubGlobal("fetch", vi.fn(async () => sseResponse(frames)));
+
+    const seenSteps: Step[] = [];
+    let session = "";
+    let usage = 0;
+    await runStream("http://x", { text: "do it" }, {
+      onSession: (id) => { session = id; },
+      onStep: (s) => seenSteps.push(s),
+      onUsage: (u) => { usage = u.totalTokens; },
+    });
+
+    expect(session).toBe("s1");
+    expect(usage).toBe(15);
+    // last write for _id 2 wins after upsert
+    const byId = new Map<number, Step>();
+    for (const s of seenSteps) byId.set(s._id, s);
+    expect(byId.get(2)).toMatchObject({ type: "text", text: "Hello world" });
+    expect(byId.get(1)).toMatchObject({ type: "thinking" });
+  });
+
+  test("error frame → onError", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => sseResponse([{ kind: "error", message: "boom" }])));
+    let msg = "";
+    await runStream("http://x", { text: "t" }, { onError: (m) => { msg = m; } });
+    expect(msg).toBe("boom");
+  });
+
+  test("non-ok response → onError, no throw", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 500 })));
+    let msg = "";
+    await runStream("http://x", { text: "t" }, { onError: (m) => { msg = m; } });
+    expect(msg).toContain("500");
+  });
+});
+
+describe("listSessions", () => {
+  test("returns the parsed array", async () => {
+    const data = [{ id: "a", title: "A", updatedAt: 1, messageCount: 2 }];
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(data), { status: 200 })));
+    expect(await listSessions("http://x", "/ws")).toEqual(data);
+  });
+
+  test("non-ok → empty", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 500 })));
+    expect(await listSessions("http://x")).toEqual([]);
+  });
+});

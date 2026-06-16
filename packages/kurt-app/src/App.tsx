@@ -1,12 +1,14 @@
-/** App root (ported from prototype/app.jsx). Holds UI state, groups the thread
- *  into per-user-message segments, and (for 6.1) fakes the live run with timers
- *  over the mock `liveRun`. In 6.3 the timer loop is replaced by the kurt-bridge
- *  SSE stream; the rendering + state shape stay the same. */
+/** App root. UI state + thread rendering (ported from prototype/app.jsx). Runs are
+ *  driven by the real engine via kurt-bridge (SSE) — see startRun. Sidebar recents
+ *  remain the mock demos for now (browsable); a "New chat" send executes a REAL
+ *  agent run. Live session list/reload from the bridge comes in the next increment. */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { Lang, Panel, QueuedMsg, RawStep, Step, Theme } from "./types.ts";
+import { useEffect, useRef, useState } from "react";
+import type { Lang, Loc, Panel, QueuedMsg, RawStep, Step, Theme } from "./types.ts";
 import { T, tr } from "./i18n/strings.ts";
-import { sessions, recents, liveRun, FILE_CONTENT } from "./mocks/agent.ts";
+import { sessions, recents, FILE_CONTENT } from "./mocks/agent.ts";
+import { runStream } from "./lib/bridge.ts";
+import { bridgeUrl } from "./lib/bridgeUrl.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
 import { Settings } from "./components/Settings.tsx";
@@ -29,13 +31,12 @@ export default function App() {
 
   const [thread, setThread] = useState<Step[]>(() => withIds(sessions.s1!.steps));
   const [activeId, setActiveId] = useState<string | null>("s1");
-  const [titleEntry, setTitleEntry] = useState(sessions.s1!.title);
+  const [titleEntry, setTitleEntry] = useState<Loc>(sessions.s1!.title);
 
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const [input, setInput] = useState("");
 
   const [running, setRunning] = useState(false);
-  const [, setPaused] = useState(false);
   const [liveId, setLiveId] = useState<number | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
   const [queuedMsgs, setQueuedMsgs] = useState<QueuedMsg[]>([]);
@@ -43,108 +44,131 @@ export default function App() {
   const [panels, setPanels] = useState<Panel[]>([]);
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
 
-  const queueRef = useRef<RawStep[]>([]);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pausedRef = useRef(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  // Bridge run plumbing: abort the in-flight run; the real session id for this
+  // chat (so follow-up turns continue it); bridge step _id → app _id (bridge
+  // numbers restart at 1 per run, so we remap to keep thread ids globally unique).
+  const abortRef = useRef<AbortController | null>(null);
+  const realSessionRef = useRef<string | null>(null);
 
   useEffect(() => { document.documentElement.setAttribute("data-theme", theme); try { localStorage.setItem("kurt-theme", theme); } catch { /* ignore */ } }, [theme]);
   useEffect(() => { document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en"); try { localStorage.setItem("kurt-lang", lang); } catch { /* ignore */ } }, [lang]);
 
+  const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => { const el = scrollRef.current; if (el && running) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [thread, liveId, running]);
   useEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = 0; }, [activeId]);
 
-  const clearTimer = () => { if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; } };
+  const upsert = (step: Step): void =>
+    setThread((t) => {
+      const i = t.findIndex((s) => s._id === step._id);
+      if (i >= 0) { const next = t.slice(); next[i] = step; return next; }
+      return [...t, step];
+    });
 
-  const scheduleNext = useCallback(function next() {
-    if (pausedRef.current) return;
-    if (queueRef.current.length === 0) {
-      const pending = queuedMsgsRef.current;
-      if (pending.length > 0) {
-        const [first, ...rest] = pending;
+  /** Execute one real run against the bridge, streaming steps into the thread. */
+  const startRun = async (text: string): Promise<void> => {
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setRunning(true);
+    setRunningId(activeId);
+    const idMap = new Map<number, number>();
+    try {
+      await runStream(
+        bridgeUrl(),
+        { sessionId: realSessionRef.current ?? undefined, text },
+        {
+          onSession: (id) => { realSessionRef.current = id; },
+          onStep: (bridgeStep) => {
+            let appId = idMap.get(bridgeStep._id);
+            if (appId === undefined) { appId = uid(); idMap.set(bridgeStep._id, appId); }
+            upsert({ ...bridgeStep, _id: appId } as Step);
+            setLiveId(appId);
+          },
+          onError: (message) => upsert({ _id: uid(), type: "text", text: `⚠ ${message}` }),
+        },
+        ctrl.signal,
+      );
+    } finally {
+      abortRef.current = null;
+      setLiveId(null);
+      // Drain one queued message (continues the same real session).
+      const [next, ...rest] = queuedMsgsRef.current;
+      if (next) {
         queuedMsgsRef.current = rest;
         setQueuedMsgs(rest);
-        const userStep: Step = { type: "user", text: { zh: first!.text, en: first!.text }, _id: uid() };
-        setThread((t) => [...t, userStep]);
-        queueRef.current = liveRun.slice();
-        timerRef.current = setTimeout(next, 480);
+        setThread((t) => [...t, { _id: uid(), type: "user", text: next.text }]);
+        void startRun(next.text);
       } else {
-        setRunning(false); setLiveId(null); setRunningId(null);
+        setRunning(false);
+        setRunningId(null);
       }
-      return;
     }
-    const step = queueRef.current.shift()!;
-    const s = { ...step, _id: uid() } as Step;
-    setThread((t) => [...t, s]);
-    setLiveId(s._id);
-    const delay = step.type === "tool" ? 1150 : step.type === "thinking" ? 1000 : step.type === "read" ? 650 : 850;
-    timerRef.current = setTimeout(next, delay);
-  }, []);
+  };
 
-  const stopRun = useCallback(() => {
-    clearTimer(); queueRef.current = []; pausedRef.current = false;
-    queuedMsgsRef.current = []; setQueuedMsgs([]);
-    setPaused(false); setRunning(false); setLiveId(null); setRunningId(null);
-  }, []);
-
-  const send = () => {
+  const send = (): void => {
     const text = input.trim();
     if (!text) return;
     setInput("");
     if (running) {
       const item = { id: uid(), text };
-      const next = [...queuedMsgsRef.current, item];
-      queuedMsgsRef.current = next;
-      setQueuedMsgs(next);
+      const nextQ = [...queuedMsgsRef.current, item];
+      queuedMsgsRef.current = nextQ;
+      setQueuedMsgs(nextQ);
       return;
     }
-    const userStep: Step = { type: "user", text: { zh: text, en: text }, _id: uid() };
-    setThread((t) => [...t, userStep]);
-    queueRef.current = liveRun.slice();
-    pausedRef.current = false;
-    setPaused(false); setRunning(true); setRunningId(activeId);
-    clearTimer();
-    timerRef.current = setTimeout(scheduleNext, 480);
+    setThread((t) => [...t, { _id: uid(), type: "user", text }]);
+    void startRun(text);
   };
 
-  const cancelQueued = (id: number) => {
+  const stopRun = (): void => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    queuedMsgsRef.current = [];
+    setQueuedMsgs([]);
+    setRunning(false);
+    setLiveId(null);
+    setRunningId(null);
+  };
+
+  const cancelQueued = (id: number): void => {
     const next = queuedMsgsRef.current.filter((m) => m.id !== id);
     queuedMsgsRef.current = next;
     setQueuedMsgs(next);
   };
 
-  const openPanel = (panel: Panel) => {
+  const openPanel = (panel: Panel): void => {
     setPanels((prev) => { if (prev.find((p) => p.id === panel.id)) { setActivePanelId(panel.id); return prev; } setActivePanelId(panel.id); return [...prev, panel]; });
   };
-  const closePanel = (id: string) => {
+  const closePanel = (id: string): void => {
     setPanels((prev) => {
       const next = prev.filter((p) => p.id !== id);
       setActivePanelId((cur) => (cur === id ? (next.length ? next[next.length - 1]!.id : null) : cur));
       return next;
     });
   };
-  const openFile = (file: string) => {
+  const openFile = (file: string): void => {
     const content = FILE_CONTENT[file] ?? `# ${file}\n\n(No preview available)`;
     const isCode = /\.(js|ts|json|py|rs|css)$/.test(file);
     openPanel({ id: "file:" + file, type: "file", title: file.split("/").pop()!, subtitle: file, content, forceCode: isCode });
   };
-  const openToolOutput = (info: OpenOutput) => {
+  const openToolOutput = (info: OpenOutput): void => {
     openPanel({ id: "output:" + info.stepId, type: "output", title: info.name, subtitle: info.title, content: info.content, forceCode: true });
   };
 
-  const toggleStep = (id: number) => setCollapsed((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const toggleStep = (id: number): void => setCollapsed((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
-  const loadSession = (id: string) => {
+  const loadSession = (id: string): void => {
     stopRun();
     const sess = sessions[id];
     if (!sess) return;
+    realSessionRef.current = null; // mock demos aren't real bridge sessions
     setView("chat");
     setThread(withIds(sess.steps));
     setActiveId(id); setTitleEntry(sess.title);
     setCollapsed(new Set()); setPanels([]); setActivePanelId(null);
   };
-  const newChat = () => {
+  const newChat = (): void => {
     stopRun();
+    realSessionRef.current = null;
     setView("chat");
     setThread([]); setActiveId(null); setTitleEntry(T.convNew); setCollapsed(new Set());
     setPanels([]); setActivePanelId(null);
@@ -173,7 +197,7 @@ export default function App() {
               <div className="main-top" data-tauri-drag-region>
                 <div className="conv-title-wrap" data-value={tr(titleEntry, lang)}>
                   <input className="conv-title-input" value={tr(titleEntry, lang)} spellCheck={false}
-                    onChange={(e) => setTitleEntry((prev) => ({ ...prev, [lang]: e.target.value }))} />
+                    onChange={(e) => setTitleEntry((prev) => (typeof prev === "string" ? e.target.value : { ...prev, [lang]: e.target.value }))} />
                 </div>
               </div>
 
@@ -195,7 +219,7 @@ export default function App() {
                       <div className="thread-inner">
                         {segments.map((seg, i) => (
                           <div key={i}>
-                            {seg.user && <div className="query-box">{tr(seg.user.type === "user" ? seg.user.text : null, lang)}</div>}
+                            {seg.user && <div className="query-box">{tr(seg.user.type === "user" ? seg.user.text : "", lang)}</div>}
                             {seg.steps.length > 0 && <div className="timeline">{seg.steps.map((s) => renderStep(s, stepCtx))}</div>}
                           </div>
                         ))}

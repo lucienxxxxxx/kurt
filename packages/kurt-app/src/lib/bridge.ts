@@ -1,0 +1,111 @@
+/**
+ * Client for the kurt-bridge HTTP/SSE API (the engine, run by a local Bun
+ * process). Mirrors the bridge's wire contract (kurt-bridge/src/types.ts) — these
+ * shapes must stay in sync.
+ */
+
+import type { Step } from "../types.ts";
+
+/** SSE frames the bridge streams during a run. */
+export type RunFrame =
+  | { kind: "session"; id: string; title: string }
+  | { kind: "step"; step: Step } // a step created/changed — upsert by _id
+  | { kind: "usage"; inputTokens: number; outputTokens: number; totalTokens: number }
+  | { kind: "done" }
+  | { kind: "aborted"; reason: string }
+  | { kind: "error"; message: string };
+
+export interface SessionInfo {
+  id: string;
+  title: string;
+  updatedAt: number;
+  messageCount: number;
+}
+
+export interface RunHandlers {
+  onSession?: (id: string, title: string) => void;
+  onStep?: (step: Step) => void;
+  onUsage?: (u: { inputTokens: number; outputTokens: number; totalTokens: number }) => void;
+  onError?: (message: string) => void;
+  onAborted?: (reason: string) => void;
+}
+
+/**
+ * POST /run and consume the SSE stream, dispatching each frame to `handlers`.
+ * Resolves when the run ends (done/error/abort or stream close). Pass a signal
+ * to stop the run (closing the stream aborts it server-side).
+ */
+export async function runStream(
+  baseUrl: string,
+  body: { sessionId?: string; text: string },
+  handlers: RunHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${baseUrl}/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    handlers.onError?.(`bridge /run failed: ${res.status}`);
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const block = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        dispatch(block, handlers);
+      }
+    }
+  } catch (err) {
+    if ((err as Error)?.name !== "AbortError") handlers.onError?.((err as Error)?.message ?? String(err));
+  }
+}
+
+function dispatch(block: string, handlers: RunHandlers): void {
+  const line = block.split("\n").find((l) => l.startsWith("data: "));
+  if (!line) return;
+  let frame: RunFrame;
+  try {
+    frame = JSON.parse(line.slice(6)) as RunFrame;
+  } catch {
+    return;
+  }
+  switch (frame.kind) {
+    case "session": handlers.onSession?.(frame.id, frame.title); break;
+    case "step": handlers.onStep?.(frame.step); break;
+    case "usage": handlers.onUsage?.(frame); break;
+    case "error": handlers.onError?.(frame.message); break;
+    case "aborted": handlers.onAborted?.(frame.reason); break;
+    case "done": break;
+  }
+}
+
+export async function listSessions(baseUrl: string, workspace?: string): Promise<SessionInfo[]> {
+  const url = workspace ? `${baseUrl}/sessions?workspace=${encodeURIComponent(workspace)}` : `${baseUrl}/sessions`;
+  const res = await fetch(url);
+  return res.ok ? ((await res.json()) as SessionInfo[]) : [];
+}
+
+export async function deleteSession(baseUrl: string, id: string): Promise<void> {
+  await fetch(`${baseUrl}/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export async function health(baseUrl: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${baseUrl}/health`);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}

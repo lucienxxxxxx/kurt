@@ -10,14 +10,18 @@ export interface LocalizedString {
   en: string;
 }
 
+/** A localizable field: bilingual fixtures use {zh,en}; live bridge steps use a
+ *  plain string (single-language engine output). `tr()` handles both. */
+export type Loc = LocalizedString | string;
+
 /** One step in a thread. Discriminated union on `type`. */
 export type Step =
-  | { _id: number; type: "user"; text: LocalizedString }
-  | { _id: number; type: "thinking"; sec?: number; text: LocalizedString }
-  | { _id: number; type: "text"; text: LocalizedString }
-  | { _id: number; type: "tool"; name: string; title: LocalizedString; cmd: string; out: LocalizedString }
+  | { _id: number; type: "user"; text: Loc }
+  | { _id: number; type: "thinking"; sec?: number; text: Loc }
+  | { _id: number; type: "text"; text: Loc }
+  | { _id: number; type: "tool"; name: string; title: Loc; cmd: string; out: Loc; isError?: boolean }
   | { _id: number; type: "read"; file: string; lines: string }
-  | { _id: number; type: "skill"; name: string; title: LocalizedString; input?: LocalizedString; output?: LocalizedString };
+  | { _id: number; type: "skill"; name: string; title: Loc; input?: Loc; output?: Loc; isError?: boolean };
 
 /** A step before ids are assigned (mock fixtures / bridge payloads).
  *  Distributive Omit so each union member keeps its own fields (a plain
