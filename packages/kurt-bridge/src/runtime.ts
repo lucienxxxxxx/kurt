@@ -55,7 +55,12 @@ interface PendingApproval {
 export interface RuntimeInfo {
   hasKey: boolean;
   model: string;
+  /** Selectable model ids for the composer's model menu. */
+  models: string[];
 }
+
+/** Model ids the desktop can pick from (DeepSeek; matches kurt-agent capabilities). */
+export const KNOWN_MODELS = ["deepseek-v4-flash", "deepseek-v4-pro"];
 
 /** Model config the desktop can set at runtime (key never leaves the machine). */
 export interface ModelConfig {
@@ -81,11 +86,16 @@ export interface Runtime {
   info?: () => RuntimeInfo;
   /** Apply + persist model config and rebuild the model (POST /config). */
   reconfigure?: (patch: ModelConfig) => void;
+  /** Build a model for one run with the given model id / effort (current key/baseURL). */
+  modelFor?: (model?: string, effort?: string) => ModelProvider;
 }
 
 export interface RunOptions {
   sessionId?: string;
   text: string;
+  /** Per-run model id / effort from the composer menus (optional). */
+  model?: string;
+  effort?: string;
   signal: AbortSignal;
   onFrame: (frame: RunFrame) => void;
 }
@@ -153,10 +163,12 @@ export async function runTurn(rt: Runtime, opts: RunOptions): Promise<void> {
   };
 
   const tools = rt.makeTools(permission);
+  // Per-run model override from the composer menus (falls back to the configured model).
+  const model = (opts.model || opts.effort) && rt.modelFor ? rt.modelFor(opts.model, opts.effort) : rt.model;
   const acc = new StepAccumulator();
   const captured: Event[] = [];
   try {
-    for await (const ev of runLoop({ system: rt.system, messages: rec.messages, tools, model: rt.model, signal: opts.signal })) {
+    for await (const ev of runLoop({ system: rt.system, messages: rec.messages, tools, model, signal: opts.signal })) {
       captured.push(ev);
       for (const step of acc.apply(ev)) opts.onFrame({ kind: "step", step });
       if (ev.type === "usage") opts.onFrame({ kind: "usage", inputTokens: ev.inputTokens, outputTokens: ev.outputTokens, totalTokens: ev.totalTokens });
@@ -203,8 +215,8 @@ function saveConfig(cfg: Required<ModelConfig>): void {
 /** Build the real runtime from the environment + ~/.kurt config (DeepSeek; core tools; ~/.kurt sessions). */
 export function productionRuntime(workspace = process.cwd()): Runtime {
   const cfg = loadConfig();
-  const buildModel = (): ModelProvider =>
-    withRetry(new OpenAICompatModel({ name: "deepseek", baseURL: cfg.baseURL, model: cfg.model, apiKey: cfg.apiKey }));
+  const buildModel = (modelId: string = cfg.model, effort?: string): ModelProvider =>
+    withRetry(new OpenAICompatModel({ name: "deepseek", baseURL: cfg.baseURL, model: modelId, apiKey: cfg.apiKey, effort }));
   const model = buildModel();
   const sandbox = process.platform === "darwin" ? new SeatbeltSandbox() : new DirectSandbox();
   const codeTemp = new SessionWorkspace({ sessionId: "bridge" });
@@ -225,7 +237,7 @@ export function productionRuntime(workspace = process.cwd()): Runtime {
   ];
 
   const rt = createRuntime({ workspace, model, makeTools, store: new SessionStore(sessionsDir()) });
-  rt.info = () => ({ hasKey: cfg.apiKey.length > 0, model: cfg.model });
+  rt.info = () => ({ hasKey: cfg.apiKey.length > 0, model: cfg.model, models: KNOWN_MODELS });
   rt.reconfigure = (patch) => {
     if (patch.apiKey !== undefined) cfg.apiKey = patch.apiKey;
     if (patch.model) cfg.model = patch.model;
@@ -233,5 +245,6 @@ export function productionRuntime(workspace = process.cwd()): Runtime {
     saveConfig(cfg);
     rt.model = buildModel(); // take effect immediately (no restart)
   };
+  rt.modelFor = (modelId, effort) => buildModel(modelId || cfg.model, effort);
   return rt;
 }

@@ -40,18 +40,18 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
 
       // Model status (never returns the key itself) + in-app config (sets the key).
       if (pathname === "/info" && req.method === "GET") {
-        return json(rt.info ? rt.info() : { hasKey: false, model: rt.model.name });
+        return json(rt.info ? rt.info() : { hasKey: false, model: rt.model.name, models: [] });
       }
       if (pathname === "/config" && req.method === "POST") {
         const patch = (await req.json().catch(() => ({}))) as ModelConfig;
         rt.reconfigure?.(patch);
-        return json(rt.info ? rt.info() : { hasKey: false, model: rt.model.name });
+        return json(rt.info ? rt.info() : { hasKey: false, model: rt.model.name, models: [] });
       }
 
       if (pathname === "/run" && req.method === "POST") {
-        const body = (await req.json().catch(() => ({}))) as { sessionId?: string; text?: string };
+        const body = (await req.json().catch(() => ({}))) as { sessionId?: string; text?: string; model?: string; effort?: string };
         if (!body.text || !body.text.trim()) return json({ error: "text required" }, 400);
-        return runSSE(rt, body.sessionId, body.text);
+        return runSSE(rt, body);
       }
 
       if (pathname === "/approve" && req.method === "POST") {
@@ -101,7 +101,7 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
 }
 
 /** Run one turn and stream its frames as Server-Sent Events. */
-function runSSE(rt: Runtime, sessionId: string | undefined, text: string): Response {
+function runSSE(rt: Runtime, body: { sessionId?: string; text?: string; model?: string; effort?: string }): Response {
   const ctrl = new AbortController();
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -113,7 +113,7 @@ function runSSE(rt: Runtime, sessionId: string | undefined, text: string): Respo
           /* stream already closed */
         }
       };
-      void runTurn(rt, { sessionId, text, signal: ctrl.signal, onFrame: send }).finally(() => {
+      void runTurn(rt, { sessionId: body.sessionId, text: body.text!, model: body.model, effort: body.effort, signal: ctrl.signal, onFrame: send }).finally(() => {
         try {
           controller.close();
         } catch {

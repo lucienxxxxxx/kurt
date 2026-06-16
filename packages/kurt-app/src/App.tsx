@@ -3,9 +3,9 @@
  *  the sidebar lists the bridge's sessions and loading one reconstructs its steps. */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Lang, Loc, Panel, QueuedMsg, SessionMeta, Step, Theme } from "./types.ts";
+import type { Effort, Lang, Loc, Panel, QueuedMsg, SessionMeta, Step, Theme } from "./types.ts";
 import { T, tr } from "./i18n/strings.ts";
-import { runStream, listSessions, getSession, approve, type ApprovalRequest } from "./lib/bridge.ts";
+import { runStream, listSessions, getSession, getInfo, approve, type ApprovalRequest } from "./lib/bridge.ts";
 import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
@@ -34,6 +34,9 @@ export default function App() {
 
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const [input, setInput] = useState("");
+  const [model, setModel] = useState("");
+  const [models, setModels] = useState<string[]>([]);
+  const [effort, setEffort] = useState<Effort>("med");
 
   const [running, setRunning] = useState(false);
   const [liveId, setLiveId] = useState<number | null>(null);
@@ -61,6 +64,15 @@ export default function App() {
     } catch { /* bridge not ready — leave the list as-is */ }
   }, []);
   useEffect(() => { void refreshSessions(); }, [refreshSessions]);
+  // Available models + current default for the composer's model menu.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const info = await getInfo(await resolveBridgeUrl());
+        if (info) { setModels(info.models); setModel((m) => m || info.model); }
+      } catch { /* bridge not ready */ }
+    })();
+  }, []);
 
   const upsert = (step: Step): void =>
     setThread((t) => {
@@ -79,7 +91,7 @@ export default function App() {
       const base = await resolveBridgeUrl();
       await runStream(
         base,
-        { sessionId: realSessionRef.current ?? undefined, text },
+        { sessionId: realSessionRef.current ?? undefined, text, model: model || undefined, effort },
         {
           onSession: (id) => { realSessionRef.current = id; setActiveId(id); setRunningId(id); },
           onStep: (bridgeStep) => {
@@ -247,7 +259,8 @@ export default function App() {
                   )}
 
                   <Composer value={input} onChange={setInput} onSend={send} onStop={stopRun}
-                    running={running} queuedMsgs={queuedMsgs} onCancelQueued={cancelQueued} lang={lang} />
+                    running={running} queuedMsgs={queuedMsgs} onCancelQueued={cancelQueued} lang={lang}
+                    model={model} models={models} onModelChange={setModel} effort={effort} onEffortChange={setEffort} />
                 </div>
               </div>
             </div>

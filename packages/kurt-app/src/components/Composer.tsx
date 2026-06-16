@@ -3,7 +3,7 @@
  *  local for 6.1; wired to real config in 6.3. */
 
 import { useEffect, useRef, useState } from "react";
-import type { Lang, QueuedMsg } from "../types.ts";
+import type { Effort, Lang, QueuedMsg } from "../types.ts";
 import { T, tr } from "../i18n/strings.ts";
 import { Icon } from "./Icon.tsx";
 
@@ -25,8 +25,8 @@ function PlusMenu({ lang, open, onToggle }: { lang: Lang; open: boolean; onToggl
   );
 }
 
-function ModelMenu({ value, onChange, open, onToggle }: { value: string; onChange: (v: string) => void; open: boolean; onToggle: () => void }) {
-  const opts = ["Sonnet 4.6", "Opus 4.2", "Haiku 4"];
+function ModelMenu({ value, options, onChange, open, onToggle }: { value: string; options: string[]; onChange: (v: string) => void; open: boolean; onToggle: () => void }) {
+  const opts = options.length ? options : [value];
   return (
     <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
       <button className="pill-btn" onClick={onToggle}>
@@ -44,7 +44,6 @@ function ModelMenu({ value, onChange, open, onToggle }: { value: string; onChang
   );
 }
 
-type Effort = "low" | "med" | "high" | "max";
 function EffortMenu({ value, onChange, lang, open, onToggle }: { value: Effort; onChange: (v: Effort) => void; lang: Lang; open: boolean; onToggle: () => void }) {
   const label = (k: Effort) => ({ low: tr(T.effortLow, lang), med: tr(T.effortMed, lang), high: tr(T.effortHigh, lang), max: tr(T.effortMax, lang) })[k];
   return (
@@ -89,7 +88,7 @@ function QueueSection({ items, onCancel, lang }: { items: QueuedMsg[]; onCancel:
   );
 }
 
-export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs, onCancelQueued, lang }: {
+export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs, onCancelQueued, lang, model, models, onModelChange, effort, onEffortChange }: {
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
@@ -98,10 +97,13 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
   queuedMsgs: QueuedMsg[];
   onCancelQueued: (id: number) => void;
   lang: Lang;
+  model: string;
+  models: string[];
+  onModelChange: (m: string) => void;
+  effort: Effort;
+  onEffortChange: (e: Effort) => void;
 }) {
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const [model, setModel] = useState("Sonnet 4.6");
-  const [effort, setEffort] = useState<Effort>("med");
   const [openMenu, setOpenMenu] = useState<"plus" | "model" | "effort" | null>(null);
 
   useEffect(() => {
@@ -133,8 +135,8 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
             onChange={(e) => onChange(e.target.value)} onKeyDown={key} />
           <div className="composer-bar">
             <PlusMenu lang={lang} open={openMenu === "plus"} onToggle={() => toggle("plus")} />
-            <ModelMenu value={model} onChange={setModel} open={openMenu === "model"} onToggle={() => toggle("model")} />
-            <EffortMenu value={effort} onChange={setEffort} lang={lang} open={openMenu === "effort"} onToggle={() => toggle("effort")} />
+            <ModelMenu value={model} options={models} onChange={onModelChange} open={openMenu === "model"} onToggle={() => toggle("model")} />
+            <EffortMenu value={effort} onChange={onEffortChange} lang={lang} open={openMenu === "effort"} onToggle={() => toggle("effort")} />
             <div className="bar-spacer" />
             <button className="pill-btn ghost" title={tr(T.voice, lang)}><Icon name="mic" /></button>
             {running && !value.trim() ? (

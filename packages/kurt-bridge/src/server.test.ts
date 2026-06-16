@@ -229,15 +229,16 @@ describe("model config (/info, /config)", () => {
     delete process.env.DEEPSEEK_API_KEY; // start with no key
     server = startServer(productionRuntime(ws));
 
-    let info = (await (await fetch(server.url + "/info")).json()) as { hasKey: boolean };
+    let info = (await (await fetch(server.url + "/info")).json()) as { hasKey: boolean; models: string[] };
     expect(info.hasKey).toBe(false);
+    expect(info.models).toContain("deepseek-v4-flash"); // composer model menu options
 
     const set = (await (await fetch(server.url + "/config", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apiKey: "sk-test-123" }),
     })).json()) as { hasKey: boolean };
     expect(set.hasKey).toBe(true);
 
-    info = (await (await fetch(server.url + "/info")).json()) as { hasKey: boolean };
+    info = (await (await fetch(server.url + "/info")).json()) as { hasKey: boolean; models: string[] };
     expect(info.hasKey).toBe(true);
     expect(existsSync(join(home, "desktop.json"))).toBe(true); // persisted (mode 0600)
   }, 20_000);

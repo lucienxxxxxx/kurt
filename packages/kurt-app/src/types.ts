@@ -3,6 +3,7 @@
 
 export type Lang = "zh" | "en";
 export type Theme = "light" | "dark";
+export type Effort = "low" | "med" | "high" | "max";
 
 /** A bilingual string (conversation content carries both; UI picks one via `tr`). */
 export interface LocalizedString {

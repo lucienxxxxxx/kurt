@@ -132,5 +132,10 @@ KURT_WORKSPACE="$HOME/some-safe-dir" bun run --cwd packages/kurt-app tauri dev
 Note: env `DEEPSEEK_API_KEY`, when set, takes precedence over the saved key (dev). Keychain
 storage is a later hardening; for now the key is plaintext (0600) on disk.
 
+5. **Model / effort menus** (composer): the model dropdown lists the real models
+   (deepseek-v4-flash / -pro, from the bridge); pick one + an effort → the next run
+   uses it for that turn (the bridge builds the model with your choice). Default model
+   reflects the configured one.
+
 Result: ____ (date / pass-fail / notes).
 

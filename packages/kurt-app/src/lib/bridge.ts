@@ -58,7 +58,7 @@ export interface RunHandlers {
  */
 export async function runStream(
   baseUrl: string,
-  body: { sessionId?: string; text: string },
+  body: { sessionId?: string; text: string; model?: string; effort?: string },
   handlers: RunHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -141,6 +141,7 @@ export async function deleteSession(baseUrl: string, id: string): Promise<void> 
 export interface BridgeInfo {
   hasKey: boolean;
   model: string;
+  models: string[];
 }
 
 export async function getInfo(baseUrl: string): Promise<BridgeInfo | null> {
