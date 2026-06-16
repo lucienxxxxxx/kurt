@@ -1,0 +1,21 @@
+{
+  "name": "kurt-bridge",
+  "version": "0.1.0",
+  "description": "Local HTTP/SSE bridge that runs the kurt engine for the desktop app (Phase 6.2).",
+  "type": "module",
+  "module": "src/index.ts",
+  "private": true,
+  "bin": { "kurt-bridge": "src/index.ts" },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "kurt-agent": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}

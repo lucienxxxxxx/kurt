@@ -16,6 +16,20 @@
         "typescript": "^5",
       },
     },
+    "packages/kurt-bridge": {
+      "name": "kurt-bridge",
+      "version": "0.1.0",
+      "bin": {
+        "kurt-bridge": "src/index.ts",
+      },
+      "dependencies": {
+        "kurt-agent": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5",
+      },
+    },
     "packages/kurt-tui": {
       "name": "kurt-tui",
       "version": "0.1.0",
@@ -226,6 +240,8 @@
     "json-schema-typed": ["json-schema-typed@8.0.2", "https://registry.npmmirror.com/json-schema-typed/-/json-schema-typed-8.0.2.tgz", {}, "sha512-fQhoXdcvc3V28x7C7BMs4P5+kNlgUURe2jmUT1T//oBRMDrqy1QPelJimwZGo7Hg9VPV3EQV5Bnq4hbFy2vetA=="],
 
     "kurt-agent": ["kurt-agent@workspace:packages/kurt-agent"],
+
+    "kurt-bridge": ["kurt-bridge@workspace:packages/kurt-bridge"],
 
     "kurt-tui": ["kurt-tui@workspace:packages/kurt-tui"],
 
