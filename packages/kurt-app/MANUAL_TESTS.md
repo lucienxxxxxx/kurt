@@ -65,19 +65,18 @@ swap is later); icons are inline SVG (lucide swap later) — both intentional.
 
 ## Phase 6.3 — real agent run via the bridge (manual two-process for now)
 
-The frontend now streams real runs from `kurt-bridge` over SSE. Tauri does NOT yet
-auto-spawn the bridge (next increment), so run it yourself in one terminal:
+The frontend streams real runs from `kurt-bridge` over SSE, and Tauri now
+**auto-spawns the bridge** (one process). Launch the app with your API key in the
+env (it's inherited by the bridge child); optionally pick a safe workspace:
 
 ```bash
-# terminal 1 — start the bridge on the dev port the app expects (8765)
-export DEEPSEEK_API_KEY=sk-...            # needed for real model calls
-KURT_BRIDGE_PORT=8765 KURT_WORKSPACE="$HOME/somewhere-safe" \
-  bun run --cwd packages/kurt-bridge start
-# → prints: KURT_BRIDGE_PORT=8765 ; kurt-bridge listening on http://127.0.0.1:8765
-
-# terminal 2 — the desktop app
-bun run --cwd packages/kurt-app tauri dev
+DEEPSEEK_API_KEY=sk-... KURT_WORKSPACE="$HOME/some-safe-dir" \
+  bun run --cwd packages/kurt-app tauri dev
 ```
+The Rust shell spawns the bridge, reads its port, and the app connects automatically
+(watch for `[bridge] kurt-bridge listening on …` in the terminal). The bridge exits
+when you quit the app (no orphan). To run the bridge manually instead, set
+`VITE_BRIDGE_URL` / `KURT_BRIDGE_PORT=8765` (the fallback).
 
 1. Click **New chat** → empty state.
 2. Type a real task (e.g. "list the files in my workspace and summarize them") → Enter.
@@ -88,7 +87,8 @@ bun run --cwd packages/kurt-app tauri dev
    appears. Click stop → the run aborts. Cancel a queued item.
 4. Send a follow-up in the same chat → it continues the **same** session (the bridge
    keeps history; the agent has context from the prior turn).
-5. If the bridge isn't running, a send shows an "⚠ bridge /run failed…" step (graceful).
+5. If the bridge can't start (e.g. no API key), a send shows an "⚠ …" step (graceful).
+6. Quit the app → the `[bridge]` process is gone (check `pgrep -f kurt-bridge`).
 
 Note: sidebar **recents are still the mock demos** (browsable) — live session
 list/reload from the bridge is the next increment. Sensitive commands run **ungated**

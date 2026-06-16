@@ -1,13 +1,33 @@
 /**
- * Where the kurt-bridge is listening. In dev you run the bridge yourself
- * (`KURT_BRIDGE_PORT=8765 bun run --cwd packages/kurt-bridge start`) and the app
- * connects to the default below; override with VITE_BRIDGE_URL. In 6.4 Tauri will
- * spawn the bridge and inject the real port (this is where that lookup goes).
+ * Where the kurt-bridge is listening.
+ *
+ * Under Tauri, the Rust shell spawns the bridge and exposes its port via the
+ * `bridge_url` command — we poll it briefly (the bridge takes a moment to start).
+ * Outside Tauri (bare `vite dev`, or when you run the bridge yourself), fall back
+ * to VITE_BRIDGE_URL or the dev default.
  */
 
-const DEFAULT = "http://127.0.0.1:8765";
+import { invoke } from "@tauri-apps/api/core";
 
-export function bridgeUrl(): string {
-  const fromEnv = (import.meta.env?.VITE_BRIDGE_URL as string | undefined)?.trim();
-  return fromEnv && fromEnv.length > 0 ? fromEnv : DEFAULT;
+const FALLBACK = ((import.meta.env?.VITE_BRIDGE_URL as string | undefined)?.trim() || "http://127.0.0.1:8765");
+
+let cached: string | null = null;
+
+export async function resolveBridgeUrl(): Promise<string> {
+  if (cached) return cached;
+  // Poll the Tauri command (~6s max) for the spawned bridge's port.
+  for (let i = 0; i < 40; i++) {
+    let url: string | null;
+    try {
+      url = await invoke<string | null>("bridge_url");
+    } catch {
+      break; // not running under Tauri → use the fallback
+    }
+    if (url) {
+      cached = url;
+      return url;
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  return FALLBACK;
 }

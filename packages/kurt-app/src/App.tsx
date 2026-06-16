@@ -8,7 +8,7 @@ import type { Lang, Loc, Panel, QueuedMsg, RawStep, Step, Theme } from "./types.
 import { T, tr } from "./i18n/strings.ts";
 import { sessions, recents, FILE_CONTENT } from "./mocks/agent.ts";
 import { runStream } from "./lib/bridge.ts";
-import { bridgeUrl } from "./lib/bridgeUrl.ts";
+import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
 import { Settings } from "./components/Settings.tsx";
@@ -72,8 +72,9 @@ export default function App() {
     setRunningId(activeId);
     const idMap = new Map<number, number>();
     try {
+      const base = await resolveBridgeUrl();
       await runStream(
-        bridgeUrl(),
+        base,
         { sessionId: realSessionRef.current ?? undefined, text },
         {
           onSession: (id) => { realSessionRef.current = id; },

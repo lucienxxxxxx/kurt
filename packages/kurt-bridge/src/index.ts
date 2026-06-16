@@ -27,3 +27,12 @@ const shutdown = (): void => {
 };
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+
+// When spawned as a sidecar (Tauri pipes our stdin and holds it open), exit as
+// soon as the parent closes it — i.e. the desktop app died. Avoids orphaned
+// bridge processes. In a normal terminal run stdin is a TTY → skip.
+if (!process.stdin.isTTY) {
+  process.stdin.on("end", shutdown);
+  process.stdin.on("close", shutdown);
+  process.stdin.resume();
+}
