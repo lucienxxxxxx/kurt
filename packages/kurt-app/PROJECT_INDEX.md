@@ -2,7 +2,7 @@
 
 > Cached architecture map. **Read this first**; scan the tree only for files this map
 > points to. Keep it fresh on every structural change (project-module-workflow Step 6).
-> Last synced: 2026-06-16, after Phase 6.3 (live runs via kurt-bridge SSE + Tauri auto-spawn).
+> Last synced: 2026-06-16, after Phase 6.4a/b (live sessions list/reload + approval modal).
 
 ## 1. Overview
 Tauri v2 macOS desktop front-end for kurt (Phase 6). It renders the agent's event
@@ -35,7 +35,7 @@ kurt-app (Tauri+React, this pkg)         kurt-bridge (Bun, packages/kurt-bridge 
 | `src/App.tsx` | Root: UI state, theme/lang (persisted), thread→segment grouping; **real runs via the bridge** (`startRun` streams steps, remaps bridge step ids, stop aborts, queue → multi-turn). Sidebar recents still mock demos | 6.3 ✓ |
 | `src/lib/bridge.ts` | kurt-bridge HTTP/SSE client: `runStream` (parses RunFrames → handlers), `listSessions`/`deleteSession`/`health`. Wire types mirror `kurt-bridge/src/types.ts` | 6.3 ✓ |
 | `src/lib/bridgeUrl.ts` | `resolveBridgeUrl` — polls Tauri `bridge_url` command (auto-spawned port), falls back to `VITE_BRIDGE_URL`/`127.0.0.1:8765` | 6.3 ✓ |
-| `src/components/` | `Icon`, `Markdown` (tiny md), `Sidebar`, `Composer` (+ plus/model/effort menus, queue, run/stop), `Settings` (appearance/general/about), `DetailPanel` (multi-tab), `thread/steps` (thinking/text/tool/read/skill + `renderStep`) | 6.1 ✓ |
+| `src/components/` | `Icon`, `Markdown`, `Sidebar`, `Composer` (+ menus, queue, run/stop), `Settings`, `DetailPanel`, `thread/steps` (+ `renderStep`), **`Approval`** (sensitive-command modal → `approve()`) | 6.1/6.4b ✓ |
 | `src/i18n/strings.ts` | `T` dict + `tr(entry,lang,params)` (ported from i18n.js) | 6.1 ✓ |
 | `src/types.ts` | `Step` discriminated union, `RawStep` (distributive Omit), `Session`/`Panel`/`QueuedMsg` | 6.1 ✓ |
 | `src/mocks/agent.ts` | `sessions`/`recents`/`liveRun`/`FILE_CONTENT` fixtures (from data.js) | 6.1 (replaced by bridge in 6.3) |
