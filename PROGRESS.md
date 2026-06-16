@@ -4,8 +4,8 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-16 · `main` @ `3edceef`(Phase 6.3:桌面端接通真实 agent)
-- **门禁**:kurt-agent **141** · kurt-tui **70** · kurt-bridge **13** · kurt-app build+**Vitest 16**+cargo ✓ · 全 typecheck 干净(真实运行需人工 GUI 核对 `MANUAL_TESTS §6.3`)
+- **最后更新**:2026-06-16 · `main` @ `a96f9e7`(Phase 6.4a:真实会话列表/重载)
+- **门禁**:kurt-agent **141** · kurt-tui **70** · kurt-bridge **15** · kurt-app build+**Vitest 16**+cargo ✓ · 全 typecheck 干净(真实运行/GUI 人工核对 `MANUAL_TESTS §6.3`)
 
 ---
 
@@ -38,7 +38,10 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
 | 6.1 | 静态 UI 对齐(mock 数据):复用原型 CSS、侧栏/线程5种步骤渲染器/输入区+菜单/设置/详情面板/主题/中英文/假流式;macOS 真原生交通灯叠加(无双框) | ✅ 完成(`bun run build` ✓ · Vitest 11 ✓ · `cargo check` ✓ · 视觉对齐人工核对 `MANUAL_TESTS §6.1`) |
 | 6.2 | `packages/kurt-bridge`(Bun):`Event`→`Step` over HTTP/SSE、会话 CRUD、集成测试 | ✅ 完成(`StepAccumulator` + Bun.serve `POST /run`(SSE)/sessions;`SessionStore` 上提到 kurt-agent 共享;13 测试,含真实 HTTP/SSE+MockModel 往返) |
 | 6.3 | app↔bridge 接通 | ✅ 完成:前端 `lib/bridge.ts`(SSE 客户端)+ `App` 真实流式(替换假流式、step _id 重映射、stop/queue/多轮)+ **Tauri 自动 spawn bridge sidecar**(读端口、stdin-EOF 防孤儿)+ `bridge_url` 命令。门禁绿;真实运行需 GUI 人工核对。(注:未引入 Zustand/TanStack Query —— 现用 useState + fetch 已足够,保留为后续可选重构;sidebar recents 仍是 mock demos,真实会话列表/重载留待后续) |
-| 6.4 | 加固+打包:API key 设置、**审批弹窗(bridge 当前敏感命令未门控)**、真实会话列表/重载、编译自包含 sidecar + 签名 `.app` | ⬜ 下一步 |
+| 6.4a | 真实会话列表/重载:sidebar 列出 bridge 真实会话、点击重载(`messagesToSteps` 在 bridge 侧重建步骤)、去掉 mock demos | ✅ 完成(bridge 15 测 + app build/16 ✓) |
+| 6.4b | **审批弹窗**:bridge 敏感命令经桌面弹窗门控(SSE 发审批请求 → `POST /approve` 回决定)—— **打包前必做的安全项** | ⬜ 下一步 |
+| 6.4c | API key 设置(Settings → Keychain)、模型/effort 菜单驱动真实 per-run config、真实文件预览 | ⬜ |
+| 6.4d | 打包:`bun build --compile` bridge → Tauri sidecar 二进制 + 代码签名/公证 `.app` | ⬜ |
 
 ## 已实现(main)
 
