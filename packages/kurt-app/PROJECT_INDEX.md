@@ -2,7 +2,7 @@
 
 > Cached architecture map. **Read this first**; scan the tree only for files this map
 > points to. Keep it fresh on every structural change (project-module-workflow Step 6).
-> Last synced: 2026-06-15, after Phase 6.0 (Tauri v2 + React + Vite scaffold).
+> Last synced: 2026-06-15, after Phase 6.1 (static UI parity on mock data; CSS-reuse).
 
 ## 1. Overview
 Tauri v2 macOS desktop front-end for kurt (Phase 6). It renders the agent's event
@@ -31,9 +31,15 @@ kurt-app (Tauri+React, this pkg)         kurt-bridge (Bun, packages/kurt-bridge 
 ## 4. Module map
 | Path | Responsibility | Status |
 |------|----------------|--------|
-| `src/main.tsx`, `src/App.tsx` | React entry + root (scaffold default for now) | 6.0 scaffold; real UI in 6.1 |
-| `src/` (planned: `components/{layout,brand,thread,composer}`, `stores/`, `hooks/`, `i18n/`, `lib/`, `styles/`) | UI per `PORTING_GUIDE.md` §2 | built 6.1 → 6.3 |
-| `src-tauri/` | Rust shell: `Cargo.toml` (pkg `kurt-app`, lib `kurt_app_lib`), `src/{main,lib}.rs`, `tauri.conf.json` (productName "Kurt"), `capabilities/`, `icons/` | 6.0 ✓; IPC + sidecar spawn in 6.3/6.4 |
+| `src/main.tsx` | React entry; imports `styles/{tokens,app}.css` | 6.0/6.1 ✓ |
+| `src/App.tsx` | Root: UI state, theme/lang (persisted), thread→segment grouping, **faked streaming** over mock `liveRun` (→ SSE in 6.3) | 6.1 ✓ |
+| `src/components/` | `Icon`, `Markdown` (tiny md), `Sidebar`, `Composer` (+ plus/model/effort menus, queue, run/stop), `Settings` (appearance/general/about), `DetailPanel` (multi-tab), `thread/steps` (thinking/text/tool/read/skill + `renderStep`) | 6.1 ✓ |
+| `src/i18n/strings.ts` | `T` dict + `tr(entry,lang,params)` (ported from i18n.js) | 6.1 ✓ |
+| `src/types.ts` | `Step` discriminated union, `RawStep` (distributive Omit), `Session`/`Panel`/`QueuedMsg` | 6.1 ✓ |
+| `src/mocks/agent.ts` | `sessions`/`recents`/`liveRun`/`FILE_CONTENT` fixtures (from data.js) | 6.1 (replaced by bridge in 6.3) |
+| `src/styles/` | `tokens.css` (verbatim) + `app.css` (prototype CSS, window shell adapted for Tauri) | 6.1 ✓ |
+| `src/test/setup.ts` | Vitest + jest-dom setup (jsdom env in `vite.config.ts`) | 6.1 ✓ |
+| `src-tauri/` | Rust shell: `Cargo.toml` (pkg `kurt-app`, lib `kurt_app_lib`), `src/{main,lib}.rs`, `tauri.conf.json` (productName "Kurt", macOS Overlay traffic lights, `trafficLightPosition`), `capabilities/`, `icons/` | 6.0/6.1 ✓; IPC + sidecar spawn in 6.3/6.4 |
 | `index.html`, `vite.config.ts`, `tsconfig*.json` | Vite + TS config | 6.0 ✓ |
 | `prototype/` | **Design reference** (HTML/JSX mockup) — do NOT port scaffolding (`PORTING_GUIDE.md` §10) | reference |
 | `PORTING_GUIDE.md` | Prototype→production mapping (layout, tokens, components, i18n, icons) | reference |
@@ -53,7 +59,7 @@ kurt-app (Tauri+React, this pkg)         kurt-bridge (Bun, packages/kurt-bridge 
 
 ## 7. Status / roadmap (Phase 6 sub-phases — live status in repo-root PROGRESS.md)
 - **6.0 Scaffold ✓** — Tauri v2 + React + Vite; builds (frontend + Rust); names = kurt-app/Kurt.
-- **6.1** Static UI parity on mock data (Tailwind + shadcn + tokens; sidebar/thread/composer/menus/theme/i18n).
+- **6.1 Static UI parity ✓** — CSS-reuse (not shadcn, per user); sidebar/thread(5 step types)/composer+menus/settings/detail-panels/theme/i18n on mock data + faked streaming; real macOS traffic lights overlaid. Vitest 11 pass.
 - **6.2** `kurt-bridge` (Bun): Event→Step over HTTP/SSE; sessions CRUD; integration-tested.
 - **6.3** Wire app↔bridge: Tauri spawns bridge; Zustand + TanStack Query; live streaming run.
 - **6.4** Harden + package: API-key Settings, permission modal, persistence, bundle signed `.app`.
