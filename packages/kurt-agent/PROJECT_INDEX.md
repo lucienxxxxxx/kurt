@@ -3,9 +3,9 @@
 > Cached architecture map. **Read this first**; scan the tree only for the files
 > this map points you to. Keep it fresh: update on every structural change.
 > Maintained via the `project-module-workflow` skill (see CLAUDE.md §3).
-> Last synced: 2026-06-15, after the B1–B5 bug-fix sweep: atomicWrite
-> (`src/fs-atomic.ts`), MCP HTTP round-trip test + SDK-default env, worktree
-> list/prune. (Phase 5 — MCP + Skills — complete before that.)
+> Last synced: 2026-06-15, after Phase 6.2 moved `SessionStore` + `kurtHome`/
+> `sessionsDir` into `src/session/` (shared by TUI + bridge + desktop). Earlier:
+> B1–B5 bug sweep (atomicWrite, MCP HTTP test); Phase 5 (MCP + Skills).
 
 ## 1. Overview
 A protocol-agnostic, **zero-I/O** AI agent engine (a **library**) in TypeScript on Bun.
@@ -52,7 +52,7 @@ and the loop continues.
 | `src/tools/` | `Tool` impls — **all side effects live here** | `ReadFileTool` (confined + truncate + offset/limit), `LsTool`, `GrepTool` (pure-fs, workspace-confined), `WriteFileTool` (serialized FIFO queue, no size cap), `ShellTool`, `CodeTool`, `BrewTool` (unsandboxed Direct runner, mutating subcommands gated), `MemoryTool` (agent-writable memory at fixed global/project files; view/append/replace), `AskUserTool` (`ask_user` — agent asks the user via an injected `AskProvider`), `UpdatePlanTool` (`update_plan` — stateless checklist for plan mode), `SkillTool` (`skill` — loads a named skill's body on demand from an injected `SkillProvider`; read-only, no approval), `WebSearchTool`, `RequestWriteAccessTool`. `fs-access.ts` = shared `isInside`/`resolveWithin`; read/ls/grep/write share the live `writable` roots array (request_write_access grants apply immediately) | engine, sandbox, session, search, permission, `../truncate` |
 | `src/truncate.ts` | Shared read-output cap (lines OR bytes, whichever first) | `truncate`, `truncationNote` | — |
 | `src/sandbox/` | Subprocess isolation behind `SandboxProvider` | `SeatbeltSandbox`, `DirectSandbox`, `buildProfile`; `run-process.ts` (detached spawn → group-kill; idle-timeout 90s + hard cap 10min; output cap; live `onOutput` streaming; abort) | — |
-| `src/session/` | Per-session scratch dir lifecycle | `SessionWorkspace` (`.root`, `.dir()`, `.dispose()`) | — |
+| `src/session/` | Per-session scratch dir + **persistent session store** (shared by all front-ends) | `SessionWorkspace` (scratch dir); `SessionStore` (`~/.kurt/sessions/<id>.json`: create/save(atomic)/load/list/remove + occupancy lock) + `SessionMeta`/`SessionRecord`; `kurtHome`/`sessionsDir` (paths.ts) | `../fs-atomic`, engine types |
 | `src/search/` | Pluggable web-search backend | `SearchProvider`, `DuckDuckGoSearch` | — |
 | `src/permission/` | Approval seam for sensitive commands | `PermissionProvider`/`PermissionDecision`/`PermissionRequest`, `classifyCommand` (pure rules → key+explanation+risk), `allowAll`/`denyAll`. ShellTool consults it; the front-end supplies the prompt/whitelist | — (pure) |
 | `src/ask/` | Seam for the `ask_user` tool (agent → user) | `AskProvider`, `AskRequest` (front-end implements; mirrors permission) | — (pure) |

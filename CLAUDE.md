@@ -1,10 +1,11 @@
 # CLAUDE.md — kurt (monorepo root)
 
-A single git repo, bun-workspace monorepo. Bun workspace = `["packages/kurt-agent", "packages/kurt-tui"]` (+ `kurt-bridge` when it lands). Packages:
+A single git repo, bun-workspace monorepo. Bun workspace = `["packages/kurt-agent", "packages/kurt-tui", "packages/kurt-bridge"]`. Packages:
 
 - `packages/kurt-agent/` — the agent **engine** (library). Read `packages/kurt-agent/CLAUDE.md` + `PROJECT_INDEX.md` before working there.
 - `packages/kurt-tui/` — **Ink** terminal front-end + the `kurt` CLI; consumes `kurt-agent` via the workspace. Read `packages/kurt-tui/CLAUDE.md` + `PROJECT_INDEX.md`.
-- `packages/kurt-app/` — **Tauri v2 + React** macOS desktop front-end (Phase 6). **Not a bun-workspace member** (own `package.json` + `bun.lock`; install with `cd packages/kurt-app && bun install`) so React/Vite/Tauri deps stay out of the engine lockfile. It reaches the engine over HTTP/SSE via `kurt-bridge` (Phase 6.2), not a TS dep. Read `packages/kurt-app/CLAUDE.md` + `PROJECT_INDEX.md`.
+- `packages/kurt-bridge/` — **local HTTP/SSE bridge** (Bun): runs the engine for GUI front-ends, mapping the `Event` stream → desktop `Step` shape. Consumes `kurt-agent` (workspace). Read `packages/kurt-bridge/CLAUDE.md` + `PROJECT_INDEX.md`.
+- `packages/kurt-app/` — **Tauri v2 + React** macOS desktop front-end (Phase 6). **Not a bun-workspace member** (own `package.json` + `bun.lock`; install with `cd packages/kurt-app && bun install`) so React/Vite/Tauri deps stay out of the engine lockfile. It reaches the engine over HTTP/SSE via `kurt-bridge`, not a TS dep. Read `packages/kurt-app/CLAUDE.md` + `PROJECT_INDEX.md`.
 
 ## Layout & rules
 - One repo (this one). `bun install` **here** at the root links the workspace (kurt-agent + kurt-tui) and owns the root `bun.lock`. kurt-app is installed separately (its own lockfile).

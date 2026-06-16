@@ -4,8 +4,8 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-15 · `main` @ `742426e`(Phase 6.1:桌面端静态 UI 对齐)
-- **门禁**:kurt-agent **133** pass · kurt-tui **78** pass · kurt-app:`bun run build`(tsc+vite)✓ + `bun run test`(Vitest)**11** pass + `cargo check`(Tauri/Rust)✓
+- **最后更新**:2026-06-15 · `main` @ `02ace4a`(Phase 6.2:kurt-bridge HTTP/SSE)
+- **门禁**:kurt-agent **141** · kurt-tui **70** · **kurt-bridge 13**(真实 HTTP/SSE + MockModel 集成测)· kurt-app build+Vitest 11+cargo ✓ · 全 typecheck 干净
 
 ---
 
@@ -36,8 +36,8 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
 |---|---|---|
 | 6.0 | 脚手架:Tauri v2 + React + Vite 起架;改名 kurt-app/Kurt;`kurt-app/{CLAUDE,PROJECT_INDEX,MANUAL_TESTS}.md`;Phase 6 进度机制 | ✅ 完成(GUI 开窗人工确认 PASS) |
 | 6.1 | 静态 UI 对齐(mock 数据):复用原型 CSS、侧栏/线程5种步骤渲染器/输入区+菜单/设置/详情面板/主题/中英文/假流式;macOS 真原生交通灯叠加(无双框) | ✅ 完成(`bun run build` ✓ · Vitest 11 ✓ · `cargo check` ✓ · 视觉对齐人工核对 `MANUAL_TESTS §6.1`) |
-| 6.2 | `packages/kurt-bridge`(Bun):`Event`→`Step` over HTTP/SSE、会话 CRUD、集成测试 | ⬜ 下一步 |
-| 6.3 | app↔bridge 接通:Tauri spawn bridge、Zustand+TanStack Query、真实流式运行 | ⬜ |
+| 6.2 | `packages/kurt-bridge`(Bun):`Event`→`Step` over HTTP/SSE、会话 CRUD、集成测试 | ✅ 完成(`StepAccumulator` + Bun.serve `POST /run`(SSE)/sessions;`SessionStore` 上提到 kurt-agent 共享;13 测试,含真实 HTTP/SSE+MockModel 往返) |
+| 6.3 | app↔bridge 接通:Tauri spawn bridge sidecar、Zustand+TanStack Query、真实流式运行替换假流式 | ⬜ 下一步 |
 | 6.4 | 加固+打包:API key 设置、审批弹窗、持久化、编译自包含 sidecar + 签名 `.app` | ⬜ |
 
 ## 已实现(main)
