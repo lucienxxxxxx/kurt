@@ -32,7 +32,7 @@ kurt-app (Tauri webview) ──fetch/SSE──▶ 127.0.0.1:<port>  (this pkg)
 | `src/events.ts` | **StepAccumulator** — pure fold of engine `Event` → desktop `Step` (read_file→read, skill→skill, else→tool; thinking elapsed-seconds) | `StepAccumulator` |
 | `src/runtime.ts` | Engine composition: `createRuntime` (generic, injectable model/tools — testable) + `productionRuntime` (DeepSeek + core tools + sandbox + shared SessionStore); `runTurn` (load/create session → stream events as frames → persist) | `createRuntime`, `productionRuntime`, `runTurn`, `Runtime` |
 | `src/server.ts` | `Bun.serve` on localhost: `POST /run` (SSE), `GET/POST/DELETE /sessions`, `/health`; client-close aborts the run | `startServer`, `ServerHandle` |
-| `src/index.ts` | Bin the Tauri sidecar spawns; prints `KURT_BRIDGE_PORT=<n>` to stdout | — |
+| `src/index.ts` | Bin the Tauri sidecar spawns; prints `KURT_BRIDGE_PORT=<n>` to stdout; when stdin is piped (sidecar) exits on EOF (parent died → no orphan) | — |
 | `src/*.test.ts` | `events.test.ts` (8, pure) · `server.test.ts` (5, real HTTP/SSE + MockModel + fake tool) | — |
 
 ## 5. Navigation — "to do X, look at Y"
@@ -42,6 +42,6 @@ kurt-app (Tauri webview) ──fetch/SSE──▶ 127.0.0.1:<port>  (this pkg)
 - **Change which tools/model the bridge uses** → `runtime.ts` `productionRuntime`.
 
 ## 6. Status / debt
-- **6.2 done** (this package). Next: 6.3 wires `kurt-app` ↔ this bridge (Tauri spawns it; live streaming replaces the faked mock).
+- **6.2 done** (this package); **6.3 done** — `kurt-app` now drives it live (Tauri auto-spawns it as a sidecar; index.ts exits on stdin-EOF so no orphan).
 - **6.4 must-do:** `runTurn` does NOT gate sensitive commands yet (no UI) — wire the desktop approval modal (a `PermissionProvider`) before packaging.
 - Not yet in the bridge's tool set: MCP / skills / ask_user / memory-preload (6.3/6.4). Auth = env only.
