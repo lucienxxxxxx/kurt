@@ -36,8 +36,10 @@ import {
   type PermissionProvider,
   type PermissionDecision,
 } from "kurt-agent";
-import { join } from "node:path";
+import { kurtHome } from "kurt-agent";
+import { join, dirname } from "node:path";
 import { homedir } from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { StepAccumulator } from "./events.ts";
 import type { RunFrame } from "./types.ts";
 
@@ -49,10 +51,24 @@ interface PendingApproval {
   key: string;
 }
 
+/** Status surfaced to the desktop (never the key itself). */
+export interface RuntimeInfo {
+  hasKey: boolean;
+  model: string;
+}
+
+/** Model config the desktop can set at runtime (key never leaves the machine). */
+export interface ModelConfig {
+  apiKey?: string;
+  model?: string;
+  baseURL?: string;
+}
+
 export interface Runtime {
   /** Working directory the agent operates in. */
   workspace: string;
   store: SessionStore;
+  /** Mutable so `reconfigure` can swap the model when the key/model changes. */
   model: ModelProvider;
   /** Build the tool set for a run, gating sensitive ops through `permission`. */
   makeTools: (permission: PermissionProvider) => Tool[];
@@ -61,6 +77,10 @@ export interface Runtime {
   pendingApprovals: Map<string, PendingApproval>;
   /** Rule keys the user chose "always allow" for (this bridge's lifetime). */
   allowlist: Set<string>;
+  /** Status for GET /info (production runtime sets this). */
+  info?: () => RuntimeInfo;
+  /** Apply + persist model config and rebuild the model (POST /config). */
+  reconfigure?: (patch: ModelConfig) => void;
 }
 
 export interface RunOptions {
@@ -159,17 +179,33 @@ function defaultSystem(workspace: string): string {
   ].join("\n");
 }
 
-/** Build the real runtime from the environment (DeepSeek; core tools; ~/.kurt sessions). */
+/** Desktop model config, persisted at ~/.kurt/desktop.json (mode 0600). The API
+ *  key is set in-app (Settings) — env wins when present (dev), else the saved file.
+ *  NOTE: plaintext on disk for now; Keychain is a later hardening. */
+function configPath(): string {
+  return join(kurtHome(), "desktop.json");
+}
+function loadConfig(): Required<ModelConfig> {
+  let saved: ModelConfig = {};
+  try { saved = JSON.parse(readFileSync(configPath(), "utf8")) as ModelConfig; } catch { /* none */ }
+  return {
+    apiKey: process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY ?? saved.apiKey ?? "",
+    model: saved.model ?? process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
+    baseURL: saved.baseURL ?? process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
+  };
+}
+function saveConfig(cfg: Required<ModelConfig>): void {
+  const path = configPath();
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+}
+
+/** Build the real runtime from the environment + ~/.kurt config (DeepSeek; core tools; ~/.kurt sessions). */
 export function productionRuntime(workspace = process.cwd()): Runtime {
-  const apiKey = process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
-  const model = withRetry(
-    new OpenAICompatModel({
-      name: "deepseek",
-      baseURL: process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
-      model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
-      apiKey,
-    }),
-  );
+  const cfg = loadConfig();
+  const buildModel = (): ModelProvider =>
+    withRetry(new OpenAICompatModel({ name: "deepseek", baseURL: cfg.baseURL, model: cfg.model, apiKey: cfg.apiKey }));
+  const model = buildModel();
   const sandbox = process.platform === "darwin" ? new SeatbeltSandbox() : new DirectSandbox();
   const codeTemp = new SessionWorkspace({ sessionId: "bridge" });
   const writable = [workspace];
@@ -188,5 +224,14 @@ export function productionRuntime(workspace = process.cwd()): Runtime {
     new MemoryTool({ globalPath: join(homedir(), ".kurt", "memory.md"), projectPath: join(workspace, ".kurt", "memory.md") }),
   ];
 
-  return createRuntime({ workspace, model, makeTools, store: new SessionStore(sessionsDir()) });
+  const rt = createRuntime({ workspace, model, makeTools, store: new SessionStore(sessionsDir()) });
+  rt.info = () => ({ hasKey: cfg.apiKey.length > 0, model: cfg.model });
+  rt.reconfigure = (patch) => {
+    if (patch.apiKey !== undefined) cfg.apiKey = patch.apiKey;
+    if (patch.model) cfg.model = patch.model;
+    if (patch.baseURL) cfg.baseURL = patch.baseURL;
+    saveConfig(cfg);
+    rt.model = buildModel(); // take effect immediately (no restart)
+  };
+  return rt;
 }

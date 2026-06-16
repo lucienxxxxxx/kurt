@@ -137,6 +137,27 @@ export async function deleteSession(baseUrl: string, id: string): Promise<void> 
   await fetch(`${baseUrl}/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+/** Model/key status (never includes the key itself). */
+export interface BridgeInfo {
+  hasKey: boolean;
+  model: string;
+}
+
+export async function getInfo(baseUrl: string): Promise<BridgeInfo | null> {
+  const res = await fetch(`${baseUrl}/info`);
+  return res.ok ? ((await res.json()) as BridgeInfo) : null;
+}
+
+/** Set model config (e.g. the API key) in the running bridge; it persists + rebuilds the model. */
+export async function setConfig(baseUrl: string, patch: { apiKey?: string; model?: string; baseURL?: string }): Promise<BridgeInfo | null> {
+  const res = await fetch(`${baseUrl}/config`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  return res.ok ? ((await res.json()) as BridgeInfo) : null;
+}
+
 export async function health(baseUrl: string): Promise<boolean> {
   try {
     const res = await fetch(`${baseUrl}/health`);

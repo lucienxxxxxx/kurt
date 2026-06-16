@@ -1,9 +1,11 @@
 /** In-app Settings (ported from prototype/ui.jsx): appearance (theme cards +
  *  language segmented control), general (toggles), about. Replaces the chat area. */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Lang, Theme } from "../types.ts";
 import { T, tr, type StringKey } from "../i18n/strings.ts";
+import { getInfo, setConfig, type BridgeInfo } from "../lib/bridge.ts";
+import { resolveBridgeUrl } from "../lib/bridgeUrl.ts";
 import { Icon } from "./Icon.tsx";
 import logo from "../assets/kurt_logo.svg";
 
@@ -56,6 +58,61 @@ function AppearancePanel({ theme, setTheme, lang, setLang }: { theme: Theme; set
   );
 }
 
+function ApiPanel({ lang }: { lang: Lang }) {
+  const [status, setStatus] = useState<BridgeInfo | null>(null);
+  const [key, setKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      try { setStatus(await getInfo(await resolveBridgeUrl())); } catch { /* bridge not ready */ }
+    })();
+  }, []);
+
+  const save = async (): Promise<void> => {
+    if (!key.trim() || saving) return;
+    setSaving(true);
+    try {
+      const info = await setConfig(await resolveBridgeUrl(), { apiKey: key.trim() });
+      if (info) setStatus(info);
+      setKey("");
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="set-panel">
+      <div className="set-row">
+        <div className="set-row-head">
+          <div className="set-row-title">
+            {tr(T.apiKeyLabel, lang)} · <span style={{ color: status?.hasKey ? "var(--green)" : "var(--text-muted)" }}>{tr(status?.hasKey ? T.apiKeySet : T.apiKeyNone, lang)}</span>
+          </div>
+          <div className="set-row-sub">{tr(T.apiKeyDesc, lang)}</div>
+        </div>
+        <div className="api-row">
+          <input className="api-input" type="password" value={key} placeholder={tr(T.apiKeyPlaceholder, lang)}
+            onChange={(e) => setKey(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void save(); }} spellCheck={false} />
+          <button className="pill-btn" disabled={saving || !key.trim()} onClick={() => void save()}>
+            {justSaved ? tr(T.saved, lang) : tr(T.save, lang)}
+          </button>
+        </div>
+      </div>
+      {status?.model && (
+        <div className="set-row inline">
+          <div className="set-row-head">
+            <div className="set-row-title">{tr(T.apiModelLabel, lang)}</div>
+          </div>
+          <div className="set-row-sub" style={{ fontFamily: "var(--font-mono)" }}>{status.model}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GeneralPanel({ lang }: { lang: Lang }) {
   const [startup, setStartup] = useState(false);
   const [sendOnEnter, setSendOnEnter] = useState(true);
@@ -93,9 +150,10 @@ function AboutPanel({ lang }: { lang: Lang }) {
 export function Settings({ theme, setTheme, lang, setLang, onClose }: {
   theme: Theme; setTheme: (t: Theme) => void; lang: Lang; setLang: (l: Lang) => void; onClose: () => void;
 }) {
-  const [cat, setCat] = useState<"appearance" | "general" | "about">("appearance");
-  const cats: { id: "appearance" | "general" | "about"; icon: string; label: StringKey }[] = [
+  const [cat, setCat] = useState<"appearance" | "api" | "general" | "about">("appearance");
+  const cats: { id: "appearance" | "api" | "general" | "about"; icon: string; label: StringKey }[] = [
     { id: "appearance", icon: "palette", label: "catAppearance" },
+    { id: "api", icon: "spark", label: "catApi" },
     { id: "general", icon: "sliders", label: "catGeneral" },
     { id: "about", icon: "info", label: "catAbout" },
   ];
@@ -115,6 +173,7 @@ export function Settings({ theme, setTheme, lang, setLang, onClose }: {
         </div>
         <div className="set-detail">
           {cat === "appearance" && <AppearancePanel theme={theme} setTheme={setTheme} lang={lang} setLang={setLang} />}
+          {cat === "api" && <ApiPanel lang={lang} />}
           {cat === "general" && <GeneralPanel lang={lang} />}
           {cat === "about" && <AboutPanel lang={lang} />}
         </div>

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { runStream, listSessions, type RunFrame } from "./bridge.ts";
+import { runStream, listSessions, getInfo, setConfig, type RunFrame } from "./bridge.ts";
 import type { Step } from "../types.ts";
 
 afterEach(() => vi.restoreAllMocks());
@@ -70,5 +70,21 @@ describe("listSessions", () => {
   test("non-ok → empty", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 500 })));
     expect(await listSessions("http://x")).toEqual([]);
+  });
+});
+
+describe("getInfo / setConfig", () => {
+  test("getInfo returns model/key status", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ hasKey: true, model: "deepseek-v4-flash" }), { status: 200 })));
+    expect(await getInfo("http://x")).toEqual({ hasKey: true, model: "deepseek-v4-flash" });
+  });
+
+  test("setConfig POSTs the patch and returns updated status", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ hasKey: true, model: "deepseek-v4-flash" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const info = await setConfig("http://x", { apiKey: "sk-abc" });
+    expect(info?.hasKey).toBe(true);
+    const init = fetchMock.mock.calls[0]![1]!;
+    expect(JSON.parse(init.body as string)).toEqual({ apiKey: "sk-abc" });
   });
 });

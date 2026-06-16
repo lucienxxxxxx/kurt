@@ -5,11 +5,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MockModel, SessionStore, type Tool } from "kurt-agent";
-import { createRuntime } from "./runtime.ts";
+import { createRuntime, productionRuntime } from "./runtime.ts";
 import { startServer, type ServerHandle } from "./server.ts";
 import type { RunFrame, Step } from "./types.ts";
 
@@ -210,5 +210,35 @@ describe("approval round-trip", () => {
     const byId = new Map<number, Step>();
     for (const f of f2) if (f.kind === "step") byId.set(f.step._id, f.step);
     expect([...byId.values()].find((s) => s.type === "tool")).toMatchObject({ out: "ran danger" });
+  }, 20_000);
+});
+
+describe("model config (/info, /config)", () => {
+  const savedHome = process.env.KURT_HOME;
+  const savedKey = process.env.DEEPSEEK_API_KEY;
+  let home = "";
+  afterEach(() => {
+    if (savedHome === undefined) delete process.env.KURT_HOME; else process.env.KURT_HOME = savedHome;
+    if (savedKey === undefined) delete process.env.DEEPSEEK_API_KEY; else process.env.DEEPSEEK_API_KEY = savedKey;
+    if (home) rmSync(home, { recursive: true, force: true });
+  });
+
+  test("set the API key in-app; /info reflects it and it persists to ~/.kurt/desktop.json", async () => {
+    home = realpathSync(mkdtempSync(join(tmpdir(), "bridge-home-")));
+    process.env.KURT_HOME = home;
+    delete process.env.DEEPSEEK_API_KEY; // start with no key
+    server = startServer(productionRuntime(ws));
+
+    let info = (await (await fetch(server.url + "/info")).json()) as { hasKey: boolean };
+    expect(info.hasKey).toBe(false);
+
+    const set = (await (await fetch(server.url + "/config", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apiKey: "sk-test-123" }),
+    })).json()) as { hasKey: boolean };
+    expect(set.hasKey).toBe(true);
+
+    info = (await (await fetch(server.url + "/info")).json()) as { hasKey: boolean };
+    expect(info.hasKey).toBe(true);
+    expect(existsSync(join(home, "desktop.json"))).toBe(true); // persisted (mode 0600)
   }, 20_000);
 });

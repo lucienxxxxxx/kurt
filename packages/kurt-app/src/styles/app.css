@@ -691,6 +691,19 @@ html[data-theme="dark"] img.empty-logo { filter: invert(1); }
 }
 .toggle.on .toggle-knob { left: 21px; }
 
+/* API key row (Settings → Model/API) */
+.api-row { display: flex; gap: 8px; align-items: center; }
+.api-input {
+  flex: 1 1 auto; min-width: 0;
+  height: 34px; padding: 0 12px;
+  border: 1px solid var(--border-strong); border-radius: 9px;
+  background: var(--bg-main); color: var(--text);
+  font-family: var(--font-mono); font-size: 13px;
+  outline: none; transition: border-color .14s;
+}
+.api-input:focus { border-color: var(--accent); }
+.api-input::placeholder { color: var(--text-faint); }
+
 /* approval modal */
 .approval-overlay {
   position: absolute; inset: 0; z-index: 200;

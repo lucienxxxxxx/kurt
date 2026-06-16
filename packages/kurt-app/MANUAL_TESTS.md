@@ -113,3 +113,24 @@ shell command, e.g. "create the file /tmp/kurt-test then delete it with rm -f".
 
 Result: ____ (date / pass-fail / notes).
 
+---
+
+## Phase 6.4c — set the API key in-app
+
+Launch **without** `DEEPSEEK_API_KEY` in the env (to prove the in-app key is used):
+```bash
+KURT_WORKSPACE="$HOME/some-safe-dir" bun run --cwd packages/kurt-app tauri dev
+```
+
+1. Open **Settings** (gear) → **Model / API**. It shows **API key · not set** and the model id.
+2. Paste your key → **Save** → the status flips to **configured** (button shows "Saved").
+3. Go back to chat and send a task → it runs (the bridge rebuilt the model with your key,
+   no restart). Before saving, a run would have errored with an auth/⚠ step.
+4. Quit and relaunch (still no env key) → Settings still shows **configured** (persisted
+   to `~/.kurt/desktop.json`, mode 0600) and runs work.
+
+Note: env `DEEPSEEK_API_KEY`, when set, takes precedence over the saved key (dev). Keychain
+storage is a later hardening; for now the key is plaintext (0600) on disk.
+
+Result: ____ (date / pass-fail / notes).
+

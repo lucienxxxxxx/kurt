@@ -11,7 +11,7 @@
  * Closing the /run response (client stop) aborts the run.
  */
 
-import { runTurn, resolveApproval, type Runtime, type ApprovalDecision } from "./runtime.ts";
+import { runTurn, resolveApproval, type Runtime, type ApprovalDecision, type ModelConfig } from "./runtime.ts";
 import { messagesToSteps } from "./events.ts";
 import type { RunFrame, SessionInfo } from "./types.ts";
 
@@ -37,6 +37,16 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
 
       if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
       if (pathname === "/health") return json({ ok: true });
+
+      // Model status (never returns the key itself) + in-app config (sets the key).
+      if (pathname === "/info" && req.method === "GET") {
+        return json(rt.info ? rt.info() : { hasKey: false, model: rt.model.name });
+      }
+      if (pathname === "/config" && req.method === "POST") {
+        const patch = (await req.json().catch(() => ({}))) as ModelConfig;
+        rt.reconfigure?.(patch);
+        return json(rt.info ? rt.info() : { hasKey: false, model: rt.model.name });
+      }
 
       if (pathname === "/run" && req.method === "POST") {
         const body = (await req.json().catch(() => ({}))) as { sessionId?: string; text?: string };
