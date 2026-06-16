@@ -54,6 +54,12 @@ export const T = {
   // recent item menu
   archiveToProject: { zh: "归纳到项目", en: "Archive to project" },
   deleteChat: { zh: "删除", en: "Delete" },
+  // approval modal
+  apprNeeded: { zh: "需要你的许可", en: "Approval needed" },
+  apprRisk: { zh: "风险", en: "Risk" },
+  apprAllow: { zh: "允许一次", en: "Allow once" },
+  apprAlways: { zh: "总是允许", en: "Always allow" },
+  apprDeny: { zh: "拒绝", en: "Deny" },
   // settings
   close: { zh: "关闭", en: "Close" },
   settings: { zh: "设置", en: "Settings" },

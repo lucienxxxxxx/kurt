@@ -11,7 +11,7 @@
  * Closing the /run response (client stop) aborts the run.
  */
 
-import { runTurn, type Runtime } from "./runtime.ts";
+import { runTurn, resolveApproval, type Runtime, type ApprovalDecision } from "./runtime.ts";
 import { messagesToSteps } from "./events.ts";
 import type { RunFrame, SessionInfo } from "./types.ts";
 
@@ -42,6 +42,12 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
         const body = (await req.json().catch(() => ({}))) as { sessionId?: string; text?: string };
         if (!body.text || !body.text.trim()) return json({ error: "text required" }, 400);
         return runSSE(rt, body.sessionId, body.text);
+      }
+
+      if (pathname === "/approve" && req.method === "POST") {
+        const body = (await req.json().catch(() => ({}))) as { id?: string; decision?: ApprovalDecision };
+        const ok = body.id ? resolveApproval(rt, body.id, body.decision ?? "deny") : false;
+        return json({ ok });
       }
 
       if (pathname === "/sessions") {

@@ -36,11 +36,58 @@ function startWith(script: ConstructorParameters<typeof MockModel>[0]): ServerHa
   const rt = createRuntime({
     workspace: ws,
     model: new MockModel(script),
-    tools: [echoShell],
+    makeTools: () => [echoShell],
     store: new SessionStore(sessions),
   });
   server = startServer(rt);
   return server;
+}
+
+/** Runtime with a tool that requires approval (calls permission.request). */
+function startGated(script: ConstructorParameters<typeof MockModel>[0]): ServerHandle {
+  const rt = createRuntime({
+    workspace: ws,
+    model: new MockModel(script),
+    makeTools: (permission): Tool[] => [
+      {
+        spec: { name: "danger", description: "a sensitive op", inputSchema: { type: "object", properties: {} } },
+        execute: async () => {
+          const d = await permission.request({ key: "rm", title: "rm", command: "rm -rf x", explanation: "deletes", risk: "data loss" });
+          return { content: d === "allow" ? "ran danger" : "denied by user", isError: d !== "allow" };
+        },
+      },
+    ],
+    store: new SessionStore(sessions),
+  });
+  server = startServer(rt);
+  return server;
+}
+
+/** Drive a run, auto-answering the first approval frame with `decision`. */
+async function runApprove(url: string, body: { text: string }, decision: "allow" | "always" | "deny"): Promise<RunFrame[]> {
+  const res = await fetch(url + "/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const reader = res.body!.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  const frames: RunFrame[] = [];
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buf.indexOf("\n\n")) >= 0) {
+      const block = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      const line = block.split("\n").find((l) => l.startsWith("data: "));
+      if (!line) continue;
+      const f = JSON.parse(line.slice(6)) as RunFrame;
+      frames.push(f);
+      if (f.kind === "approval") {
+        void fetch(url + "/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: f.id, decision }) });
+      }
+    }
+  }
+  return frames;
 }
 
 async function run(url: string, body: { sessionId?: string; text: string }): Promise<RunFrame[]> {
@@ -126,4 +173,42 @@ describe("bridge server /run (SSE)", () => {
     const h = startWith([{ text: "x" }]);
     expect(((await (await fetch(h.url + "/health")).json()) as { ok: boolean }).ok).toBe(true);
   });
+});
+
+describe("approval round-trip", () => {
+  test("a sensitive tool emits an approval frame; deny blocks it", async () => {
+    const h = startGated([{ toolCalls: [{ name: "danger", input: {} }] }, { text: "ok" }]);
+    const frames = await runApprove(h.url, { text: "do danger" }, "deny");
+    const approval = frames.find((f) => f.kind === "approval");
+    expect(approval && approval.kind === "approval" && approval.command).toBe("rm -rf x");
+    const byId = new Map<number, Step>();
+    for (const f of frames) if (f.kind === "step") byId.set(f.step._id, f.step);
+    const tool = [...byId.values()].find((s) => s.type === "tool");
+    expect(tool).toMatchObject({ type: "tool", out: "denied by user", isError: true });
+  }, 20_000);
+
+  test("allow lets it proceed", async () => {
+    const h = startGated([{ toolCalls: [{ name: "danger", input: {} }] }, { text: "ok" }]);
+    const frames = await runApprove(h.url, { text: "do danger" }, "allow");
+    const byId = new Map<number, Step>();
+    for (const f of frames) if (f.kind === "step") byId.set(f.step._id, f.step);
+    const tool = [...byId.values()].find((s) => s.type === "tool");
+    expect(tool).toMatchObject({ type: "tool", out: "ran danger", isError: false });
+  }, 20_000);
+
+  test("'always' allows subsequent same-key ops without a new approval frame", async () => {
+    const h = startGated([
+      { toolCalls: [{ name: "danger", input: {} }] }, { text: "first done" },
+      { toolCalls: [{ name: "danger", input: {} }] }, { text: "second done" },
+    ]);
+    const f1 = await runApprove(h.url, { text: "first" }, "always");
+    expect(f1.some((f) => f.kind === "approval")).toBe(true);
+
+    // second run on the same runtime: the key is now allow-listed → NO approval frame
+    const f2 = await runApprove(h.url, { text: "second" }, "deny");
+    expect(f2.some((f) => f.kind === "approval")).toBe(false);
+    const byId = new Map<number, Step>();
+    for (const f of f2) if (f.kind === "step") byId.set(f.step._id, f.step);
+    expect([...byId.values()].find((s) => s.type === "tool")).toMatchObject({ out: "ran danger" });
+  }, 20_000);
 });

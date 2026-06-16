@@ -691,6 +691,43 @@ html[data-theme="dark"] img.empty-logo { filter: invert(1); }
 }
 .toggle.on .toggle-knob { left: 21px; }
 
+/* approval modal */
+.approval-overlay {
+  position: absolute; inset: 0; z-index: 200;
+  display: grid; place-items: center;
+  background: rgba(0,0,0,0.28);
+  animation: fadeUp .14s ease both;
+}
+.approval {
+  width: min(520px, 86%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.3);
+  padding: 18px 18px 14px;
+}
+.approval-head { display: flex; align-items: center; gap: 9px; }
+.approval-badge {
+  width: 24px; height: 24px; flex: 0 0 24px;
+  display: grid; place-items: center; border-radius: 7px;
+  background: var(--accent-soft); color: var(--accent);
+}
+.approval-badge svg { width: 15px; height: 15px; }
+.approval-title { font-family: var(--font-serif); font-size: 16px; font-weight: 650; color: var(--text); }
+.approval-subtitle { margin-top: 10px; font-size: 14px; font-weight: 600; color: var(--text); }
+.approval-cmd {
+  margin: 8px 0; padding: 11px 13px;
+  background: var(--tool-bg); border: 1px solid var(--border); border-radius: 10px;
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.5;
+  color: var(--tool-text); white-space: pre-wrap; word-break: break-word; max-height: 180px; overflow: auto;
+}
+.approval-explain { font-size: 13.5px; color: var(--text-soft); line-height: 1.5; }
+.approval-risk { margin-top: 8px; font-size: 13px; color: var(--accent); }
+.approval-actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.approval-allow { border-color: var(--accent); color: #fff; background: var(--accent); }
+.approval-allow:hover { background: var(--accent-press); }
+.approval-allow svg { width: 15px; height: 15px; }
+
 .set-panel.about { align-items: center; text-align: center; padding-top: 40px; gap: 8px; }
 .about-logo { width: 64px; height: 64px; object-fit: contain; margin-bottom: 8px; }
 html[data-theme="dark"] .about-logo { filter: invert(1); }

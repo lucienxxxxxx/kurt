@@ -90,9 +90,26 @@ when you quit the app (no orphan). To run the bridge manually instead, set
 5. If the bridge can't start (e.g. no API key), a send shows an "⚠ …" step (graceful).
 6. Quit the app → the `[bridge]` process is gone (check `pgrep -f kurt-bridge`).
 
-Note: sidebar **recents are still the mock demos** (browsable) — live session
-list/reload from the bridge is the next increment. Sensitive commands run **ungated**
-until the 6.4 approval modal — test in a safe workspace.
+Note (since 6.4a): the sidebar now lists your **real** sessions (this workspace),
+and clicking one resumes it. (Since 6.4b sensitive commands are gated — see below.)
+
+Result: ____ (date / pass-fail / notes).
+
+---
+
+## Phase 6.4b — approval modal (sensitive commands gated)
+
+Launch as in §6.3 (one process). Send a task that makes the agent run a sensitive
+shell command, e.g. "create the file /tmp/kurt-test then delete it with rm -f".
+
+1. When the agent reaches the `rm` (or `sudo`, etc.), an **approval modal** appears
+   over the window — command + explanation + risk, with **Deny / Always allow /
+   Allow once**. The run is **paused** until you choose.
+2. **Deny** → the tool result shows it was declined; the agent continues without it.
+3. Re-run and **Allow once** → it runs; a later sensitive command prompts **again**.
+4. **Always allow** → that command kind runs now and **doesn't prompt again** this session.
+5. **Stop** while a modal is open → the run aborts and the modal closes (= deny).
+6. Non-sensitive commands (ls, cat, normal scripts) run **without** a prompt.
 
 Result: ____ (date / pass-fail / notes).
 

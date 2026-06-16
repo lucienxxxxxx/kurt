@@ -5,11 +5,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Lang, Loc, Panel, QueuedMsg, SessionMeta, Step, Theme } from "./types.ts";
 import { T, tr } from "./i18n/strings.ts";
-import { runStream, listSessions, getSession } from "./lib/bridge.ts";
+import { runStream, listSessions, getSession, approve, type ApprovalRequest } from "./lib/bridge.ts";
 import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
 import { Settings } from "./components/Settings.tsx";
+import { Approval } from "./components/Approval.tsx";
 import { DetailPanel } from "./components/DetailPanel.tsx";
 import { renderStep, type OpenOutput } from "./components/thread/steps.tsx";
 import logo from "./assets/kurt_logo.svg";
@@ -41,6 +42,7 @@ export default function App() {
   const queuedMsgsRef = useRef<QueuedMsg[]>([]);
   const [panels, setPanels] = useState<Panel[]>([]);
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const realSessionRef = useRef<string | null>(null);
@@ -86,6 +88,7 @@ export default function App() {
             upsert({ ...bridgeStep, _id: appId } as Step);
             setLiveId(appId);
           },
+          onApproval: (req) => setPendingApproval(req),
           onError: (message) => upsert({ _id: uid(), type: "text", text: `⚠ ${message}` }),
         },
         ctrl.signal,
@@ -130,6 +133,16 @@ export default function App() {
     setRunning(false);
     setLiveId(null);
     setRunningId(null);
+    setPendingApproval(null); // bridge resolves it as "deny" on abort
+  };
+
+  const decideApproval = (decision: "allow" | "always" | "deny"): void => {
+    const req = pendingApproval;
+    if (!req) return;
+    setPendingApproval(null);
+    void (async () => {
+      try { await approve(await resolveBridgeUrl(), req.id, decision); } catch { /* ignore */ }
+    })();
   };
 
   const cancelQueued = (id: number): void => {
@@ -243,6 +256,8 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {pendingApproval && <Approval req={pendingApproval} lang={lang} onDecide={decideApproval} />}
     </div>
   );
 }
