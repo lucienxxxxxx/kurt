@@ -4,8 +4,8 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-17 · `main` @ `b7d1e3e`(桌面端打磨:用户消息支持 markdown + 授权框改为输入框上方内联面板;前置 `eea01e1` 修 request_write_access)
-- **门禁**:kurt-agent **145** · kurt-tui **70** · kurt-bridge **22** · kurt-app build+**Vitest 26**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
+- **最后更新**:2026-06-17 · `main` @ `0b35228`(桌面端打磨:markdown 表格 + 切会话滚到底 + 授权框按会话保留/不被切换打断 + 授权框与输入框贴合;前置 `b7d1e3e` 用户消息 markdown + 内联授权面板)
+- **门禁**:kurt-agent **145** · kurt-tui **70** · kurt-bridge **22** · kurt-app build+**Vitest 28**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
 
@@ -44,6 +44,7 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
 | 6.4-打磨 | composer 新增 **chat/agent/plan 模式**(bridge 按模式过滤工具 + per-mode prompt)、**thinking 开关**、bridge 加 **request_write_access** + update_plan;窗口可拖动(`core:window:allow-start-dragging`);用户↔回复间距加大 | ✅ 完成 |
 | 6.4-修 | **request_write_access「无此工具」修复**:① 从 agent-only 移入全模式 READ_ONLY 基集(审批门控,只读模式下仅放开工作区外目录的**读**);② 接受模型常传的 `{"path":…}` 作为 `directory` 别名;③ prompt 去掉「仅 agent 模式」措辞。回归测试覆盖 path/directory/deny/invalid + 全模式可见。**注意:bridge 不热重载,需完全退出并重启 `tauri dev` 才生效。** | ✅ 完成 |
 | 6.4-打磨2 | **用户消息支持 markdown**(用户气泡走与 agent 回复相同的 `MdBlock`:粗体/行内码/标题/列表/代码块);**授权框改内联面板**:不再是居中遮罩弹窗,而是渲染在 composer 内、输入框正上方,等宽、同 16px 圆角,从输入框背后向上升起(`approvalRise`),其余窗口保持可交互。Markdown.test + Approval.test(断言非 overlay)。 | ✅ 完成 |
+| 6.4-打磨3 | **markdown 表格**(`MdBlock` 解析 GFM 表格:表头+`\|---\|`分隔+正文,列对齐 `:--/--:/:-:`,单元格内联 md;`.md-table` 描边/斑马纹/横向滚动);**切会话滚到底**(`activeId` 变化时 `scrollTop=scrollHeight`);**授权框按会话保留**:approval 以 run 的 sessionId 为键,切走不再 abort run、run 流入 `runBufRef` 每会话缓冲、仅当查看该会话时镜像到可见 thread,切回重新显示(`loadSession` 不再 `stopRun`;New Chat 仍结束 run);**授权框与输入框贴合**(`margin-bottom:0`+下方直角+无下边框)。Markdown.test +2(表格)。 | ✅ 完成 |
 | 6.4d | 打包:`bun build --compile` bridge → Tauri sidecar 二进制 + 代码签名/公证 `.app` | ⏸ 暂缓(用户选择)—— 桌面端**功能已完整**,停在 `tauri dev` 形态;打包时再做(需 Apple 签名身份,或先出未签名本地构建) |
 
 ## 已实现(main)
