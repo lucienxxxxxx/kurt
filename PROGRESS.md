@@ -4,8 +4,8 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-16 · `main` @ `4ca7777`(Phase 6.4c:API key + 模型/effort 真实配置)
-- **门禁**:kurt-agent **141** · kurt-tui **70** · kurt-bridge **19** · kurt-app build+**Vitest 20**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4c`)
+- **最后更新**:2026-06-16 · `main` @ `762c5af`(桌面端打磨:request_write_access、chat/agent/plan、thinking、间距;前置 `769d3ca` 修窗口拖动)
+- **门禁**:kurt-agent **141** · kurt-tui **70** · kurt-bridge **22** · kurt-app build+**Vitest 20**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
 
@@ -40,7 +40,8 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
 | 6.3 | app↔bridge 接通 | ✅ 完成:前端 `lib/bridge.ts`(SSE 客户端)+ `App` 真实流式(替换假流式、step _id 重映射、stop/queue/多轮)+ **Tauri 自动 spawn bridge sidecar**(读端口、stdin-EOF 防孤儿)+ `bridge_url` 命令。门禁绿;真实运行需 GUI 人工核对。(注:未引入 Zustand/TanStack Query —— 现用 useState + fetch 已足够,保留为后续可选重构;sidebar recents 仍是 mock demos,真实会话列表/重载留待后续) |
 | 6.4a | 真实会话列表/重载:sidebar 列出 bridge 真实会话、点击重载(`messagesToSteps` 在 bridge 侧重建步骤)、去掉 mock demos | ✅ 完成(bridge 15 测 + app build/16 ✓) |
 | 6.4b | **审批弹窗 ✓**:bridge 敏感命令经桌面弹窗门控(per-run `PermissionProvider` → `approval` SSE frame → `POST /approve` 回 allow/always/deny;always 入内存 allowlist)。**安全缺口已闭合。** | ✅ 完成(bridge 18 测含审批往返 + app 18 测) |
-| 6.4c | **API key + 模型/effort ✓**:Settings →「模型 / API」面板配置 key(`~/.kurt/desktop.json` 0600,实时重建模型);composer 模型菜单列真实模型(`/info`)、模型/effort 随 `/run` 驱动真实 per-run 配置(`rt.modelFor`)。**待:** 真实文件预览、Keychain 加固(均非阻塞) | ✅ 完成 |
+| 6.4c | **API key + 模型/effort ✓**:Settings →「模型 / API」面板配置 key(`~/.kurt/desktop.json` 0600,实时重建模型);composer 模型菜单列真实模型(`/info`)、模型/effort 随 `/run` 驱动真实 per-run 配置(`rt.modelFor`)。 | ✅ 完成 |
+| 6.4-打磨 | composer 新增 **chat/agent/plan 模式**(bridge 按模式过滤工具 + per-mode prompt)、**thinking 开关**、bridge 加 **request_write_access**(工作区外目录经审批弹窗授权,修“无此工具”)+ update_plan;窗口可拖动(`core:window:allow-start-dragging`);用户↔回复间距加大 | ✅ 完成 |
 | 6.4d | 打包:`bun build --compile` bridge → Tauri sidecar 二进制 + 代码签名/公证 `.app` | ⏸ 暂缓(用户选择)—— 桌面端**功能已完整**,停在 `tauri dev` 形态;打包时再做(需 Apple 签名身份,或先出未签名本地构建) |
 
 ## 已实现(main)
