@@ -33,7 +33,12 @@ Run `bun run tauri dev`. The real UI replaces the starter. Compare against
 `prototype/index.html` (open it in a browser side-by-side). Everything is mock /
 faked-streaming for now — no real agent yet (that's 6.3).
 
-1. **Sidebar** → traffic lights + search, "Kurt" wordmark (Amita serif), a red
+1. **Window chrome** → the three macOS buttons (close/min/max) are the REAL native
+   ones, overlaid at the **sidebar's top-left** (titleBarStyle "Overlay"), with NO
+   separate OS title-bar frame above the content. They work (close/min/max), and the
+   top bar is draggable to move the window. If their position is slightly off, nudge
+   `trafficLightPosition` {x,y} in `src-tauri/tauri.conf.json`.
+1b. **Sidebar** → search (top-right), "Kurt" wordmark (Amita serif), a red
    "New chat", Projects/Skills, a "Recent" list of 8, profile "lew / Pro" + gear.
 2. **Thread (session s1 loads by default)** → right-aligned user query bubble; a
    thinking step ("Thought for 5s", click to expand/collapse); text in serif-headed

@@ -44,11 +44,8 @@ body {
   padding: 0 14px 0 16px;
   flex: 0 0 auto;
 }
-.traffic { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
-.dot-light { width: 12px; height: 12px; border-radius: 50%; }
-.dot-light.red { background: #ff5f57; }
-.dot-light.yellow { background: #febc2e; }
-.dot-light.green { background: #28c840; }
+/* Native macOS traffic lights overlay the top-left here (see tauri.conf
+   titleBarStyle:"Overlay"); no fake dots are drawn. */
 
 .brand {
   display: flex; align-items: center; justify-content: center;

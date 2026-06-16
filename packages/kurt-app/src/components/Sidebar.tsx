@@ -56,10 +56,11 @@ export function Sidebar({ recents, activeId, runningId, onPick, onNewChat, lang,
 }) {
   return (
     <div className="sidebar">
-      <div className="sb-top">
-        <div className="traffic">
-          <span className="dot-light red" /><span className="dot-light yellow" /><span className="dot-light green" />
-        </div>
+      {/* The macOS traffic lights (close/min/max) are the REAL native buttons,
+          overlaid here at top-left via tauri.conf titleBarStyle:"Overlay" +
+          trafficLightPosition — no fake dots, no extra title-bar frame.
+          The bar is a drag region so the window can be moved by it. */}
+      <div className="sb-top" data-tauri-drag-region>
         <div style={{ marginLeft: "auto" }}>
           <button className="icon-btn" title={tr(T.search, lang)}><Icon name="search" /></button>
         </div>

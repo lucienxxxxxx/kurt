@@ -170,7 +170,7 @@ export default function App() {
         ) : (
           <div className="main-chat">
             <div className="main-content">
-              <div className="main-top">
+              <div className="main-top" data-tauri-drag-region>
                 <div className="conv-title-wrap" data-value={tr(titleEntry, lang)}>
                   <input className="conv-title-input" value={tr(titleEntry, lang)} spellCheck={false}
                     onChange={(e) => setTitleEntry((prev) => ({ ...prev, [lang]: e.target.value }))} />
