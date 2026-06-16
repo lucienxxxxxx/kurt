@@ -233,6 +233,10 @@ html[data-theme="dark"] .brand-logo { filter: invert(1); }
   color: var(--text);
   text-align: left;
 }
+/* markdown inside the user bubble: keep padding tight, no stray edge margins */
+.query-box > :first-child { margin-top: 0; }
+.query-box > :last-child { margin-bottom: 0; }
+.query-box p { margin: 0; }
 
 /* steps */
 .timeline { position: relative; }
@@ -706,20 +710,22 @@ html[data-theme="dark"] img.empty-logo { filter: invert(1); }
 .api-input:focus { border-color: var(--accent); }
 .api-input::placeholder { color: var(--text-faint); }
 
-/* approval modal */
-.approval-overlay {
-  position: absolute; inset: 0; z-index: 200;
-  display: grid; place-items: center;
-  background: rgba(0,0,0,0.28);
-  animation: fadeUp .14s ease both;
-}
-.approval {
-  width: min(520px, 86%);
+/* approval panel — inline, directly above the composer (not a modal).
+   Same width / rounded corners as the input box; rises up from behind it. */
+.approval-inline {
+  width: 100%;
+  margin-bottom: 8px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
-  border-radius: 14px;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.3);
-  padding: 18px 18px 14px;
+  border-radius: 16px;
+  box-shadow: 0 8px 26px rgba(0,0,0,0.12);
+  padding: 16px 16px 13px;
+  transform-origin: bottom center;
+  animation: approvalRise .2s cubic-bezier(.2,.7,.3,1) both;
+}
+@keyframes approvalRise {
+  from { transform: translateY(16px) scale(.985); opacity: 0; }
+  to   { transform: none; opacity: 1; }
 }
 .approval-head { display: flex; align-items: center; gap: 9px; }
 .approval-badge {

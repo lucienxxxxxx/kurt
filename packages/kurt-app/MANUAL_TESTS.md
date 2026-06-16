@@ -160,3 +160,24 @@ Result: ____ (date / pass-fail / notes).
 
 Result: ____ (date / pass-fail / notes).
 
+---
+
+## Phase 6.4 polish — markdown in user messages + inline approval panel
+
+1. **Markdown in the user bubble.** Send a message that contains markdown, e.g.
+   ``please run `bun test` and check the **first** failure`` (with a `## heading`,
+   a `- bullet`, and a ```` ```fenced``` ```` block on separate lines). Your own
+   message bubble now renders the markdown (bold, inline code, heading, list, code
+   block) — **not** the literal `**`, `` ` ``, `##` characters. The agent's reply
+   already rendered markdown; both sides now match.
+
+2. **Approval is an inline panel, not a modal.** Trigger an approval (e.g. ask it to
+   `rm` a file, or read `~/Downloads` → request_write_access). Instead of a dimmed
+   modal in the center of the window, the approval card now appears **directly above
+   the input box**, the **same width** as the composer, with the **same rounded
+   corners**, and animates **upward from behind the input box**. There is no overlay
+   dimming the rest of the window. Deny / Always allow / Allow once still work the same,
+   and the panel disappears once you choose (or on Stop).
+
+Result: ____ (date / pass-fail / notes).
+

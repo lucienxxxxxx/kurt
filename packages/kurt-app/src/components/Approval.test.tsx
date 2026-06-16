@@ -10,7 +10,7 @@ const req: ApprovalRequest = {
   command: "rm -rf /tmp/x", explanation: "removes files", risk: "data loss",
 };
 
-describe("Approval modal", () => {
+describe("Approval panel", () => {
   test("shows the command, risk, and three actions", () => {
     render(<Approval req={req} lang="en" onDecide={vi.fn()} />);
     expect(screen.getByText("rm -rf /tmp/x")).toBeInTheDocument();
@@ -18,6 +18,12 @@ describe("Approval modal", () => {
     expect(screen.getByText("Allow once")).toBeInTheDocument();
     expect(screen.getByText("Always allow")).toBeInTheDocument();
     expect(screen.getByText("Deny")).toBeInTheDocument();
+  });
+
+  test("is an inline panel, not a modal overlay", () => {
+    const { container } = render(<Approval req={req} lang="en" onDecide={vi.fn()} />);
+    expect(container.querySelector(".approval-overlay")).toBeNull();
+    expect(container.querySelector(".approval-inline")).toBeInTheDocument();
   });
 
   test("each button reports its decision", () => {

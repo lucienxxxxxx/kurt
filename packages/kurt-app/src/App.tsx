@@ -13,6 +13,7 @@ import { Settings } from "./components/Settings.tsx";
 import { Approval } from "./components/Approval.tsx";
 import { DetailPanel } from "./components/DetailPanel.tsx";
 import { renderStep, type OpenOutput } from "./components/thread/steps.tsx";
+import { MdBlock } from "./components/Markdown.tsx";
 import logo from "./assets/kurt_logo.svg";
 
 let _uid = 1000;
@@ -254,7 +255,7 @@ export default function App() {
                       <div className="thread-inner">
                         {segments.map((seg, i) => (
                           <div key={i}>
-                            {seg.user && <div className="query-box">{tr(seg.user.type === "user" ? seg.user.text : "", lang)}</div>}
+                            {seg.user && <div className="query-box"><MdBlock text={tr(seg.user.type === "user" ? seg.user.text : "", lang)} /></div>}
                             {seg.steps.length > 0 && <div className="timeline">{seg.steps.map((s) => renderStep(s, stepCtx))}</div>}
                           </div>
                         ))}
@@ -265,7 +266,8 @@ export default function App() {
                   <Composer value={input} onChange={setInput} onSend={send} onStop={stopRun}
                     running={running} queuedMsgs={queuedMsgs} onCancelQueued={cancelQueued} lang={lang}
                     model={model} models={models} onModelChange={setModel} effort={effort} onEffortChange={setEffort}
-                    mode={mode} onModeChange={setMode} thinking={thinking} onThinkingToggle={() => setThinking((v) => !v)} />
+                    mode={mode} onModeChange={setMode} thinking={thinking} onThinkingToggle={() => setThinking((v) => !v)}
+                    approval={pendingApproval ? <Approval req={pendingApproval} lang={lang} onDecide={decideApproval} /> : null} />
                 </div>
               </div>
             </div>
@@ -274,8 +276,6 @@ export default function App() {
           </div>
         )}
       </div>
-
-      {pendingApproval && <Approval req={pendingApproval} lang={lang} onDecide={decideApproval} />}
     </div>
   );
 }

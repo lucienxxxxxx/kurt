@@ -115,7 +115,7 @@ function QueueSection({ items, onCancel, lang }: { items: QueuedMsg[]; onCancel:
   );
 }
 
-export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs, onCancelQueued, lang, model, models, onModelChange, effort, onEffortChange, mode, onModeChange, thinking, onThinkingToggle }: {
+export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs, onCancelQueued, lang, model, models, onModelChange, effort, onEffortChange, mode, onModeChange, thinking, onThinkingToggle, approval }: {
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
@@ -133,6 +133,8 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
   onModeChange: (m: Mode) => void;
   thinking: boolean;
   onThinkingToggle: () => void;
+  /** Approval panel, slotted in just above the input box (same width). */
+  approval?: React.ReactNode;
 }) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const [openMenu, setOpenMenu] = useState<"plus" | "model" | "effort" | "mode" | null>(null);
@@ -159,6 +161,7 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
   return (
     <div className="composer-wrap">
       <div className="composer-inner">
+        {approval}
         <div className="composer">
           <QueueSection items={queuedMsgs} onCancel={onCancelQueued} lang={lang} />
           <textarea ref={taRef} value={value} rows={1}
