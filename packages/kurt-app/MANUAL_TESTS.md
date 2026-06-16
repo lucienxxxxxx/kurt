@@ -181,3 +181,25 @@ Result: ____ (date / pass-fail / notes).
 
 Result: ____ (date / pass-fail / notes).
 
+---
+
+## Phase 6.4 polish — md tables, scroll-to-bottom, approval survives session switch
+
+1. **Markdown tables.** Ask for a table (e.g. "给我一个 3 行的 markdown 表格对比 a/b/c").
+   The reply renders an actual `<table>` (header shaded, bordered cells, zebra rows,
+   `--:` columns right-aligned) — **not** raw `| --- |` text. Tables also render in your
+   own message bubble.
+2. **Scroll to bottom on session switch.** Open a long conversation from the sidebar.
+   The view lands at the **bottom** (latest message), not scrolled to the top.
+3. **Approval survives a session switch.** Trigger an approval (e.g. `rm` / read
+   `~/Downloads`). With the approval panel showing, click a **different** session in the
+   sidebar — it loads normally, the approval panel is **not** shown there, and the run is
+   **not** cancelled. Switch **back** to the original session → the approval panel is
+   **still there**, and Allow/Deny still completes the blocked run. (New Chat, by contrast,
+   ends the run.)
+4. **Approval joins the input box.** The approval panel's **bottom is flush** with the
+   composer (no gap), bottom corners **square**, so it reads as one continuous surface
+   rising out of the input box.
+
+Result: ____ (date / pass-fail / notes).
+

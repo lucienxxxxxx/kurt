@@ -446,6 +446,23 @@ code.inl {
 }
 .md-pre-lang { font-size: 11px; font-weight: 600; color: var(--text-faint); letter-spacing: .04em; margin-bottom: 6px; }
 .md-hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+.md-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  display: block;
+  overflow-x: auto;
+}
+.md-table th, .md-table td {
+  border: 1px solid var(--border);
+  padding: 6px 11px;
+  vertical-align: top;
+}
+.md-table th { background: var(--tool-bg); font-weight: 650; color: var(--text); white-space: nowrap; }
+.md-table td { color: var(--text-soft); }
+.md-table tr:nth-child(even) td { background: var(--tool-bg); }
 .md-link { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-soft); transition: border-color .14s; }
 .md-link:hover { border-bottom-color: var(--accent); }
 
@@ -714,11 +731,12 @@ html[data-theme="dark"] img.empty-logo { filter: invert(1); }
    Same width / rounded corners as the input box; rises up from behind it. */
 .approval-inline {
   width: 100%;
-  margin-bottom: 8px;
+  margin-bottom: 0;            /* no gap — joins the composer directly below */
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
-  border-radius: 16px;
-  box-shadow: 0 8px 26px rgba(0,0,0,0.12);
+  border-bottom: none;         /* the composer's top border is the shared seam */
+  border-radius: 16px 16px 0 0; /* rounded top, rectangular bottom */
+  box-shadow: 0 -3px 18px rgba(0,0,0,0.07);
   padding: 16px 16px 13px;
   transform-origin: bottom center;
   animation: approvalRise .2s cubic-bezier(.2,.7,.3,1) both;

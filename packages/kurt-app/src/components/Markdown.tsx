@@ -47,6 +47,28 @@ export function MdBlock({ text }: { text: string }) {
       continue;
     }
 
+    // GitHub-style table: a header row followed by a |---|---| separator row.
+    if (line.includes("|") && i + 1 < lines.length && isTableSep(lines[i + 1]!)) {
+      const header = splitRow(line);
+      const aligns = splitRow(lines[i + 1]!).map(cellAlign);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length && lines[i]!.trim() !== "" && lines[i]!.includes("|")) { rows.push(splitRow(lines[i]!)); i++; }
+      elements.push(
+        <table key={k++} className="md-table">
+          <thead>
+            <tr>{header.map((c, ci) => <th key={ci} style={{ textAlign: aligns[ci] ?? "left" }}>{renderInline(c)}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.map((r, ri) => (
+              <tr key={ri}>{header.map((_, ci) => <td key={ci} style={{ textAlign: aligns[ci] ?? "left" }}>{renderInline(r[ci] ?? "")}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>,
+      );
+      continue;
+    }
+
     if (line.startsWith("### ")) { elements.push(<h4 key={k++} className="md-h3">{renderInline(line.slice(4))}</h4>); i++; continue; }
     if (line.startsWith("## ")) { elements.push(<h3 key={k++} className="md-h2">{renderInline(line.slice(3))}</h3>); i++; continue; }
     if (line.startsWith("# ")) { elements.push(<h2 key={k++} className="md-h1">{renderInline(line.slice(2))}</h2>); i++; continue; }
@@ -71,4 +93,28 @@ export function MdBlock({ text }: { text: string }) {
     i++;
   }
   return <>{elements}</>;
+}
+
+/** A markdown table separator row: only `| - : space`, with at least one `-` and `|`. */
+function isTableSep(line: string): boolean {
+  const s = line.trim();
+  return /^[:\-\s|]+$/.test(s) && s.includes("-") && s.includes("|");
+}
+
+/** Split a `| a | b |` row into trimmed cells (tolerating missing edge pipes). */
+function splitRow(line: string): string[] {
+  let s = line.trim();
+  if (s.startsWith("|")) s = s.slice(1);
+  if (s.endsWith("|")) s = s.slice(0, -1);
+  return s.split("|").map((c) => c.trim());
+}
+
+/** Column alignment from a separator cell (`:--` left, `--:` right, `:-:` center). */
+function cellAlign(cell: string): "left" | "center" | "right" {
+  const c = cell.trim();
+  const l = c.startsWith(":");
+  const r = c.endsWith(":");
+  if (l && r) return "center";
+  if (r) return "right";
+  return "left";
 }

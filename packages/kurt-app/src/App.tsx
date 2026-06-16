@@ -48,10 +48,17 @@ export default function App() {
   const queuedMsgsRef = useRef<QueuedMsg[]>([]);
   const [panels, setPanels] = useState<Panel[]>([]);
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
-  const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
+  // Approvals are keyed by the session their run belongs to, so switching
+  // sessions doesn't lose a pending prompt — it re-appears when you switch back.
+  const [pendingApprovals, setPendingApprovals] = useState<Record<string, ApprovalRequest>>({});
+  const approvalKey = (id: string | null): string => id ?? "";
 
   const abortRef = useRef<AbortController | null>(null);
   const realSessionRef = useRef<string | null>(null);
+  const activeIdRef = useRef<string | null>(null);     // latest activeId, for stream callbacks
+  const runSidRef = useRef<string | null>(null);       // session id the active run belongs to
+  const runBufRef = useRef<Step[]>([]);                // the running session's accumulated steps
+  const setActive = useCallback((id: string | null): void => { activeIdRef.current = id; setActiveId(id); }, []);
 
   useEffect(() => { document.documentElement.setAttribute("data-theme", theme); try { localStorage.setItem("kurt-theme", theme); } catch { /* ignore */ } }, [theme]);
   useEffect(() => { document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en"); try { localStorage.setItem("kurt-lang", lang); } catch { /* ignore */ } }, [lang]);
@@ -60,7 +67,8 @@ export default function App() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => { const el = scrollRef.current; if (el && running) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [thread, liveId, running]);
-  useEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = 0; }, [activeId]);
+  // On session switch, jump straight to the latest message (bottom), not the top.
+  useEffect(() => { const el = scrollRef.current; if (el) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [activeId]);
 
   const refreshSessions = useCallback(async (): Promise<void> => {
     try {
@@ -79,18 +87,22 @@ export default function App() {
     })();
   }, []);
 
-  const upsert = (step: Step): void =>
-    setThread((t) => {
-      const i = t.findIndex((s) => s._id === step._id);
-      if (i >= 0) { const next = t.slice(); next[i] = step; return next; }
-      return [...t, step];
-    });
+  /** Upsert a step into the running session's buffer; mirror to the visible
+   *  thread only while that session is the one being viewed (so a run that
+   *  continues after you switch away doesn't leak into another conversation). */
+  const upsertRun = (sid: string | null, step: Step): void => {
+    const buf = runBufRef.current;
+    const i = buf.findIndex((s) => s._id === step._id);
+    if (i >= 0) buf[i] = step; else buf.push(step);
+    if (activeIdRef.current === sid) setThread(buf.slice());
+  };
 
-  /** Execute one real run against the bridge, streaming steps into the thread. */
+  /** Execute one real run against the bridge, streaming steps into the run buffer. */
   const startRun = async (text: string): Promise<void> => {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setRunning(true);
+    runSidRef.current = realSessionRef.current; // session this run belongs to (null = new chat)
     const idMap = new Map<number, number>();
     try {
       const base = await resolveBridgeUrl();
@@ -98,26 +110,35 @@ export default function App() {
         base,
         { sessionId: realSessionRef.current ?? undefined, text, model: model || undefined, effort, thinking, mode },
         {
-          onSession: (id) => { realSessionRef.current = id; setActiveId(id); setRunningId(id); },
+          onSession: (id) => {
+            realSessionRef.current = id;
+            runSidRef.current = id;
+            setRunningId(id);
+            if (activeIdRef.current === null) setActive(id); // follow a brand-new chat to its session
+          },
           onStep: (bridgeStep) => {
             let appId = idMap.get(bridgeStep._id);
             if (appId === undefined) { appId = uid(); idMap.set(bridgeStep._id, appId); }
-            upsert({ ...bridgeStep, _id: appId } as Step);
+            upsertRun(runSidRef.current, { ...bridgeStep, _id: appId } as Step);
             setLiveId(appId);
           },
-          onApproval: (req) => setPendingApproval(req),
-          onError: (message) => upsert({ _id: uid(), type: "text", text: `⚠ ${message}` }),
+          onApproval: (req) => setPendingApprovals((m) => ({ ...m, [approvalKey(runSidRef.current)]: req })),
+          onError: (message) => upsertRun(runSidRef.current, { _id: uid(), type: "text", text: `⚠ ${message}` }),
         },
         ctrl.signal,
       );
     } finally {
       abortRef.current = null;
       setLiveId(null);
+      // This run's approval (if any) is now resolved/aborted — drop it.
+      setPendingApprovals((m) => { const n = { ...m }; delete n[approvalKey(runSidRef.current)]; return n; });
       const [next, ...rest] = queuedMsgsRef.current;
       if (next) {
         queuedMsgsRef.current = rest;
         setQueuedMsgs(rest);
-        setThread((t) => [...t, { _id: uid(), type: "user", text: next.text }]);
+        const userStep: Step = { _id: uid(), type: "user", text: next.text };
+        runBufRef.current = [...runBufRef.current, userStep];
+        if (activeIdRef.current === runSidRef.current) setThread(runBufRef.current.slice());
         void startRun(next.text);
       } else {
         setRunning(false);
@@ -138,7 +159,10 @@ export default function App() {
       setQueuedMsgs(nextQ);
       return;
     }
-    setThread((t) => [...t, { _id: uid(), type: "user", text }]);
+    // Seed the run buffer with the current thread + this message, then run.
+    const userStep: Step = { _id: uid(), type: "user", text };
+    runBufRef.current = [...thread, userStep];
+    setThread(runBufRef.current.slice());
     void startRun(text);
   };
 
@@ -150,13 +174,16 @@ export default function App() {
     setRunning(false);
     setLiveId(null);
     setRunningId(null);
-    setPendingApproval(null); // bridge resolves it as "deny" on abort
+    // bridge resolves the prompt as "deny" on abort — drop this run's approval
+    const key = approvalKey(runSidRef.current);
+    setPendingApprovals((m) => { const n = { ...m }; delete n[key]; return n; });
   };
 
   const decideApproval = (decision: "allow" | "always" | "deny"): void => {
-    const req = pendingApproval;
+    const key = approvalKey(activeId);
+    const req = pendingApprovals[key];
     if (!req) return;
-    setPendingApproval(null);
+    setPendingApprovals((m) => { const n = { ...m }; delete n[key]; return n; });
     void (async () => {
       try { await approve(await resolveBridgeUrl(), req.id, decision); } catch { /* ignore */ }
     })();
@@ -190,23 +217,32 @@ export default function App() {
   const toggleStep = (id: number): void => setCollapsed((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const loadSession = async (id: string): Promise<void> => {
-    stopRun();
+    // Do NOT stop the active run: switching away keeps it (and any pending
+    // approval) alive; switching back restores its live buffer.
+    setView("chat");
+    realSessionRef.current = id;
+    setCollapsed(new Set()); setPanels([]); setActivePanelId(null);
+    if (id === runningId) {
+      setActive(id);
+      setThread(runBufRef.current.slice());
+      const meta = sessionList.find((s) => s.id === id);
+      if (meta) setTitleEntry(meta.title);
+      return;
+    }
     try {
       const detail = await getSession(await resolveBridgeUrl(), id);
       if (!detail) return;
-      realSessionRef.current = id;
-      setView("chat");
+      setActive(id);
       setThread(detail.steps);
-      setActiveId(id);
       setTitleEntry(detail.title || T.convNew);
-      setCollapsed(new Set()); setPanels([]); setActivePanelId(null);
     } catch { /* ignore */ }
   };
   const newChat = (): void => {
     stopRun();
     realSessionRef.current = null;
+    runBufRef.current = [];
     setView("chat");
-    setThread([]); setActiveId(null); setTitleEntry(T.convNew); setCollapsed(new Set());
+    setThread([]); setActive(null); setTitleEntry(T.convNew); setCollapsed(new Set());
     setPanels([]); setActivePanelId(null);
   };
 
@@ -267,7 +303,7 @@ export default function App() {
                     running={running} queuedMsgs={queuedMsgs} onCancelQueued={cancelQueued} lang={lang}
                     model={model} models={models} onModelChange={setModel} effort={effort} onEffortChange={setEffort}
                     mode={mode} onModeChange={setMode} thinking={thinking} onThinkingToggle={() => setThinking((v) => !v)}
-                    approval={pendingApproval ? <Approval req={pendingApproval} lang={lang} onDecide={decideApproval} /> : null} />
+                    approval={pendingApprovals[approvalKey(activeId)] ? <Approval req={pendingApprovals[approvalKey(activeId)]!} lang={lang} onDecide={decideApproval} /> : null} />
                 </div>
               </div>
             </div>
