@@ -26,7 +26,7 @@ import {
 import { saveConfig } from "./config.ts";
 import { loadContextPrelude } from "./context-files.ts";
 import { loadSkills } from "./skills.ts";
-import { SessionStore, type SessionRecord } from "./session-store.ts";
+import { SessionStore, type SessionRecord } from "kurt-agent";
 import { Allowlist } from "./allowlist.ts";
 import { PermissionBridge } from "./tui/permission.ts";
 import { AskBridge } from "./tui/ask.ts";

@@ -1,6 +1,6 @@
 import { Box, Static, Text, useApp, useInput, useStdout } from "ink";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { messagesFromEvents, type Event, type Message, type PermissionRequest } from "kurt-agent";
+import { messagesFromEvents, type Event, type Message, type PermissionRequest, type SessionMeta, type SessionRecord } from "kurt-agent";
 import { applyEvent, type Entry } from "./entries.ts";
 import { COMMANDS, filterCommands, isCommand, parseCommand } from "./commands.ts";
 import { EntryView } from "./conversation.tsx";
@@ -12,7 +12,6 @@ import { AskPrompt } from "./ask-prompt.tsx";
 import { entriesFromMessages } from "./session-view.ts";
 import type { PermissionBridge } from "./permission.ts";
 import type { AskBridge, PendingAsk } from "./ask.ts";
-import type { SessionMeta, SessionRecord } from "../session-store.ts";
 
 const NO_SUBSCRIBE = (): (() => void) => () => {};
 const NO_PENDING = (): PermissionRequest | null => null;

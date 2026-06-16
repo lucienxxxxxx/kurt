@@ -1,5 +1,5 @@
 import { Box, Text } from "ink";
-import type { SessionMeta } from "../session-store.ts";
+import type { SessionMeta } from "kurt-agent";
 
 /** Interactive session list shown by `/sessions`. Keys are handled in App. */
 export function SessionPicker({ sessions, selected }: { sessions: SessionMeta[]; selected: number }) {

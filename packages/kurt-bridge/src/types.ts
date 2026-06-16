@@ -16,6 +16,7 @@ export type Step =
 
 /** SSE frames the bridge streams during a run (one JSON object per `data:` line). */
 export type RunFrame =
+  | { kind: "session"; id: string; title: string } // the resolved/created session for this run
   | { kind: "step"; step: Step } // a step was created or changed — upsert by _id
   | { kind: "usage"; inputTokens: number; outputTokens: number; totalTokens: number }
   | { kind: "done" }

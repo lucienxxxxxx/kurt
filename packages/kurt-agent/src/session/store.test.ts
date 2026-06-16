@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Message } from "kurt-agent";
-import { SessionStore } from "./session-store.ts";
+import type { Message } from "../engine/index.ts";
+import { SessionStore } from "./store.ts";
 
 let dir: string;
 let store: SessionStore;
@@ -79,7 +79,6 @@ describe("SessionStore occupancy locks", () => {
 
   test("a dead process's lock is reclaimed (liveness-based staleness)", () => {
     const id = "stale-session";
-    // Forge a lock owned by a pid that's (almost certainly) not alive.
     writeFileSync(join(dir, `${id}.lock`), JSON.stringify({ pid: 2147483647, ts: Date.now() }));
     expect(store.acquireLock(id)).toBe(true); // dead owner → stale → reclaimed
     store.releaseLock(id);

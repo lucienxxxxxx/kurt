@@ -1,15 +1,17 @@
 /**
  * SessionStore — persists conversations under ~/.kurt/sessions/<id>.json so they
- * survive across launches. Sessions are stored globally but tagged with the
- * workspace they came from, so the TUI can list just the current workspace's.
+ * survive across launches and are SHARED across front-ends (TUI + desktop bridge).
+ * Sessions are stored globally but tagged with the workspace they came from, so a
+ * front-end can list just the current workspace's.
  *
- * This is pure orchestration (the engine is stateless; history is just
- * `Message[]`). No engine dependency beyond the `Message` type.
+ * Orchestration-layer I/O (the engine is stateless; history is just `Message[]`).
+ * Lives in kurt-agent so every front-end consumes one implementation + one store.
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { atomicWrite, type Message } from "kurt-agent";
+import type { Message } from "../engine/index.ts";
+import { atomicWrite } from "../fs-atomic.ts";
 import { sessionsDir } from "./paths.ts";
 
 /** Listing-sized session info (no message bodies). */
@@ -92,11 +94,11 @@ export class SessionStore {
   }
 
   // ── Occupancy locks ──────────────────────────────────────────────────────
-  // Two terminals editing the SAME session id would silently overwrite each
+  // Two front-ends editing the SAME session id would silently overwrite each
   // other's history (each autosaves its own in-memory messages). A lock file
   // marks a session as "open here"; another process refuses to open it (and
   // forks a new session instead). Staleness is decided by process liveness, so
-  // a crashed kurt's lock is reclaimed automatically — no timeout heuristics.
+  // a crashed process's lock is reclaimed automatically — no timeout heuristics.
 
   /** Try to claim a session. Returns false if another LIVE process holds it. */
   acquireLock(id: string): boolean {
