@@ -12,7 +12,7 @@
 ## 一句话定位
 
 main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(Phase 6)**」的阶段:
-七期里 1、2、3、**5 全部完成**,4 主线完成;**6 进行中**(桌面端 kurt-app 已能跑真实 agent;见下方子阶段表);7 尚未开始。
+七期里 1、2、3、**5 全部完成**,4 主线完成;**6 功能完整**(macOS 桌面端 kurt-app:配置 key、选模型/effort、真实流式运行、真实会话列表/重载、敏感命令审批;停在 `tauri dev`,打包暂缓);7 尚未开始。
 
 ## 七期路线图状态(main)
 
@@ -41,7 +41,7 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
 | 6.4a | 真实会话列表/重载:sidebar 列出 bridge 真实会话、点击重载(`messagesToSteps` 在 bridge 侧重建步骤)、去掉 mock demos | ✅ 完成(bridge 15 测 + app build/16 ✓) |
 | 6.4b | **审批弹窗 ✓**:bridge 敏感命令经桌面弹窗门控(per-run `PermissionProvider` → `approval` SSE frame → `POST /approve` 回 allow/always/deny;always 入内存 allowlist)。**安全缺口已闭合。** | ✅ 完成(bridge 18 测含审批往返 + app 18 测) |
 | 6.4c | **API key + 模型/effort ✓**:Settings →「模型 / API」面板配置 key(`~/.kurt/desktop.json` 0600,实时重建模型);composer 模型菜单列真实模型(`/info`)、模型/effort 随 `/run` 驱动真实 per-run 配置(`rt.modelFor`)。**待:** 真实文件预览、Keychain 加固(均非阻塞) | ✅ 完成 |
-| 6.4d | 打包:`bun build --compile` bridge → Tauri sidecar 二进制 + 代码签名/公证 `.app`(需用户 Apple 签名身份,或先出未签名本地构建) | ⬜ 下一步 |
+| 6.4d | 打包:`bun build --compile` bridge → Tauri sidecar 二进制 + 代码签名/公证 `.app` | ⏸ 暂缓(用户选择)—— 桌面端**功能已完整**,停在 `tauri dev` 形态;打包时再做(需 Apple 签名身份,或先出未签名本地构建) |
 
 ## 已实现(main)
 
