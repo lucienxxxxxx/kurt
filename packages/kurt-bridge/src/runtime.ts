@@ -51,7 +51,9 @@ export type ApprovalDecision = "allow" | "always" | "deny";
 /** Operating mode (mirrors kurt-tui): chat = read-only, plan = +planning, agent = full. */
 export type Mode = "chat" | "agent" | "plan";
 
-const READ_ONLY = ["read_file", "ls", "grep", "web_search", "memory"];
+// request_write_access is in every mode: it's approval-gated, and in read-only
+// modes it just enables READING dirs outside the workspace (no write tool present).
+const READ_ONLY = ["read_file", "ls", "grep", "web_search", "memory", "request_write_access"];
 const MODE_TOOLS: Record<Mode, "all" | string[]> = {
   agent: "all",
   chat: READ_ONLY,
@@ -223,8 +225,9 @@ function defaultSystem(workspace: string): string {
     "Use the available tools to actually do the work; show your steps.",
     `WORKSPACE_DIR = ${workspace} — read inputs and write outputs here.`,
     "To read or write OUTSIDE the workspace (e.g. ~/Downloads), call request_write_access",
-    "with that absolute directory first — the user is prompted to approve — then retry. Do",
-    "NOT claim you lack a tool for this; request_write_access is available in agent mode.",
+    "with that absolute directory first (param: `directory`) — the user is prompted to",
+    "approve — then retry. Do NOT claim you lack a tool for this; request_write_access is",
+    "always available.",
   ].join("\n");
 }
 

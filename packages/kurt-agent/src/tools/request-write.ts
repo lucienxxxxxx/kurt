@@ -22,8 +22,9 @@ export class RequestWriteAccessTool implements Tool {
     inputSchema: {
       type: "object",
       properties: {
-        directory: { type: "string", description: "Absolute path of the directory to allow writing in." },
-        reason: { type: "string", description: "Why you need write access there." },
+        directory: { type: "string", description: "Absolute path of the directory to allow access to (alias: path)." },
+        path: { type: "string", description: "Alias for directory." },
+        reason: { type: "string", description: "Why you need access there." },
       },
       required: ["directory"],
     },
@@ -39,11 +40,13 @@ export class RequestWriteAccessTool implements Tool {
   }
 
   async execute(input: unknown, _ctx: ToolContext): Promise<ToolResult> {
-    const { directory, reason } = (input ?? {}) as { directory?: unknown; reason?: unknown };
-    if (typeof directory !== "string" || directory.length === 0) {
-      return { content: 'Invalid input: "directory" must be a non-empty string.', isError: true };
+    const { directory, path, reason } = (input ?? {}) as { directory?: unknown; path?: unknown; reason?: unknown };
+    // Accept `path` as an alias for `directory` (models often pass `path`).
+    const target = typeof directory === "string" && directory.length > 0 ? directory : typeof path === "string" ? path : "";
+    if (target.length === 0) {
+      return { content: 'Invalid input: "directory" (or "path") must be a non-empty string.', isError: true };
     }
-    const dir = resolve(expandHome(directory));
+    const dir = resolve(expandHome(target));
 
     if (this.#writable.includes(dir)) {
       return { content: `Already writable: ${dir}` };

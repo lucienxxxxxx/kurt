@@ -215,7 +215,7 @@ describe("approval round-trip", () => {
 
 describe("modes (tool gating)", () => {
   const named = (name: string): Tool => ({ spec: { name, description: "", inputSchema: { type: "object", properties: {} } }, execute: async () => ({ content: "ok" }) });
-  const allNames = ["read_file", "ls", "grep", "web_search", "memory", "write_file", "shell", "update_plan"];
+  const allNames = ["read_file", "ls", "grep", "web_search", "memory", "write_file", "shell", "update_plan", "request_write_access"];
 
   async function toolNamesForMode(mode: "chat" | "agent" | "plan"): Promise<string[]> {
     const model = new MockModel([{ text: "hi" }]);
