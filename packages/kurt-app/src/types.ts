@@ -4,6 +4,7 @@
 export type Lang = "zh" | "en";
 export type Theme = "light" | "dark";
 export type Effort = "low" | "med" | "high" | "max";
+export type Mode = "chat" | "agent" | "plan";
 
 /** A bilingual string (conversation content carries both; UI picks one via `tr`). */
 export interface LocalizedString {

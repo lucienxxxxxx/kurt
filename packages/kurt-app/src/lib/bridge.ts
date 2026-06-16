@@ -58,7 +58,7 @@ export interface RunHandlers {
  */
 export async function runStream(
   baseUrl: string,
-  body: { sessionId?: string; text: string; model?: string; effort?: string },
+  body: { sessionId?: string; text: string; model?: string; effort?: string; thinking?: boolean; mode?: "chat" | "agent" | "plan" },
   handlers: RunHandlers,
   signal?: AbortSignal,
 ): Promise<void> {

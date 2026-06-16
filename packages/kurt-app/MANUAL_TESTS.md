@@ -139,3 +139,24 @@ storage is a later hardening; for now the key is plaintext (0600) on disk.
 
 Result: ____ (date / pass-fail / notes).
 
+---
+
+## Phase 6.4 polish — out-of-workspace access, modes, thinking, spacing
+
+1. **Access outside the workspace (request_write_access).** Set `KURT_WORKSPACE` to a
+   dir that does NOT contain Downloads, then ask "看一下我的下载文件夹有什么" / "list
+   my ~/Downloads". The agent now calls **request_write_access** → the **approval modal**
+   pops up for `~/Downloads` → **Allow** → it reads the folder. (It must NOT say "no
+   request_write_access tool available".)
+2. **Mode menu (chat/agent/plan)** in the composer:
+   - **chat** → ask it to write a file or run a command → it explains/declines (no write/shell tools).
+   - **agent** → it actually does it.
+   - **plan** → it produces a step-by-step plan (update_plan), doesn't execute.
+   Selection persists across relaunch.
+3. **Thinking toggle** (composer): turn it on → the next run uses the model's thinking/
+   reasoning (visible as a thinking step / longer reasoning); off → plain. Persists.
+4. **Spacing**: the gap between your message bubble and the agent's reply is noticeably
+   wider than before.
+
+Result: ____ (date / pass-fail / notes).
+

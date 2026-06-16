@@ -223,7 +223,7 @@ html[data-theme="dark"] .brand-logo { filter: invert(1); }
   width: fit-content;
   max-width: 80%;
   margin-left: auto;
-  margin-bottom: 26px;
+  margin-bottom: 38px;
   padding: 11px 16px;
   border-radius: 16px 16px 4px 16px;
   background: var(--accent-soft);
@@ -545,6 +545,8 @@ html[data-theme="dark"] img.empty-logo { filter: invert(1); }
 .pill-btn:hover { background: var(--bg-hover); }
 .pill-btn svg { width: 16px; height: 16px; }
 .pill-btn.ghost { border-color: transparent; padding: 0 8px; }
+.pill-btn.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.pill-btn.on:hover { background: var(--accent-soft); }
 .pill-btn .chev { width: 13px; height: 13px; color: var(--text-muted); }
 .bar-spacer { flex: 1 1 auto; }
 

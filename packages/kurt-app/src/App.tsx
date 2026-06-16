@@ -3,7 +3,7 @@
  *  the sidebar lists the bridge's sessions and loading one reconstructs its steps. */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Effort, Lang, Loc, Panel, QueuedMsg, SessionMeta, Step, Theme } from "./types.ts";
+import type { Effort, Lang, Loc, Mode, Panel, QueuedMsg, SessionMeta, Step, Theme } from "./types.ts";
 import { T, tr } from "./i18n/strings.ts";
 import { runStream, listSessions, getSession, getInfo, approve, type ApprovalRequest } from "./lib/bridge.ts";
 import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
@@ -37,6 +37,8 @@ export default function App() {
   const [model, setModel] = useState("");
   const [models, setModels] = useState<string[]>([]);
   const [effort, setEffort] = useState<Effort>("med");
+  const [mode, setMode] = useState<Mode>(() => persisted<Mode>("kurt-mode", "agent"));
+  const [thinking, setThinking] = useState<boolean>(() => { try { return localStorage.getItem("kurt-thinking") === "1"; } catch { return false; } });
 
   const [running, setRunning] = useState(false);
   const [liveId, setLiveId] = useState<number | null>(null);
@@ -52,6 +54,8 @@ export default function App() {
 
   useEffect(() => { document.documentElement.setAttribute("data-theme", theme); try { localStorage.setItem("kurt-theme", theme); } catch { /* ignore */ } }, [theme]);
   useEffect(() => { document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en"); try { localStorage.setItem("kurt-lang", lang); } catch { /* ignore */ } }, [lang]);
+  useEffect(() => { try { localStorage.setItem("kurt-mode", mode); } catch { /* ignore */ } }, [mode]);
+  useEffect(() => { try { localStorage.setItem("kurt-thinking", thinking ? "1" : "0"); } catch { /* ignore */ } }, [thinking]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => { const el = scrollRef.current; if (el && running) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [thread, liveId, running]);
@@ -91,7 +95,7 @@ export default function App() {
       const base = await resolveBridgeUrl();
       await runStream(
         base,
-        { sessionId: realSessionRef.current ?? undefined, text, model: model || undefined, effort },
+        { sessionId: realSessionRef.current ?? undefined, text, model: model || undefined, effort, thinking, mode },
         {
           onSession: (id) => { realSessionRef.current = id; setActiveId(id); setRunningId(id); },
           onStep: (bridgeStep) => {
@@ -260,7 +264,8 @@ export default function App() {
 
                   <Composer value={input} onChange={setInput} onSend={send} onStop={stopRun}
                     running={running} queuedMsgs={queuedMsgs} onCancelQueued={cancelQueued} lang={lang}
-                    model={model} models={models} onModelChange={setModel} effort={effort} onEffortChange={setEffort} />
+                    model={model} models={models} onModelChange={setModel} effort={effort} onEffortChange={setEffort}
+                    mode={mode} onModeChange={setMode} thinking={thinking} onThinkingToggle={() => setThinking((v) => !v)} />
                 </div>
               </div>
             </div>

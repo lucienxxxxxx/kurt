@@ -28,6 +28,8 @@ import {
   CodeTool,
   WebSearchTool,
   MemoryTool,
+  UpdatePlanTool,
+  RequestWriteAccessTool,
   DuckDuckGoSearch,
   sessionsDir,
   type Event,
@@ -45,6 +47,33 @@ import type { RunFrame } from "./types.ts";
 
 /** The desktop's answer to an approval request. */
 export type ApprovalDecision = "allow" | "always" | "deny";
+
+/** Operating mode (mirrors kurt-tui): chat = read-only, plan = +planning, agent = full. */
+export type Mode = "chat" | "agent" | "plan";
+
+const READ_ONLY = ["read_file", "ls", "grep", "web_search", "memory"];
+const MODE_TOOLS: Record<Mode, "all" | string[]> = {
+  agent: "all",
+  chat: READ_ONLY,
+  plan: [...READ_ONLY, "update_plan"],
+};
+
+function toolsForMode(tools: Tool[], mode: Mode): Tool[] {
+  const allow = MODE_TOOLS[mode];
+  return allow === "all" ? tools : tools.filter((t) => allow.includes(t.spec.name));
+}
+
+/** Per-mode guidance appended to the base system prompt. */
+function modeGuidance(mode: Mode): string {
+  switch (mode) {
+    case "chat":
+      return "\n\nMODE: chat — read and explain only. You can read/search (read_file/ls/grep/web_search) and use memory, but you CANNOT write files or run commands.";
+    case "plan":
+      return "\n\nMODE: plan — investigate, then produce a step-by-step plan with the update_plan tool. You CANNOT write files or run commands — you plan, you don't execute.";
+    case "agent":
+      return "\n\nMODE: agent — the full tool set is available; act directly to accomplish the task.";
+  }
+}
 
 interface PendingApproval {
   resolve: (d: PermissionDecision) => void;
@@ -86,16 +115,18 @@ export interface Runtime {
   info?: () => RuntimeInfo;
   /** Apply + persist model config and rebuild the model (POST /config). */
   reconfigure?: (patch: ModelConfig) => void;
-  /** Build a model for one run with the given model id / effort (current key/baseURL). */
-  modelFor?: (model?: string, effort?: string) => ModelProvider;
+  /** Build a model for one run with the given model id / effort / thinking (current key/baseURL). */
+  modelFor?: (model?: string, effort?: string, thinking?: boolean) => ModelProvider;
 }
 
 export interface RunOptions {
   sessionId?: string;
   text: string;
-  /** Per-run model id / effort from the composer menus (optional). */
+  /** Per-run model id / effort / thinking / mode from the composer menus (optional). */
   model?: string;
   effort?: string;
+  thinking?: boolean;
+  mode?: Mode;
   signal: AbortSignal;
   onFrame: (frame: RunFrame) => void;
 }
@@ -162,13 +193,16 @@ export async function runTurn(rt: Runtime, opts: RunOptions): Promise<void> {
     },
   };
 
-  const tools = rt.makeTools(permission);
+  const mode: Mode = opts.mode ?? "agent";
+  const tools = toolsForMode(rt.makeTools(permission), mode);
+  const system = rt.system + modeGuidance(mode);
   // Per-run model override from the composer menus (falls back to the configured model).
-  const model = (opts.model || opts.effort) && rt.modelFor ? rt.modelFor(opts.model, opts.effort) : rt.model;
+  const override = opts.model || opts.effort || opts.thinking !== undefined;
+  const model = override && rt.modelFor ? rt.modelFor(opts.model, opts.effort, opts.thinking) : rt.model;
   const acc = new StepAccumulator();
   const captured: Event[] = [];
   try {
-    for await (const ev of runLoop({ system: rt.system, messages: rec.messages, tools, model, signal: opts.signal })) {
+    for await (const ev of runLoop({ system, messages: rec.messages, tools, model, signal: opts.signal })) {
       captured.push(ev);
       for (const step of acc.apply(ev)) opts.onFrame({ kind: "step", step });
       if (ev.type === "usage") opts.onFrame({ kind: "usage", inputTokens: ev.inputTokens, outputTokens: ev.outputTokens, totalTokens: ev.totalTokens });
@@ -188,6 +222,9 @@ function defaultSystem(workspace: string): string {
     "You are Kurt, a concise desktop coding/automation assistant.",
     "Use the available tools to actually do the work; show your steps.",
     `WORKSPACE_DIR = ${workspace} — read inputs and write outputs here.`,
+    "To read or write OUTSIDE the workspace (e.g. ~/Downloads), call request_write_access",
+    "with that absolute directory first — the user is prompted to approve — then retry. Do",
+    "NOT claim you lack a tool for this; request_write_access is available in agent mode.",
   ].join("\n");
 }
 
@@ -215,8 +252,8 @@ function saveConfig(cfg: Required<ModelConfig>): void {
 /** Build the real runtime from the environment + ~/.kurt config (DeepSeek; core tools; ~/.kurt sessions). */
 export function productionRuntime(workspace = process.cwd()): Runtime {
   const cfg = loadConfig();
-  const buildModel = (modelId: string = cfg.model, effort?: string): ModelProvider =>
-    withRetry(new OpenAICompatModel({ name: "deepseek", baseURL: cfg.baseURL, model: modelId, apiKey: cfg.apiKey, effort }));
+  const buildModel = (modelId: string = cfg.model, effort?: string, thinking?: boolean): ModelProvider =>
+    withRetry(new OpenAICompatModel({ name: "deepseek", baseURL: cfg.baseURL, model: modelId, apiKey: cfg.apiKey, effort, thinking }));
   const model = buildModel();
   const sandbox = process.platform === "darwin" ? new SeatbeltSandbox() : new DirectSandbox();
   const codeTemp = new SessionWorkspace({ sessionId: "bridge" });
@@ -234,6 +271,10 @@ export function productionRuntime(workspace = process.cwd()): Runtime {
     new CodeTool(sandbox, codeTemp, { writablePaths: writable, env, cwd: workspace }),
     new WebSearchTool(new DuckDuckGoSearch()),
     new MemoryTool({ globalPath: join(homedir(), ".kurt", "memory.md"), projectPath: join(workspace, ".kurt", "memory.md") }),
+    new UpdatePlanTool(),
+    // Lets the agent request access to a dir OUTSIDE the workspace (e.g. ~/Downloads);
+    // routes through the approval modal, then the dir joins `writable` (read + write).
+    new RequestWriteAccessTool(writable, permission),
   ];
 
   const rt = createRuntime({ workspace, model, makeTools, store: new SessionStore(sessionsDir()) });
@@ -245,6 +286,6 @@ export function productionRuntime(workspace = process.cwd()): Runtime {
     saveConfig(cfg);
     rt.model = buildModel(); // take effect immediately (no restart)
   };
-  rt.modelFor = (modelId, effort) => buildModel(modelId || cfg.model, effort);
+  rt.modelFor = (modelId, effort, thinking) => buildModel(modelId || cfg.model, effort, thinking);
   return rt;
 }

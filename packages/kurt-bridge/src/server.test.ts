@@ -9,7 +9,7 @@ import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MockModel, SessionStore, type Tool } from "kurt-agent";
-import { createRuntime, productionRuntime } from "./runtime.ts";
+import { createRuntime, productionRuntime, runTurn } from "./runtime.ts";
 import { startServer, type ServerHandle } from "./server.ts";
 import type { RunFrame, Step } from "./types.ts";
 
@@ -211,6 +211,38 @@ describe("approval round-trip", () => {
     for (const f of f2) if (f.kind === "step") byId.set(f.step._id, f.step);
     expect([...byId.values()].find((s) => s.type === "tool")).toMatchObject({ out: "ran danger" });
   }, 20_000);
+});
+
+describe("modes (tool gating)", () => {
+  const named = (name: string): Tool => ({ spec: { name, description: "", inputSchema: { type: "object", properties: {} } }, execute: async () => ({ content: "ok" }) });
+  const allNames = ["read_file", "ls", "grep", "web_search", "memory", "write_file", "shell", "update_plan"];
+
+  async function toolNamesForMode(mode: "chat" | "agent" | "plan"): Promise<string[]> {
+    const model = new MockModel([{ text: "hi" }]);
+    const rt = createRuntime({ workspace: ws, model, makeTools: () => allNames.map(named), store: new SessionStore(sessions) });
+    await runTurn(rt, { text: "hi", mode, signal: new AbortController().signal, onFrame: () => {} });
+    return model.requests[0]!.tools.map((t) => t.name);
+  }
+
+  test("chat mode → read-only tools only (no write/shell)", async () => {
+    const names = await toolNamesForMode("chat");
+    expect(names).toContain("read_file");
+    expect(names).not.toContain("write_file");
+    expect(names).not.toContain("shell");
+    expect(names).not.toContain("update_plan");
+  });
+
+  test("plan mode → read-only + update_plan, still no write/shell", async () => {
+    const names = await toolNamesForMode("plan");
+    expect(names).toContain("update_plan");
+    expect(names).not.toContain("shell");
+  });
+
+  test("agent mode → all tools", async () => {
+    const names = await toolNamesForMode("agent");
+    expect(names).toContain("shell");
+    expect(names).toContain("write_file");
+  });
 });
 
 describe("model config (/info, /config)", () => {

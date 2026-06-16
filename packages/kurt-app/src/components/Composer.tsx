@@ -3,7 +3,7 @@
  *  local for 6.1; wired to real config in 6.3. */
 
 import { useEffect, useRef, useState } from "react";
-import type { Effort, Lang, QueuedMsg } from "../types.ts";
+import type { Effort, Lang, Mode, QueuedMsg } from "../types.ts";
 import { T, tr } from "../i18n/strings.ts";
 import { Icon } from "./Icon.tsx";
 
@@ -62,6 +62,33 @@ function EffortMenu({ value, onChange, lang, open, onToggle }: { value: Effort; 
   );
 }
 
+function ModeMenu({ value, onChange, lang, open, onToggle }: { value: Mode; onChange: (v: Mode) => void; lang: Lang; open: boolean; onToggle: () => void }) {
+  const label = (m: Mode) => ({ chat: tr(T.modeChat, lang), agent: tr(T.modeAgent, lang), plan: tr(T.modePlan, lang) })[m];
+  return (
+    <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
+      <button className="pill-btn" onClick={onToggle}>
+        <Icon name="chat" />{label(value)}<Icon name="chevD" className="chev" />
+      </button>
+      <MenuPopover open={open}>
+        {(["chat", "agent", "plan"] as Mode[]).map((m) => (
+          <div key={m} className={"menu-item" + (m === value ? " sel" : "")} onClick={() => { onChange(m); onToggle(); }}>
+            <Icon name="chat" />{label(m)}
+            {m === value && <span style={{ marginLeft: "auto" }}><Icon name="check" /></span>}
+          </div>
+        ))}
+      </MenuPopover>
+    </div>
+  );
+}
+
+function ThinkingToggle({ on, onToggle, lang }: { on: boolean; onToggle: () => void; lang: Lang }) {
+  return (
+    <button className={"pill-btn" + (on ? " on" : "")} onClick={onToggle} title={tr(T.thinkingLabel, lang)}>
+      <Icon name="spark" />{tr(T.thinkingLabel, lang)}
+    </button>
+  );
+}
+
 function QueueSection({ items, onCancel, lang }: { items: QueuedMsg[]; onCancel: (id: number) => void; lang: Lang }) {
   if (!items.length) return null;
   return (
@@ -88,7 +115,7 @@ function QueueSection({ items, onCancel, lang }: { items: QueuedMsg[]; onCancel:
   );
 }
 
-export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs, onCancelQueued, lang, model, models, onModelChange, effort, onEffortChange }: {
+export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs, onCancelQueued, lang, model, models, onModelChange, effort, onEffortChange, mode, onModeChange, thinking, onThinkingToggle }: {
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
@@ -102,9 +129,13 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
   onModelChange: (m: string) => void;
   effort: Effort;
   onEffortChange: (e: Effort) => void;
+  mode: Mode;
+  onModeChange: (m: Mode) => void;
+  thinking: boolean;
+  onThinkingToggle: () => void;
 }) {
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const [openMenu, setOpenMenu] = useState<"plus" | "model" | "effort" | null>(null);
+  const [openMenu, setOpenMenu] = useState<"plus" | "model" | "effort" | "mode" | null>(null);
 
   useEffect(() => {
     const ta = taRef.current;
@@ -123,7 +154,7 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
   const key = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (running && !value.trim()) return; onSend(); }
   };
-  const toggle = (name: "plus" | "model" | "effort") => setOpenMenu((v) => (v === name ? null : name));
+  const toggle = (name: "plus" | "model" | "effort" | "mode") => setOpenMenu((v) => (v === name ? null : name));
 
   return (
     <div className="composer-wrap">
@@ -135,8 +166,10 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
             onChange={(e) => onChange(e.target.value)} onKeyDown={key} />
           <div className="composer-bar">
             <PlusMenu lang={lang} open={openMenu === "plus"} onToggle={() => toggle("plus")} />
+            <ModeMenu value={mode} onChange={onModeChange} lang={lang} open={openMenu === "mode"} onToggle={() => toggle("mode")} />
             <ModelMenu value={model} options={models} onChange={onModelChange} open={openMenu === "model"} onToggle={() => toggle("model")} />
             <EffortMenu value={effort} onChange={onEffortChange} lang={lang} open={openMenu === "effort"} onToggle={() => toggle("effort")} />
+            <ThinkingToggle on={thinking} onToggle={onThinkingToggle} lang={lang} />
             <div className="bar-spacer" />
             <button className="pill-btn ghost" title={tr(T.voice, lang)}><Icon name="mic" /></button>
             {running && !value.trim() ? (

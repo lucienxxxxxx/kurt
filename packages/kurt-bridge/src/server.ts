@@ -11,7 +11,7 @@
  * Closing the /run response (client stop) aborts the run.
  */
 
-import { runTurn, resolveApproval, type Runtime, type ApprovalDecision, type ModelConfig } from "./runtime.ts";
+import { runTurn, resolveApproval, type Runtime, type ApprovalDecision, type ModelConfig, type Mode } from "./runtime.ts";
 import { messagesToSteps } from "./events.ts";
 import type { RunFrame, SessionInfo } from "./types.ts";
 
@@ -49,7 +49,7 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
       }
 
       if (pathname === "/run" && req.method === "POST") {
-        const body = (await req.json().catch(() => ({}))) as { sessionId?: string; text?: string; model?: string; effort?: string };
+        const body = (await req.json().catch(() => ({}))) as RunBody;
         if (!body.text || !body.text.trim()) return json({ error: "text required" }, 400);
         return runSSE(rt, body);
       }
@@ -100,8 +100,17 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
   };
 }
 
+interface RunBody {
+  sessionId?: string;
+  text?: string;
+  model?: string;
+  effort?: string;
+  thinking?: boolean;
+  mode?: Mode;
+}
+
 /** Run one turn and stream its frames as Server-Sent Events. */
-function runSSE(rt: Runtime, body: { sessionId?: string; text?: string; model?: string; effort?: string }): Response {
+function runSSE(rt: Runtime, body: RunBody): Response {
   const ctrl = new AbortController();
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -113,7 +122,7 @@ function runSSE(rt: Runtime, body: { sessionId?: string; text?: string; model?: 
           /* stream already closed */
         }
       };
-      void runTurn(rt, { sessionId: body.sessionId, text: body.text!, model: body.model, effort: body.effort, signal: ctrl.signal, onFrame: send }).finally(() => {
+      void runTurn(rt, { sessionId: body.sessionId, text: body.text!, model: body.model, effort: body.effort, thinking: body.thinking, mode: body.mode, signal: ctrl.signal, onFrame: send }).finally(() => {
         try {
           controller.close();
         } catch {
