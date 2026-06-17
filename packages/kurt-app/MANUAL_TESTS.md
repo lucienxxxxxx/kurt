@@ -157,7 +157,9 @@ Result: ____ (date / pass-fail / notes).
    - **agent** → it actually does it.
    - **plan** → it produces a step-by-step plan (update_plan), doesn't execute.
    Selection persists across relaunch.
-3. **Thinking toggle** (composer): turn it on → the next run uses the model's thinking/
+3. **Thinking toggle** lives **inside the model menu** (open the model dropdown → below a
+   divider, a "Thinking" row with an Apple-style switch). Toggling it flips the switch in
+   place and keeps the menu open; turn it on → the next run uses the model's thinking/
    reasoning (visible as a thinking step / longer reasoning); off → plain. Persists.
 4. **Spacing**: the gap between your message bubble and the agent's reply is noticeably
    wider than before.

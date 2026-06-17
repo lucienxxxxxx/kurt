@@ -25,7 +25,10 @@ function PlusMenu({ lang, open, onToggle }: { lang: Lang; open: boolean; onToggl
   );
 }
 
-function ModelMenu({ value, options, onChange, open, onToggle }: { value: string; options: string[]; onChange: (v: string) => void; open: boolean; onToggle: () => void }) {
+function ModelMenu({ value, options, onChange, open, onToggle, thinking, onThinkingToggle, lang }: {
+  value: string; options: string[]; onChange: (v: string) => void; open: boolean; onToggle: () => void;
+  thinking: boolean; onThinkingToggle: () => void; lang: Lang;
+}) {
   const opts = options.length ? options : [value];
   return (
     <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
@@ -39,6 +42,12 @@ function ModelMenu({ value, options, onChange, open, onToggle }: { value: string
             {m === value && <span style={{ marginLeft: "auto" }}><Icon name="check" /></span>}
           </div>
         ))}
+        <div className="menu-sep" />
+        {/* thinking-mode toggle — stays open on click so the switch flips in place */}
+        <div className="menu-item switch-row" role="switch" aria-checked={thinking} onClick={() => onThinkingToggle()}>
+          <Icon name="spark" />{tr(T.thinkingLabel, lang)}
+          <span className={"switch" + (thinking ? " on" : "")}><span className="switch-knob" /></span>
+        </div>
       </MenuPopover>
     </div>
   );
@@ -78,14 +87,6 @@ function ModeMenu({ value, onChange, lang, open, onToggle }: { value: Mode; onCh
         ))}
       </MenuPopover>
     </div>
-  );
-}
-
-function ThinkingToggle({ on, onToggle, lang }: { on: boolean; onToggle: () => void; lang: Lang }) {
-  return (
-    <button className={"pill-btn" + (on ? " on" : "")} onClick={onToggle} title={tr(T.thinkingLabel, lang)}>
-      <Icon name="spark" />{tr(T.thinkingLabel, lang)}
-    </button>
   );
 }
 
@@ -170,9 +171,9 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
           <div className="composer-bar">
             <PlusMenu lang={lang} open={openMenu === "plus"} onToggle={() => toggle("plus")} />
             <ModeMenu value={mode} onChange={onModeChange} lang={lang} open={openMenu === "mode"} onToggle={() => toggle("mode")} />
-            <ModelMenu value={model} options={models} onChange={onModelChange} open={openMenu === "model"} onToggle={() => toggle("model")} />
+            <ModelMenu value={model} options={models} onChange={onModelChange} open={openMenu === "model"} onToggle={() => toggle("model")}
+              thinking={thinking} onThinkingToggle={onThinkingToggle} lang={lang} />
             <EffortMenu value={effort} onChange={onEffortChange} lang={lang} open={openMenu === "effort"} onToggle={() => toggle("effort")} />
-            <ThinkingToggle on={thinking} onToggle={onThinkingToggle} lang={lang} />
             <div className="bar-spacer" />
             <button className="pill-btn ghost" title={tr(T.voice, lang)}><Icon name="mic" /></button>
             {running && !value.trim() ? (
