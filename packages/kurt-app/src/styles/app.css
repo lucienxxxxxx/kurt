@@ -23,7 +23,12 @@ body {
   background: var(--bg-window);
   overflow: hidden;
   display: flex;
+  user-select: none; /* the app chrome isn't selectable — only message content is (below) */
 }
+
+/* Text selection is allowed only for actual message/preview CONTENT. */
+.step-text, .query-box, .think-body, .tool-content, .skill-section-body,
+.fp-md, .fp-code, .md-pre, input, textarea { user-select: text; }
 
 /* ===== Sidebar ===== */
 .sidebar {
@@ -244,8 +249,11 @@ html[data-theme="dark"] .brand-logo { filter: invert(1); }
 .query-box p { margin: 0; }
 
 /* message action footer (copy / rollback / time) — background-less buttons */
-.msg-actions { display: flex; align-items: center; gap: 2px; margin-top: 5px; }
+/* the action row reserves its space (visibility, not display) but only shows on
+   hover of the message it belongs to */
+.msg-actions { display: flex; align-items: center; gap: 2px; margin-top: 5px; visibility: hidden; }
 .msg-actions.user { justify-content: flex-end; }
+.step:hover .msg-actions, .query-row:hover .msg-actions { visibility: visible; }
 .msg-btn {
   display: inline-flex; align-items: center; gap: 5px;
   height: 26px; padding: 0 7px;
@@ -573,6 +581,15 @@ html[data-theme="dark"] img.empty-logo { filter: invert(1); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .running-bar.paused .spin { animation-play-state: paused; border-top-color: var(--text-muted); }
+
+/* live run readout at the bottom of the thread: spinner + elapsed + tokens */
+.run-status { display: flex; align-items: center; gap: 9px; margin-top: 6px; color: var(--text-muted); font-size: 13px; user-select: none; }
+.run-status .spin {
+  width: 13px; height: 13px; border-radius: 50%; flex: 0 0 13px;
+  border: 2px solid var(--accent-soft); border-top-color: var(--accent);
+  animation: spin .8s linear infinite;
+}
+.run-status-text { font-variant-numeric: tabular-nums; }
 
 .composer {
   border: 1px solid var(--border-strong);

@@ -297,3 +297,23 @@ Result: ____ (date / pass-fail / notes).
 
 Result: ____ (date / pass-fail / notes).
 
+---
+
+## Phase 6.4 polish — run readout, hover actions, no stray selection
+
+1. **Run readout.** While the viewed conversation is running, a row at the **bottom of the
+   thread** shows a **spinner + elapsed time** (e.g. `44s`, `2m 44s`); once usage arrives it
+   appends **tokens** (e.g. `2m 44s · 1.5k tokens`). Elapsed ticks every second. It clears
+   when the run finishes/stops, and re-appears (with the right elapsed/tokens) if you switch
+   back to a still-running conversation.
+2. **Hover-only message actions.** The Copy / Rollback / time row under agent replies and
+   your own messages is **hidden by default** and appears only when you **hover** that
+   message. It reserves its space (the layout does **not** jump when it appears/disappears).
+3. **No stray text selection.** Dragging to select over the sidebar, titles, buttons,
+   composer chrome, status text, etc. selects **nothing**. You **can** still select the
+   actual content: agent reply text, your message bubbles, thinking body, tool IN/OUT,
+   skill output, code blocks, and the detail-panel preview. Typing/selecting inside the
+   composer and the title field still works.
+
+Result: ____ (date / pass-fail / notes).
+

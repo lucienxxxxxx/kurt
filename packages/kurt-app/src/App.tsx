@@ -9,6 +9,7 @@ import { T, tr } from "./i18n/strings.ts";
 import { runStream, listSessions, getSession, getInfo, approve, truncateSession, deleteSession, type ApprovalRequest } from "./lib/bridge.ts";
 import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
 import { externalLinkFromClick, openExternal } from "./lib/external.ts";
+import { fmtElapsed, fmtTokens } from "./lib/format.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
 import { Settings } from "./components/Settings.tsx";
@@ -32,6 +33,8 @@ interface Run {
   buf: Step[];                // this conversation's accumulated steps
   idMap: Map<number, number>; // bridge step _id → app uid, for the current turn
   queue: QueuedMsg[];         // messages queued onto THIS run while it streams
+  startedAt: number;          // for the elapsed-time readout
+  tokens: number;             // total tokens reported via usage frames
 }
 
 const persisted = <V extends string>(key: string, fallback: V): V => {
@@ -64,6 +67,9 @@ export default function App() {
   const [runningIds, setRunningIds] = useState<Set<string>>(() => new Set());
   const [newChatRunId, setNewChatRunId] = useState<number | null>(null);
   const [queuedMsgs, setQueuedMsgs] = useState<QueuedMsg[]>([]); // the VIEWED run's queue
+  // Live run readout for the VIEWED conversation (elapsed + tokens); null when idle.
+  const [viewStats, setViewStats] = useState<{ startedAt: number; tokens: number } | null>(null);
+  const [, forceTick] = useState(0);
   const [panels, setPanels] = useState<Panel[]>([]);
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
   // Approvals are keyed by the session their run belongs to, so switching
@@ -119,6 +125,13 @@ export default function App() {
   useEffect(() => { const el = scrollRef.current; if (el && viewRunning) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [thread, liveId, viewRunning]);
   // On session switch, jump straight to the latest message (bottom), not the top.
   useEffect(() => { const el = scrollRef.current; if (el) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [activeId]);
+  // Tick once a second while a run readout is showing, so elapsed time advances.
+  const runStatusOn = viewStats !== null;
+  useEffect(() => {
+    if (!runStatusOn) return;
+    const t = setInterval(() => forceTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [runStatusOn]);
 
   const refreshSessions = useCallback(async (): Promise<void> => {
     try {
@@ -180,6 +193,7 @@ export default function App() {
             upsertRun(run, { ...bridgeStep, _id: appId } as Step);
           },
           onApproval: (req) => { if (run.sessionId) setPendingApprovals((m) => ({ ...m, [run.sessionId!]: req })); },
+          onUsage: (u) => { run.tokens += u.totalTokens; if (isViewing(run)) setViewStats({ startedAt: run.startedAt, tokens: run.tokens }); },
           onError: (message) => upsertRun(run, { _id: uid(), type: "text", text: `⚠ ${message}`, ts: Date.now() } as Step),
         },
         run.ctrl.signal,
@@ -197,7 +211,7 @@ export default function App() {
         if (run.sessionId) setRunningIds((s) => { const n = new Set(s); n.delete(run.sessionId!); return n; });
         if (run.sessionId && run.sessionId !== activeIdRef.current) setUnread((u) => new Set(u).add(run.sessionId!));
         if (newChatRunIdRef.current === run.runId) setNewChatRun(null);
-        if (isViewing(run)) { setLiveId(null); setQueuedMsgs([]); }
+        if (isViewing(run)) { setLiveId(null); setQueuedMsgs([]); setViewStats(null); }
         void refreshSessions();
       }
     }
@@ -205,11 +219,12 @@ export default function App() {
 
   /** Start a fresh run for `sessionId` (null = the unsaved new chat in view). */
   const beginRun = (sessionId: string | null, seed: Step[], text: string): void => {
-    const run: Run = { runId: uid(), sessionId, ctrl: new AbortController(), buf: seed, idMap: new Map(), queue: [] };
+    const run: Run = { runId: uid(), sessionId, ctrl: new AbortController(), buf: seed, idMap: new Map(), queue: [], startedAt: Date.now(), tokens: 0 };
     runsRef.current.set(run.runId, run);
     if (sessionId) setRunningIds((s) => new Set(s).add(sessionId));
     else setNewChatRun(run.runId);
     setLiveId(seed.length ? seed[seed.length - 1]!._id : null);
+    setViewStats({ startedAt: run.startedAt, tokens: 0 }); // beginRun is always for the viewed conversation
     void streamRun(run, text);
   };
 
@@ -239,7 +254,7 @@ export default function App() {
     run.ctrl.abort(); // → runStream rejects → streamRun's finally retires the run
     if (run.sessionId) setRunningIds((s) => { const n = new Set(s); n.delete(run.sessionId!); return n; });
     if (newChatRunIdRef.current === run.runId) setNewChatRun(null);
-    setQueuedMsgs([]); setLiveId(null);
+    setQueuedMsgs([]); setLiveId(null); setViewStats(null);
   };
 
   const decideApproval = (decision: "allow" | "always" | "deny"): void => {
@@ -312,11 +327,12 @@ export default function App() {
       setThread(run.buf.slice());
       setLiveId(run.buf.length ? run.buf[run.buf.length - 1]!._id : null);
       setQueuedMsgs(run.queue.slice());
+      setViewStats({ startedAt: run.startedAt, tokens: run.tokens });
       const meta = sessionList.find((s) => s.id === id);
       setTitleEntry(meta ? meta.title : T.convNew);
       return;
     }
-    setLiveId(null); setQueuedMsgs([]);
+    setLiveId(null); setQueuedMsgs([]); setViewStats(null);
     try {
       const detail = await getSession(await resolveBridgeUrl(), id);
       if (!detail || activeIdRef.current !== id) return; // bailed or switched away mid-load
@@ -330,7 +346,7 @@ export default function App() {
     setView("chat");
     setActive(null);
     setNewChatRun(null);
-    setThread([]); setLiveId(null); setQueuedMsgs([]);
+    setThread([]); setLiveId(null); setQueuedMsgs([]); setViewStats(null);
     setTitleEntry(T.convNew); setCollapsed(new Set()); setPanels([]); setActivePanelId(null);
   };
 
@@ -413,6 +429,15 @@ export default function App() {
                             {seg.steps.length > 0 && <div className="timeline">{seg.steps.map((s) => renderStep(s, stepCtx))}</div>}
                           </div>
                         ))}
+                        {viewStats && (
+                          <div className="run-status">
+                            <span className="spin" />
+                            <span className="run-status-text">
+                              {fmtElapsed(Date.now() - viewStats.startedAt)}
+                              {viewStats.tokens > 0 ? ` · ${fmtTokens(viewStats.tokens)} tokens` : ""}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
