@@ -319,3 +319,18 @@ Result: ____ (date / pass-fail / notes).
 
 Result: ____ (date / pass-fail / notes).
 
+---
+
+## Phase 6.4 polish — auto-summarized session titles + collapsed status dot
+
+1. **"新会话" → summarized title.** Start a new chat and send a first message. The sidebar
+   immediately shows a **"新会话" / "New chat"** entry (with a running dot). When the turn
+   finishes, the title is **replaced by a short auto-generated summary** of the topic
+   (a quick model call). Needs an API key set; with no key it falls back to the first
+   message (truncated).
+2. **Status-dot spacing.** A session with **no** running/unread dot has its title flush
+   left (the dot takes **no** space). Only when a dot is present (running/unread) does the
+   title shift right to make room — i.e. the dot slot is not reserved when empty.
+
+Result: ____ (date / pass-fail / notes).
+

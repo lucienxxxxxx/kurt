@@ -136,7 +136,9 @@ export default function App() {
   const refreshSessions = useCallback(async (): Promise<void> => {
     try {
       const list = await listSessions(await resolveBridgeUrl());
-      setSessionList(list.map((s) => ({ id: s.id, title: s.title || tr(T.convNew, "en"), icon: "chat" })));
+      // Keep the raw title (may be "" while a new session's title is still being
+      // auto-summarized); the sidebar localizes the empty case to "新会话".
+      setSessionList(list.map((s) => ({ id: s.id, title: s.title, icon: "chat" })));
     } catch { /* bridge not ready — leave the list as-is */ }
   }, []);
   useEffect(() => { void refreshSessions(); }, [refreshSessions]);
@@ -329,7 +331,7 @@ export default function App() {
       setQueuedMsgs(run.queue.slice());
       setViewStats({ startedAt: run.startedAt, tokens: run.tokens });
       const meta = sessionList.find((s) => s.id === id);
-      setTitleEntry(meta ? meta.title : T.convNew);
+      setTitleEntry(meta && meta.title ? meta.title : T.convNew);
       return;
     }
     setLiveId(null); setQueuedMsgs([]); setViewStats(null);

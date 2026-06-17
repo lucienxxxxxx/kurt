@@ -48,10 +48,15 @@ describe("Sidebar", () => {
     expect(props.onNewChat).toHaveBeenCalled();
   });
 
-  test("running session shows a pulsing status dot left of its title", () => {
+  test("running session shows a pulsing status dot; a session with no status has no dot element", () => {
     renderSidebar({ runningIds: new Set(["s1"]) });
     expect(statusDot("Organize downloads")?.className).toContain("running");
-    expect(statusDot("ESLint issue")?.className).not.toContain("running");
+    expect(statusDot("ESLint issue")).toBeNull(); // no status → not rendered (takes no space)
+  });
+
+  test("empty title renders the localized 'New chat' placeholder", () => {
+    renderSidebar({ recents: [{ id: "s9", title: "", icon: "chat" }] });
+    expect(document.querySelector(".recent-item .r-label")?.textContent).toBe("New chat");
   });
 
   test("unread session shows a solid status dot; running takes precedence", () => {

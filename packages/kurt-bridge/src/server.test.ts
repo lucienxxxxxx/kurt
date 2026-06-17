@@ -124,7 +124,13 @@ describe("bridge server /run (SSE)", () => {
     expect(kinds[kinds.length - 1]).toBe("done");
 
     const session = frames.find((f) => f.kind === "session");
-    expect(session && session.kind === "session" && session.title).toBe("do the thing");
+    const id = session && session.kind === "session" ? session.id : "";
+    expect(id).toBeTruthy();
+    // A new session's title is finalized AFTER the turn (auto-summary, or — with no
+    // summarizer — a fallback to the first user message). The opening frame is empty.
+    expect(session && session.kind === "session" && session.title).toBe("");
+    const rec0 = (await (await fetch(h.url + `/sessions/${encodeURIComponent(id)}`)).json()) as { title: string };
+    expect(rec0.title).toBe("do the thing");
 
     // The client upserts step frames by _id (a step is re-sent as it changes);
     // fold to the final snapshot per _id, as the desktop will.
@@ -136,6 +142,23 @@ describe("bridge server /run (SSE)", () => {
     expect(steps.some((s) => s.type === "text" && s.text === "All done.")).toBe(true);
     const tool = steps.find((s) => s.type === "tool");
     expect(tool).toMatchObject({ type: "tool", name: "shell", cmd: "echo hi", out: "ran: echo hi" });
+  }, 20_000);
+
+  test("a new session's title is auto-summarized via makeTitle (empty until the turn finishes)", async () => {
+    const rt = createRuntime({
+      workspace: ws,
+      model: new MockModel([{ text: "It's sunny." }]),
+      makeTools: () => [echoShell],
+      store: new SessionStore(sessions),
+      makeTitle: async () => "Weather in Paris",
+    });
+    server = startServer(rt);
+    const frames = await run(server.url, { text: "what's the weather in paris" });
+    const session = frames.find((f) => f.kind === "session");
+    const id = session && session.kind === "session" ? session.id : "";
+    expect(session && session.kind === "session" && session.title).toBe(""); // opening frame: no title yet
+    const rec = (await (await fetch(server.url + `/sessions/${encodeURIComponent(id)}`)).json()) as { title: string };
+    expect(rec.title).toBe("Weather in Paris");
   }, 20_000);
 
   test("the run persists the session; it then appears in GET /sessions and survives a second turn", async () => {

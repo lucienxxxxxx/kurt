@@ -33,7 +33,9 @@ import {
   DuckDuckGoSearch,
   sessionsDir,
   type Event,
+  type Message,
   type ModelProvider,
+  type ModelRequest,
   type Tool,
   type PermissionProvider,
   type PermissionDecision,
@@ -119,6 +121,9 @@ export interface Runtime {
   reconfigure?: (patch: ModelConfig) => void;
   /** Build a model for one run with the given model id / effort / thinking (current key/baseURL). */
   modelFor?: (model?: string, effort?: string, thinking?: boolean) => ModelProvider;
+  /** Summarize a new conversation into a short title (production runtime sets this;
+   *  when absent, runTurn falls back to the first user message). */
+  makeTitle?: (messages: Message[]) => Promise<string>;
 }
 
 export interface RunOptions {
@@ -139,6 +144,7 @@ export function createRuntime(opts: {
   makeTools: (permission: PermissionProvider) => Tool[];
   system?: string;
   store?: SessionStore;
+  makeTitle?: (messages: Message[]) => Promise<string>;
 }): Runtime {
   return {
     workspace: opts.workspace,
@@ -148,6 +154,7 @@ export function createRuntime(opts: {
     store: opts.store ?? new SessionStore(),
     pendingApprovals: new Map(),
     allowlist: new Set(),
+    makeTitle: opts.makeTitle,
   };
 }
 
@@ -168,8 +175,10 @@ export function resolveApproval(rt: Runtime, id: string, decision: ApprovalDecis
  */
 export async function runTurn(rt: Runtime, opts: RunOptions): Promise<void> {
   const rec = (opts.sessionId ? await rt.store.load(opts.sessionId) : null) ?? rt.store.create(rt.workspace, rt.model.name);
+  const isNewSession = !rec.title; // brand-new conversation → title is auto-summarized after this turn
   rec.messages.push({ role: "user", content: [{ type: "text", text: opts.text }] });
-  if (!rec.title) rec.title = opts.text.slice(0, 60).trim();
+  // For a new session the title stays empty for now (the desktop shows "新会话")
+  // and is filled by an auto-summary once this turn completes (see below).
   opts.onFrame({ kind: "session", id: rec.id, title: rec.title });
 
   // Per-run permission: known-allowed keys pass; otherwise emit an approval frame
@@ -212,6 +221,15 @@ export async function runTurn(rt: Runtime, opts: RunOptions): Promise<void> {
       else if (ev.type === "error") opts.onFrame({ kind: "error", message: ev.message });
     }
     rec.messages.push(...messagesFromEvents(captured));
+    // Auto-summarize a concise title for a brand-new conversation (falls back to
+    // the first user message if there's no summarizer or it fails / was aborted).
+    if (isNewSession && !rec.title) {
+      let title = "";
+      if (rt.makeTitle && !opts.signal.aborted) {
+        try { title = (await rt.makeTitle(rec.messages)).trim(); } catch { /* fall back */ }
+      }
+      rec.title = title || opts.text.slice(0, 60).trim();
+    }
     await rt.store.save(rec);
     opts.onFrame({ kind: "done" });
   } catch (err) {
@@ -290,5 +308,40 @@ export function productionRuntime(workspace = process.cwd()): Runtime {
     rt.model = buildModel(); // take effect immediately (no restart)
   };
   rt.modelFor = (modelId, effort, thinking) => buildModel(modelId || cfg.model, effort, thinking);
+  // Auto-title: one cheap, tool-free model call summarizing the opening exchange.
+  rt.makeTitle = async (messages) => {
+    const req: ModelRequest = {
+      system: "You write a very short title (3–6 words) capturing a conversation's topic. " +
+        "Reply with ONLY the title — no quotes, no trailing punctuation — in the conversation's language.",
+      messages: [{ role: "user", content: [{ type: "text", text: `Conversation:\n${transcriptFor(messages)}\n\nTitle:` }] }],
+      tools: [],
+    };
+    let out = "";
+    for await (const ev of rt.model.stream(req, new AbortController().signal)) {
+      if (ev.type === "text_delta") out += ev.text;
+    }
+    return cleanTitle(out);
+  };
   return rt;
+}
+
+/** A compact transcript of the opening turns, for the title prompt. */
+function transcriptFor(messages: Message[]): string {
+  return messages
+    .slice(0, 6)
+    .map((m) => {
+      const text = m.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join(" ").trim();
+      return text ? `${m.role}: ${text}` : "";
+    })
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, 2000);
+}
+
+/** First line, unquoted, no trailing punctuation, capped — a clean title. */
+function cleanTitle(raw: string): string {
+  let t = (raw.split("\n").find((l) => l.trim()) ?? "").trim();
+  t = t.replace(/^["'“”『「《]+|["'“”』」》]+$/g, "").trim();
+  t = t.replace(/[。.!?！？,，、;；:：]+$/u, "").trim();
+  return t.slice(0, 60);
 }

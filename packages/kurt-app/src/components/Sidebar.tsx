@@ -38,13 +38,15 @@ function RecentItem({ r, active, running, unread, onPick, onDelete, lang }: {
   onPick: (id: string) => void; onDelete: (id: string) => void; lang: Lang;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  // One status slot, left of the title: running (pulsing) → unread (solid) → none.
+  // Status dot left of the title: running (pulsing) → unread (solid) → none.
+  // When there's no status the dot isn't rendered at all (so it takes no space).
   const status = running ? "running" : unread ? "unread" : "";
+  const label = tr(r.title, lang) || tr(T.convNew, lang); // empty title → "新会话" placeholder
   return (
     <div className={"recent-item" + (active ? " active" : "") + (running ? " running" : "")}
-      onClick={() => onPick(r.id)} title={tr(r.title, lang)}>
-      <span className={"r-status" + (status ? " " + status : "")} aria-hidden={!status} />
-      <span className="r-label">{tr(r.title, lang)}</span>
+      onClick={() => onPick(r.id)} title={label}>
+      {status && <span className={"r-status " + status} aria-hidden />}
+      <span className="r-label">{label}</span>
       <div style={{ position: "relative" }}>
         <button className={"r-more" + (menuOpen ? " open" : "")}
           onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}>
