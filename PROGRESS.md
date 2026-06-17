@@ -4,8 +4,8 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-17 · `main` @ `f40a9de`(修 bridge:禁用 Bun.serve 默认 10s idleTimeout,避免 SSE/审批等待被掐断;前置 `c96be6f` 侧栏会话状态点)
-- **门禁**:kurt-agent **145** · kurt-tui **70** · kurt-bridge **22** · kurt-app build+**Vitest 30**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
+- **最后更新**:2026-06-17 · `main` @ `f94614f`(消息操作:复制/时间/回退 + 代码块复制 + 会话截断后端;前置 `f40a9de` bridge idleTimeout)
+- **门禁**:kurt-agent **150** · kurt-tui **70** · kurt-bridge **24** · kurt-app build+**Vitest 35**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
 
@@ -47,6 +47,7 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
 | 6.4-打磨3 | **markdown 表格**(`MdBlock` 解析 GFM 表格:表头+`\|---\|`分隔+正文,列对齐 `:--/--:/:-:`,单元格内联 md;`.md-table` 描边/斑马纹/横向滚动);**切会话滚到底**(`activeId` 变化时 `scrollTop=scrollHeight`);**授权框按会话保留**:approval 以 run 的 sessionId 为键,切走不再 abort run、run 流入 `runBufRef` 每会话缓冲、仅当查看该会话时镜像到可见 thread,切回重新显示(`loadSession` 不再 `stopRun`;New Chat 仍结束 run);**授权框与输入框贴合**(`margin-bottom:0`+下方直角+无下边框)。Markdown.test +2(表格)。 | ✅ 完成 |
 | 6.4-打磨4 | **侧栏会话状态点**(标题左侧一个状态槽:运行中=脉冲 accent 点;运行在非当前会话**完成**→实心未读点 + soft halo;点击会话清除未读;槽位预留宽度保持对齐)。App 用 `unread:Set<sessionId>`,仅当完成时 `runSid!==activeId` 标记;`loadSession` 清除。Sidebar.test +2(运行点/未读点+优先级)。 | ✅ 完成 |
 | 6.4-修2 | **bridge SSE 空闲超时**:`Bun.serve` 默认 `idleTimeout:10s` 会掐断长时间无数据的 `/run` SSE 流(模型思考/工具运行/**审批弹窗等待人答**),触发 `cancel()`→abort run。设 `idleTimeout:0` 禁用。MANUAL_TESTS §6.4b 加「审批搁置>10s 仍可完成」核对点。 | ✅ 完成 |
+| 6.4-打磨5 | **消息操作 + 代码块复制**:agent 回复底部无背景 **复制** 按钮 + **时间**(流式结束后才显示);用户气泡移入右对齐 `.query-row`,底部 **复制 + 回退 + 时间**;**回退** = 删除该用户消息及之后所有内容 + 文本填回输入框 + 截断后端会话(新 `POST /sessions/:id/truncate`,`SessionStore.truncate`/`truncateToUserTurns`),先停活动 run;**代码块** 右上角复制按钮(`MdBlock` 加 `lang`)。时间为客户端戳(`ts?` 仅客户端,重载会话无时间)。MessageActions.test +4、Markdown 代码复制 +1、agent truncate +5、bridge truncate +2。 | ✅ 完成 |
 | 6.4d | 打包:`bun build --compile` bridge → Tauri sidecar 二进制 + 代码签名/公证 `.app` | ⏸ 暂缓(用户选择)—— 桌面端**功能已完整**,停在 `tauri dev` 形态;打包时再做(需 Apple 签名身份,或先出未签名本地构建) |
 
 ## 已实现(main)

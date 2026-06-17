@@ -31,9 +31,9 @@ kurt-app (Tauri webview) ──fetch/SSE──▶ 127.0.0.1:<port>  (this pkg)
 | `src/types.ts` | Wire contract: `Step` union, `RunFrame` (session/step/usage/done/aborted/error), `SessionInfo` | (types) |
 | `src/events.ts` | **StepAccumulator** — pure fold of engine `Event` → desktop `Step` (read_file→read, skill→skill, else→tool; thinking elapsed-seconds) | `StepAccumulator` |
 | `src/runtime.ts` | Engine composition: `createRuntime` (generic, injectable model/tools — testable) + `productionRuntime` (DeepSeek + core tools + sandbox + shared SessionStore); `runTurn` (load/create session → stream events as frames → persist) | `createRuntime`, `productionRuntime`, `runTurn`, `Runtime` |
-| `src/server.ts` | `Bun.serve` on localhost: `POST /run` (SSE), `POST /approve` (answer an approval), `GET /sessions` (this workspace), `GET /sessions/:id` (→ reconstructed steps), `POST/DELETE /sessions`, `/health`; client-close aborts the run | `startServer`, `ServerHandle` |
+| `src/server.ts` | `Bun.serve` on localhost (`idleTimeout:0` — SSE/approval streams legitimately go quiet): `POST /run` (SSE), `POST /approve`, `GET /sessions`, `GET /sessions/:id` (→ reconstructed steps), `POST /sessions/:id/truncate` (rollback: keep N user turns), `POST/DELETE /sessions`, `/health`; client-close aborts the run | `startServer`, `ServerHandle` |
 | `src/index.ts` | Bin the Tauri sidecar spawns; prints `KURT_BRIDGE_PORT=<n>` to stdout; when stdin is piped (sidecar) exits on EOF (parent died → no orphan) | — |
-| `src/*.test.ts` | `events.test.ts` (8, pure) · `server.test.ts` (5, real HTTP/SSE + MockModel + fake tool) | — |
+| `src/*.test.ts` | `events.test.ts` (8, pure) · `server.test.ts` (16, real HTTP/SSE + MockModel + fake tool; incl. truncate + modes + config) | — |
 
 ## 5. Navigation — "to do X, look at Y"
 - **Change the wire shape** → `types.ts` (and mirror in `kurt-app/src/types.ts`).
