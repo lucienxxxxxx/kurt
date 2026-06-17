@@ -41,7 +41,7 @@ export function DetailPanel({ panels, activePanelId, onSetActive, onClose, lang 
         {isCode ? (
           <pre className="fp-code"><code>{active.content || "// (empty)"}</code></pre>
         ) : (
-          <div className="fp-md"><MdBlock text={active.content || "(empty)"} /></div>
+          <div className="fp-md"><MdBlock text={active.content || "(empty)"} lang={lang} /></div>
         )}
       </div>
     </div>

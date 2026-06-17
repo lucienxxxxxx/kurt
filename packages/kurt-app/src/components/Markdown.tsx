@@ -2,6 +2,8 @@
  *  + block headers/lists/code-fences/hr. Faithful to the prototype's subset. */
 
 import type { ReactNode } from "react";
+import type { Lang } from "../types.ts";
+import { CopyButton } from "./MessageActions.tsx";
 
 export function renderInline(text: string): ReactNode[] {
   const parts: ReactNode[] = [];
@@ -21,7 +23,7 @@ export function renderInline(text: string): ReactNode[] {
   return parts;
 }
 
-export function MdBlock({ text }: { text: string }) {
+export function MdBlock({ text, lang = "en" }: { text: string; lang?: Lang }) {
   const lines = text.split("\n");
   const elements: ReactNode[] = [];
   let i = 0;
@@ -33,15 +35,17 @@ export function MdBlock({ text }: { text: string }) {
     if (line.trim() === "") { elements.push(<div key={k++} style={{ height: 6 }} />); i++; continue; }
 
     if (line.trim().startsWith("```")) {
-      const lang = line.trim().slice(3).trim();
+      const fence = line.trim().slice(3).trim(); // the code fence's language label
       const codeLines: string[] = [];
       i++;
       while (i < lines.length && !lines[i]!.trim().startsWith("```")) { codeLines.push(lines[i]!); i++; }
       i++;
+      const code = codeLines.join("\n");
       elements.push(
         <pre key={k++} className="md-pre">
-          {lang && <div className="md-pre-lang">{lang}</div>}
-          <code>{codeLines.join("\n")}</code>
+          {fence && <div className="md-pre-lang">{fence}</div>}
+          <CopyButton text={code} lang={lang} compact className="md-pre-copy" />
+          <code>{code}</code>
         </pre>,
       );
       continue;

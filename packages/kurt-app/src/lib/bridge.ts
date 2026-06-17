@@ -137,6 +137,16 @@ export async function deleteSession(baseUrl: string, id: string): Promise<void> 
   await fetch(`${baseUrl}/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+/** Rollback: keep only the first `keepUserTurns` user turns of a session. */
+export async function truncateSession(baseUrl: string, id: string, keepUserTurns: number): Promise<SessionDetail | null> {
+  const res = await fetch(`${baseUrl}/sessions/${encodeURIComponent(id)}/truncate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ keepUserTurns }),
+  });
+  return res.ok ? ((await res.json()) as SessionDetail) : null;
+}
+
 /** Model/key status (never includes the key itself). */
 export interface BridgeInfo {
   hasKey: boolean;

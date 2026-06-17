@@ -58,6 +58,10 @@ export const T = {
   // recent item menu
   archiveToProject: { zh: "归纳到项目", en: "Archive to project" },
   deleteChat: { zh: "删除", en: "Delete" },
+  // message actions
+  copy: { zh: "复制", en: "Copy" },
+  copied: { zh: "已复制", en: "Copied" },
+  rollback: { zh: "回退", en: "Rollback" },
   // approval modal
   apprNeeded: { zh: "需要你的许可", en: "Approval needed" },
   apprRisk: { zh: "风险", en: "Risk" },

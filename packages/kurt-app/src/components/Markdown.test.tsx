@@ -35,6 +35,11 @@ describe("MdBlock — used for both user messages and agent replies", () => {
     expect(container.querySelector("pre.md-pre code")?.textContent).toBe("const x = 1;");
   });
 
+  test("a code block carries a copy button", () => {
+    const { container } = render(<MdBlock text={"```\nhi\n```"} />);
+    expect(container.querySelector("pre.md-pre .md-pre-copy")).toBeInTheDocument();
+  });
+
   test("renders a GitHub-style table with header + body cells", () => {
     const md = "| Name | Age |\n|------|----:|\n| Ann | 30 |\n| Bo | 25 |";
     const { container } = render(<MdBlock text={md} />);

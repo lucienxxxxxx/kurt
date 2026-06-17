@@ -6,6 +6,7 @@ import type { Lang, Step } from "../../types.ts";
 import { T, tr } from "../../i18n/strings.ts";
 import { Icon } from "../Icon.tsx";
 import { MdBlock } from "../Markdown.tsx";
+import { CopyButton, MessageTime } from "../MessageActions.tsx";
 
 type ThinkingStep = Extract<Step, { type: "thinking" }>;
 type TextStep = Extract<Step, { type: "text" | "user" }>;
@@ -29,17 +30,24 @@ export function ThinkingStepView({ step, open, onToggle, typing, lang }: {
         <Icon name="chevR" className="chev" />
         <span>{typing ? tr(T.thinking, lang) : tr(T.thoughtFor, lang, { n: step.sec ?? 0 })}</span>
       </div>
-      {open && <div className="think-body"><MdBlock text={tr(step.text, lang)} /></div>}
+      {open && <div className="think-body"><MdBlock text={tr(step.text, lang)} lang={lang} /></div>}
     </div>
   );
 }
 
 export function TextStepView({ step, typing, lang }: { step: TextStep; typing: boolean; lang: Lang }) {
+  const txt = tr(step.text, lang);
   return (
     <div className="step">
       <div className={"step-text" + (typing ? " typing-cursor" : "")}>
-        <MdBlock text={tr(step.text, lang)} />
+        <MdBlock text={txt} lang={lang} />
       </div>
+      {!typing && (
+        <div className="msg-actions">
+          <CopyButton text={txt} lang={lang} />
+          <MessageTime ts={step.ts} />
+        </div>
+      )}
     </div>
   );
 }
@@ -123,7 +131,7 @@ export function SkillStepView({ step, open, onToggle, lang }: {
           {step.output && (
             <div className="skill-section out">
               <div className="skill-section-label">OUTPUT</div>
-              <div className="skill-section-body"><MdBlock text={tr(step.output, lang)} /></div>
+              <div className="skill-section-body"><MdBlock text={tr(step.output, lang)} lang={lang} /></div>
             </div>
           )}
         </div>

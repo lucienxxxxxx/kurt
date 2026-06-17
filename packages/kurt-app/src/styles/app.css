@@ -220,13 +220,15 @@ html[data-theme="dark"] .brand-logo { filter: invert(1); }
 .thread-scroll::-webkit-scrollbar-track { margin-right: 4px; }
 .thread-inner { max-width: 760px; margin: 0 auto; padding: 30px 28px 40px; }
 
+/* user query row: bubble + its action footer, both hugging the right */
+.query-row { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 30px; }
+
 /* user query box */
 .query-box {
   display: block;
   width: fit-content;
   max-width: 80%;
   margin-left: auto;
-  margin-bottom: 38px;
   padding: 11px 16px;
   border-radius: 16px 16px 4px 16px;
   background: var(--accent-soft);
@@ -240,6 +242,38 @@ html[data-theme="dark"] .brand-logo { filter: invert(1); }
 .query-box > :first-child { margin-top: 0; }
 .query-box > :last-child { margin-bottom: 0; }
 .query-box p { margin: 0; }
+
+/* message action footer (copy / rollback / time) — background-less buttons */
+.msg-actions { display: flex; align-items: center; gap: 2px; margin-top: 5px; }
+.msg-actions.user { justify-content: flex-end; }
+.msg-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 7px;
+  border: none; background: transparent;
+  color: var(--text-faint);
+  font-size: 12.5px; font-family: var(--font-sans);
+  border-radius: 7px; cursor: pointer;
+  transition: background .14s, color .14s;
+}
+.msg-btn:hover { background: var(--bg-hover); color: var(--text-soft); }
+.msg-btn svg { width: 14px; height: 14px; }
+.msg-btn.done { color: var(--accent); }
+.msg-btn.compact { padding: 0; width: 26px; justify-content: center; }
+.msg-time { font-size: 12px; color: var(--text-faint); padding: 0 6px; user-select: none; }
+
+/* copy button inside a code block, pinned top-right */
+.md-pre { position: relative; }
+.md-pre-copy {
+  position: absolute; top: 6px; right: 6px;
+  height: 24px; width: 24px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  opacity: 0; transition: opacity .14s, background .14s, color .14s;
+}
+.md-pre:hover .md-pre-copy { opacity: 1; }
+.md-pre-copy:hover { background: var(--bg-hover); color: var(--text-soft); }
+.md-pre-copy.done { opacity: 1; color: var(--accent); }
 
 /* steps */
 .timeline { position: relative; }

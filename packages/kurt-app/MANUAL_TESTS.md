@@ -222,3 +222,26 @@ Result: ____ (date / pass-fail / notes).
 
 Result: ____ (date / pass-fail / notes).
 
+---
+
+## Phase 6.4 polish — message actions (copy / time / rollback) + code-block copy
+
+1. **Agent reply footer.** Below a finished agent reply there's a background-less **Copy**
+   button and a **HH:MM** time. Click Copy → the message text is on the clipboard and the
+   button briefly shows **Copied**. (The footer does NOT appear while the reply is still
+   streaming.)
+2. **User message footer.** Below your own bubble (right-aligned) there's **Copy**, a
+   **Rollback (回退)** button, and the time. Copy works the same.
+3. **Rollback = rewind + edit.** Send a few messages. Click **Rollback** on an earlier
+   user message → that message and everything after it disappear from the thread, the
+   message's text is placed back in the composer, and the stored session is truncated
+   (reloading the session later shows it's shortened). Edit and resend continues from there.
+   (If a run is active, Rollback stops it first.)
+4. **Code-block copy.** Hover a code block in any message → a copy button appears
+   **top-right**; click → the code is copied (button shows the check). Works for both
+   agent replies and your own messages.
+5. **Reloaded sessions** show no per-message time (not stored) — that's expected; live
+   messages do.
+
+Result: ____ (date / pass-fail / notes).
+

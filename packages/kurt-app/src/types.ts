@@ -16,14 +16,16 @@ export interface LocalizedString {
  *  plain string (single-language engine output). `tr()` handles both. */
 export type Loc = LocalizedString | string;
 
-/** One step in a thread. Discriminated union on `type`. */
-export type Step =
+/** One step in a thread. Discriminated union on `type`. `ts` is a client-side
+ *  creation time (live runs only; not part of the bridge wire shape). */
+export type Step = (
   | { _id: number; type: "user"; text: Loc }
   | { _id: number; type: "thinking"; sec?: number; text: Loc }
   | { _id: number; type: "text"; text: Loc }
   | { _id: number; type: "tool"; name: string; title: Loc; cmd: string; out: Loc; isError?: boolean }
   | { _id: number; type: "read"; file: string; lines: string }
-  | { _id: number; type: "skill"; name: string; title: Loc; input?: Loc; output?: Loc; isError?: boolean };
+  | { _id: number; type: "skill"; name: string; title: Loc; input?: Loc; output?: Loc; isError?: boolean }
+) & { ts?: number };
 
 /** A step before ids are assigned (mock fixtures / bridge payloads).
  *  Distributive Omit so each union member keeps its own fields (a plain

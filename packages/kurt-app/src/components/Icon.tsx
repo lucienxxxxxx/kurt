@@ -31,6 +31,8 @@ const ICON: Record<string, string> = {
   info: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 11v6M12 7v.01",
   palette: "M12 3a9 9 0 100 18c1 0 1.5-.8 1.5-1.7 0-.4-.2-.8-.5-1.1-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H16a5 5 0 005-5c0-4.4-4-8-9-8zM7 12.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM10.5 8a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM15 8a1.5 1.5 0 100-3 1.5 1.5 0 000 3z",
   dots3: "M12 5v.01M12 12v.01M12 19v.01",
+  copy: "M9 9h10v10H9zM5 15H4a1 1 0 01-1-1V5a1 1 0 011-1h9a1 1 0 011 1v1",
+  rollback: "M9 14L4 9l5-5M4 9h11a5 5 0 110 10h-1",
 };
 
 export function Icon({ name, className }: { name: string; className?: string }) {

@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Effort, Lang, Loc, Mode, Panel, QueuedMsg, SessionMeta, Step, Theme } from "./types.ts";
 import { T, tr } from "./i18n/strings.ts";
-import { runStream, listSessions, getSession, getInfo, approve, type ApprovalRequest } from "./lib/bridge.ts";
+import { runStream, listSessions, getSession, getInfo, approve, truncateSession, type ApprovalRequest } from "./lib/bridge.ts";
 import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
@@ -14,6 +14,8 @@ import { Approval } from "./components/Approval.tsx";
 import { DetailPanel } from "./components/DetailPanel.tsx";
 import { renderStep, type OpenOutput } from "./components/thread/steps.tsx";
 import { MdBlock } from "./components/Markdown.tsx";
+import { CopyButton, MessageTime } from "./components/MessageActions.tsx";
+import { Icon } from "./components/Icon.tsx";
 import logo from "./assets/kurt_logo.svg";
 
 let _uid = 1000;
@@ -95,7 +97,13 @@ export default function App() {
   const upsertRun = (sid: string | null, step: Step): void => {
     const buf = runBufRef.current;
     const i = buf.findIndex((s) => s._id === step._id);
-    if (i >= 0) buf[i] = step; else buf.push(step);
+    if (i >= 0) {
+      // Preserve the creation time across the step's streamed updates.
+      const ts = step.ts ?? buf[i]!.ts;
+      buf[i] = ts === undefined ? step : { ...step, ts };
+    } else {
+      buf.push({ ...step, ts: step.ts ?? Date.now() });
+    }
     if (activeIdRef.current === sid) setThread(buf.slice());
   };
 
@@ -138,7 +146,7 @@ export default function App() {
       if (next) {
         queuedMsgsRef.current = rest;
         setQueuedMsgs(rest);
-        const userStep: Step = { _id: uid(), type: "user", text: next.text };
+        const userStep: Step = { _id: uid(), type: "user", text: next.text, ts: Date.now() };
         runBufRef.current = [...runBufRef.current, userStep];
         if (activeIdRef.current === runSidRef.current) setThread(runBufRef.current.slice());
         void startRun(next.text);
@@ -165,7 +173,7 @@ export default function App() {
       return;
     }
     // Seed the run buffer with the current thread + this message, then run.
-    const userStep: Step = { _id: uid(), type: "user", text };
+    const userStep: Step = { _id: uid(), type: "user", text, ts: Date.now() };
     runBufRef.current = [...thread, userStep];
     setThread(runBufRef.current.slice());
     void startRun(text);
@@ -192,6 +200,27 @@ export default function App() {
     void (async () => {
       try { await approve(await resolveBridgeUrl(), req.id, decision); } catch { /* ignore */ }
     })();
+  };
+
+  /** Rollback: drop this user message and everything after it (truncating the
+   *  stored session too), and put its text back in the composer to edit & resend. */
+  const rollbackTo = (step: Step | null): void => {
+    if (!step || step.type !== "user") return;
+    const idx = thread.findIndex((s) => s._id === step._id);
+    if (idx < 0) return;
+    stopRun(); // can't rewind a live run — stop it first
+    const kept = thread.slice(0, idx);
+    const keepUserTurns = kept.filter((s) => s.type === "user").length;
+    setThread(kept);
+    runBufRef.current = kept.slice();
+    setInput(tr(step.text, lang));
+    const id = realSessionRef.current;
+    if (id) {
+      void (async () => {
+        try { await truncateSession(await resolveBridgeUrl(), id, keepUserTurns); } catch { /* ignore */ }
+        void refreshSessions();
+      })();
+    }
   };
 
   const cancelQueued = (id: number): void => {
@@ -253,7 +282,8 @@ export default function App() {
   };
 
   // group thread into segments by user message
-  const segments: { user: Step | null; steps: Step[] }[] = [];
+  type UserStep = Extract<Step, { type: "user" }>;
+  const segments: { user: UserStep | null; steps: Step[] }[] = [];
   thread.forEach((step) => {
     if (step.type === "user") segments.push({ user: step, steps: [] });
     else { if (!segments.length) segments.push({ user: null, steps: [] }); segments[segments.length - 1]!.steps.push(step); }
@@ -297,7 +327,18 @@ export default function App() {
                       <div className="thread-inner">
                         {segments.map((seg, i) => (
                           <div key={i}>
-                            {seg.user && <div className="query-box"><MdBlock text={tr(seg.user.type === "user" ? seg.user.text : "", lang)} /></div>}
+                            {seg.user && (
+                              <div className="query-row">
+                                <div className="query-box"><MdBlock text={tr(seg.user.text, lang)} lang={lang} /></div>
+                                <div className="msg-actions user">
+                                  <CopyButton text={tr(seg.user.text, lang)} lang={lang} />
+                                  <button className="msg-btn" onClick={() => rollbackTo(seg.user)} title={tr(T.rollback, lang)} aria-label={tr(T.rollback, lang)}>
+                                    <Icon name="rollback" /><span className="msg-btn-label">{tr(T.rollback, lang)}</span>
+                                  </button>
+                                  <MessageTime ts={seg.user.ts} />
+                                </div>
+                              </div>
+                            )}
                             {seg.steps.length > 0 && <div className="timeline">{seg.steps.map((s) => renderStep(s, stepCtx))}</div>}
                           </div>
                         ))}
