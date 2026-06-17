@@ -4,8 +4,8 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-17 · `main` @ `8cc8050`(新会话发首条消息后立即入侧栏:bridge 先存截断消息为临时标题、运行中即可见,首轮后 LLM 总结替换;前置 `a670eae` 模型厂商 logo)
-- **门禁**:kurt-agent **150** · kurt-tui **70** · kurt-bridge **25** · kurt-app build+**Vitest 52**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
+- **最后更新**:2026-06-17 · `main` @ `b004212`(上下文用量双环 donut + 明细卡:估算上下文 token/模型最大上下文,点开按类别细分;前置 `8cc8050` 新会话即时入列表)
+- **门禁**:kurt-agent **150** · kurt-tui **70** · kurt-bridge **25** · kurt-app build+**Vitest 61**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
 
@@ -47,6 +47,7 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
 | 6.4-打磨3 | **markdown 表格**(`MdBlock` 解析 GFM 表格:表头+`\|---\|`分隔+正文,列对齐 `:--/--:/:-:`,单元格内联 md;`.md-table` 描边/斑马纹/横向滚动);**切会话滚到底**(`activeId` 变化时 `scrollTop=scrollHeight`);**授权框按会话保留**:approval 以 run 的 sessionId 为键,切走不再 abort run、run 流入 `runBufRef` 每会话缓冲、仅当查看该会话时镜像到可见 thread,切回重新显示(`loadSession` 不再 `stopRun`;New Chat 仍结束 run);**授权框与输入框贴合**(`margin-bottom:0`+下方直角+无下边框)。Markdown.test +2(表格)。 | ✅ 完成 |
 | 6.4-打磨4 | **侧栏会话状态点**(标题左侧一个状态槽:运行中=脉冲 accent 点;运行在非当前会话**完成**→实心未读点 + soft halo;点击会话清除未读;槽位预留宽度保持对齐)。App 用 `unread:Set<sessionId>`,仅当完成时 `runSid!==activeId` 标记;`loadSession` 清除。Sidebar.test +2(运行点/未读点+优先级)。 | ✅ 完成 |
 | 6.4-修2 | **bridge SSE 空闲超时**:`Bun.serve` 默认 `idleTimeout:10s` 会掐断长时间无数据的 `/run` SSE 流(模型思考/工具运行/**审批弹窗等待人答**),触发 `cancel()`→abort run。设 `idleTimeout:0` 禁用。MANUAL_TESTS §6.4b 加「审批搁置>10s 仍可完成」核对点。 | ✅ 完成 |
+| 6.4-打磨12 | **上下文用量双环 + 明细卡**:composer 下方右侧 donut 双环显示上下文占比=估算上下文 token / 模型最大上下文(`modelContextWindow`,deepseek 128k),≥70% 琥珀、≥90% 红;点击弹卡按类别(你的消息/思考/工具/回复/系统)给比例条+计数,注明为估算(API 只报总量),有真实用量则附 API 合计。新 `lib/tokens.ts`(estimateTokens)、`lib/models.ts`、`ContextMeter`、Composer `meter` 槽。估算式,直播/重载/无 key 都可用。tokens.test +6、ContextMeter.test +3。 | ✅ 完成 |
 | 6.4-修4 | **新会话即时入列表**:根因—`runTurn` 仅在运行结束才存会话,故新会话直到跑完才出现在侧栏。改为新会话先用消息开头作临时标题并**提前保存**(运行一开始即可列出),首轮后 LLM 总结替换标题(无总结器/失败/中断则保留临时标题)。server.test 调整(开场 frame 带临时标题、断言运行中即列出)。 | ✅ 完成 |
 | 6.4-打磨11 | **模型厂商 logo**:新增 `ModelLogo`(按 model id 选厂商 logo——模型元数据的图标位):deepseek 模型显示 DeepSeek 填充图标(`fill:currentColor`,独立于描边 Icon 集),未知厂商退回 spark;模型菜单按钮 + 每个模型行改用 `ModelLogo`(思考行仍用 spark)。ModelLogo.test +3。 | ✅ 完成 |
 | 6.4-打磨10 | **会话标题 LLM 自动总结 + 状态点不占位**:① bridge 新会话标题不再用首条消息原文——`runTurn` 先留空(开场 `session` frame title=""),首轮结束后调用可注入的 `rt.makeTitle(messages)` 生成简洁标题并保存(无总结器/失败/中断则退回首条消息截断);`productionRuntime` 接一次免工具模型调用(transcriptFor+cleanTitle),`createRuntime` 加可选 `makeTitle` 便于测试。app 侧 `refreshSessions` 保留空标题,侧栏把空标题本地化为「新会话」占位 → 新建时先显示「新会话」,首轮后替换为总结。② 侧栏状态点仅有状态(运行/未读)时才渲染,无状态不占 7px 槽位。bridge server.test +1、app Sidebar.test +1。 | ✅ 完成 |
