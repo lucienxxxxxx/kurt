@@ -261,3 +261,24 @@ Result: ____ (date / pass-fail / notes).
 
 Result: ____ (date / pass-fail / notes).
 
+---
+
+## Phase 6.4 polish — background runs (per-session concurrency)
+
+1. **Switch away mid-run → it keeps going.** Start a task in session A (steps streaming).
+   Click another session B in the sidebar. A's row shows a **pulsing running dot**; B opens
+   normally. Switch back to A → its steps **advanced** while you were away (it never stopped).
+2. **New Chat doesn't stop it.** With A running, click **New Chat**. A keeps running
+   (running dot in the sidebar); you get a fresh empty composer. Switch back to A to watch it.
+3. **Run two at once.** While A runs, open B (or a New Chat) and send a second task. **Both**
+   run concurrently — both show running dots; each session shows only its own stream.
+4. **Stop is per-conversation.** The Stop button only stops the run of the conversation
+   **you're viewing**. Viewing a non-running session shows the normal Send button (its
+   composer is idle even though another session is running).
+5. **Only Stop stops a run.** Switching sessions, New Chat, and opening Settings never abort
+   a run — only the composer's Stop button (or Delete / Rollback on that conversation) does.
+6. **Finish-while-away → unread dot.** If A finishes while you're viewing B, A gets a solid
+   **unread** dot; clicking A clears it.
+
+Result: ____ (date / pass-fail / notes).
+

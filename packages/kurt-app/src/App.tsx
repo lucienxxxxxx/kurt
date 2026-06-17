@@ -1,5 +1,6 @@
 /** App root. UI state + thread rendering (layout ported from prototype/app.jsx).
- *  Runs and sessions are real, via kurt-bridge: startRun streams a turn over SSE;
+ *  Runs and sessions are real, via kurt-bridge: each conversation streams its turn
+ *  over SSE independently (runs continue in the background when you switch away);
  *  the sidebar lists the bridge's sessions and loading one reconstructs its steps. */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -20,6 +21,17 @@ import logo from "./assets/kurt_logo.svg";
 
 let _uid = 1000;
 const uid = () => ++_uid;
+
+/** One in-flight agent run. Lives until its turn(s) finish or it's aborted.
+ *  Runs are independent per conversation, so several can stream at once. */
+interface Run {
+  runId: number;
+  sessionId: string | null;   // resolved on the first SSE frame (null = brand-new chat until then)
+  ctrl: AbortController;       // replaced per turn (a run may continue through its queue)
+  buf: Step[];                // this conversation's accumulated steps
+  idMap: Map<number, number>; // bridge step _id → app uid, for the current turn
+  queue: QueuedMsg[];         // messages queued onto THIS run while it streams
+}
 
 const persisted = <V extends string>(key: string, fallback: V): V => {
   try { const v = localStorage.getItem(key); return v === null ? fallback : (v as V); } catch { return fallback; }
@@ -45,11 +57,12 @@ export default function App() {
   const [mode, setMode] = useState<Mode>(() => persisted<Mode>("kurt-mode", "agent"));
   const [thinking, setThinking] = useState<boolean>(() => { try { return localStorage.getItem("kurt-thinking") === "1"; } catch { return false; } });
 
-  const [running, setRunning] = useState(false);
   const [liveId, setLiveId] = useState<number | null>(null);
-  const [runningId, setRunningId] = useState<string | null>(null);
-  const [queuedMsgs, setQueuedMsgs] = useState<QueuedMsg[]>([]);
-  const queuedMsgsRef = useRef<QueuedMsg[]>([]);
+  // Which sessions have an in-flight run (sidebar dots + composer state). A run
+  // in a brand-new chat isn't here until its id resolves; newChatRunId covers that.
+  const [runningIds, setRunningIds] = useState<Set<string>>(() => new Set());
+  const [newChatRunId, setNewChatRunId] = useState<number | null>(null);
+  const [queuedMsgs, setQueuedMsgs] = useState<QueuedMsg[]>([]); // the VIEWED run's queue
   const [panels, setPanels] = useState<Panel[]>([]);
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
   // Approvals are keyed by the session their run belongs to, so switching
@@ -57,12 +70,31 @@ export default function App() {
   const [pendingApprovals, setPendingApprovals] = useState<Record<string, ApprovalRequest>>({});
   const approvalKey = (id: string | null): string => id ?? "";
 
-  const abortRef = useRef<AbortController | null>(null);
-  const realSessionRef = useRef<string | null>(null);
+  const runsRef = useRef<Map<number, Run>>(new Map()); // in-flight runs, by runId
   const activeIdRef = useRef<string | null>(null);     // latest activeId, for stream callbacks
-  const runSidRef = useRef<string | null>(null);       // session id the active run belongs to
-  const runBufRef = useRef<Step[]>([]);                // the running session's accumulated steps
+  const newChatRunIdRef = useRef<number | null>(null); // mirror of newChatRunId for callbacks
   const setActive = useCallback((id: string | null): void => { activeIdRef.current = id; setActiveId(id); }, []);
+  const setNewChatRun = useCallback((rid: number | null): void => { newChatRunIdRef.current = rid; setNewChatRunId(rid); }, []);
+
+  // Resolve the run (if any) for a session id / for the conversation in view.
+  const runForSession = (id: string): Run | undefined => {
+    for (const r of runsRef.current.values()) if (r.sessionId === id) return r;
+    return undefined;
+  };
+  const viewedRun = (): Run | undefined => {
+    const id = activeIdRef.current;
+    if (id !== null) return runForSession(id);
+    const rid = newChatRunIdRef.current;
+    return rid !== null ? runsRef.current.get(rid) : undefined;
+  };
+  // Is `run` the conversation currently on screen? (handles the unsaved-new-chat case)
+  const isViewing = (run: Run): boolean =>
+    run.sessionId !== null
+      ? run.sessionId === activeIdRef.current
+      : activeIdRef.current === null && newChatRunIdRef.current === run.runId;
+
+  // Is the conversation in view running? (drives the composer's send/stop state)
+  const viewRunning = activeId !== null ? runningIds.has(activeId) : newChatRunId !== null;
 
   useEffect(() => { document.documentElement.setAttribute("data-theme", theme); try { localStorage.setItem("kurt-theme", theme); } catch { /* ignore */ } }, [theme]);
   useEffect(() => { document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en"); try { localStorage.setItem("kurt-lang", lang); } catch { /* ignore */ } }, [lang]);
@@ -70,7 +102,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("kurt-thinking", thinking ? "1" : "0"); } catch { /* ignore */ } }, [thinking]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { const el = scrollRef.current; if (el && running) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [thread, liveId, running]);
+  useEffect(() => { const el = scrollRef.current; if (el && viewRunning) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [thread, liveId, viewRunning]);
   // On session switch, jump straight to the latest message (bottom), not the top.
   useEffect(() => { const el = scrollRef.current; if (el) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [activeId]);
 
@@ -91,105 +123,109 @@ export default function App() {
     })();
   }, []);
 
-  /** Upsert a step into the running session's buffer; mirror to the visible
-   *  thread only while that session is the one being viewed (so a run that
-   *  continues after you switch away doesn't leak into another conversation). */
-  const upsertRun = (sid: string | null, step: Step): void => {
-    const buf = runBufRef.current;
+  /** Upsert a step into a run's buffer; mirror to the visible thread + cursor only
+   *  while that run is the conversation on screen (a backgrounded run doesn't leak
+   *  into whatever you're viewing). */
+  const upsertRun = (run: Run, step: Step): void => {
+    const buf = run.buf;
     const i = buf.findIndex((s) => s._id === step._id);
     if (i >= 0) {
-      // Preserve the creation time across the step's streamed updates.
-      const ts = step.ts ?? buf[i]!.ts;
+      const ts = step.ts ?? buf[i]!.ts; // preserve creation time across streamed updates
       buf[i] = ts === undefined ? step : { ...step, ts };
     } else {
       buf.push({ ...step, ts: step.ts ?? Date.now() });
     }
-    if (activeIdRef.current === sid) setThread(buf.slice());
+    if (isViewing(run)) { setThread(buf.slice()); setLiveId(step._id); }
   };
 
-  /** Execute one real run against the bridge, streaming steps into the run buffer. */
-  const startRun = async (text: string): Promise<void> => {
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
-    setRunning(true);
-    runSidRef.current = realSessionRef.current; // session this run belongs to (null = new chat)
-    const idMap = new Map<number, number>();
+  /** Stream one turn of `run` from the bridge; on finish, continue its queue or retire it. */
+  const streamRun = async (run: Run, text: string): Promise<void> => {
+    run.ctrl = new AbortController();
+    run.idMap = new Map(); // the bridge restarts step ids at 1 each turn — map them fresh
     try {
       const base = await resolveBridgeUrl();
       await runStream(
         base,
-        { sessionId: realSessionRef.current ?? undefined, text, model: model || undefined, effort, thinking, mode },
+        { sessionId: run.sessionId ?? undefined, text, model: model || undefined, effort, thinking, mode },
         {
           onSession: (id) => {
-            realSessionRef.current = id;
-            runSidRef.current = id;
-            setRunningId(id);
-            if (activeIdRef.current === null) setActive(id); // follow a brand-new chat to its session
+            const wasUnsaved = run.sessionId === null;
+            run.sessionId = id;
+            if (wasUnsaved) {
+              setRunningIds((s) => new Set(s).add(id));
+              if (activeIdRef.current === null && newChatRunIdRef.current === run.runId) {
+                setNewChatRun(null); // the new chat now has a real id — follow it
+                setActive(id);
+              }
+              void refreshSessions(); // it now appears in the sidebar (with a running dot)
+            }
           },
           onStep: (bridgeStep) => {
-            let appId = idMap.get(bridgeStep._id);
-            if (appId === undefined) { appId = uid(); idMap.set(bridgeStep._id, appId); }
-            upsertRun(runSidRef.current, { ...bridgeStep, _id: appId } as Step);
-            setLiveId(appId);
+            let appId = run.idMap.get(bridgeStep._id);
+            if (appId === undefined) { appId = uid(); run.idMap.set(bridgeStep._id, appId); }
+            upsertRun(run, { ...bridgeStep, _id: appId } as Step);
           },
-          onApproval: (req) => setPendingApprovals((m) => ({ ...m, [approvalKey(runSidRef.current)]: req })),
-          onError: (message) => upsertRun(runSidRef.current, { _id: uid(), type: "text", text: `⚠ ${message}` }),
+          onApproval: (req) => { if (run.sessionId) setPendingApprovals((m) => ({ ...m, [run.sessionId!]: req })); },
+          onError: (message) => upsertRun(run, { _id: uid(), type: "text", text: `⚠ ${message}`, ts: Date.now() } as Step),
         },
-        ctrl.signal,
+        run.ctrl.signal,
       );
     } finally {
-      abortRef.current = null;
-      setLiveId(null);
-      // This run's approval (if any) is now resolved/aborted — drop it.
-      setPendingApprovals((m) => { const n = { ...m }; delete n[approvalKey(runSidRef.current)]; return n; });
-      const [next, ...rest] = queuedMsgsRef.current;
+      if (run.sessionId) setPendingApprovals((m) => { const n = { ...m }; delete n[run.sessionId!]; return n; });
+      const next = run.ctrl.signal.aborted ? undefined : run.queue.shift();
       if (next) {
-        queuedMsgsRef.current = rest;
-        setQueuedMsgs(rest);
         const userStep: Step = { _id: uid(), type: "user", text: next.text, ts: Date.now() };
-        runBufRef.current = [...runBufRef.current, userStep];
-        if (activeIdRef.current === runSidRef.current) setThread(runBufRef.current.slice());
-        void startRun(next.text);
+        run.buf = [...run.buf, userStep];
+        if (isViewing(run)) { setThread(run.buf.slice()); setQueuedMsgs(run.queue.slice()); }
+        void streamRun(run, next.text); // continue the same conversation
       } else {
-        setRunning(false);
-        setRunningId(null);
-        // Finished while you were looking elsewhere → mark its sidebar dot unread.
-        const sid = runSidRef.current;
-        if (sid && sid !== activeIdRef.current) setUnread((u) => new Set(u).add(sid));
-        void refreshSessions(); // the new/updated session now shows in the sidebar
+        runsRef.current.delete(run.runId);
+        if (run.sessionId) setRunningIds((s) => { const n = new Set(s); n.delete(run.sessionId!); return n; });
+        if (run.sessionId && run.sessionId !== activeIdRef.current) setUnread((u) => new Set(u).add(run.sessionId!));
+        if (newChatRunIdRef.current === run.runId) setNewChatRun(null);
+        if (isViewing(run)) { setLiveId(null); setQueuedMsgs([]); }
+        void refreshSessions();
       }
     }
+  };
+
+  /** Start a fresh run for `sessionId` (null = the unsaved new chat in view). */
+  const beginRun = (sessionId: string | null, seed: Step[], text: string): void => {
+    const run: Run = { runId: uid(), sessionId, ctrl: new AbortController(), buf: seed, idMap: new Map(), queue: [] };
+    runsRef.current.set(run.runId, run);
+    if (sessionId) setRunningIds((s) => new Set(s).add(sessionId));
+    else setNewChatRun(run.runId);
+    setLiveId(seed.length ? seed[seed.length - 1]!._id : null);
+    void streamRun(run, text);
   };
 
   const send = (): void => {
     const text = input.trim();
     if (!text) return;
     setInput("");
-    if (running) {
-      const item = { id: uid(), text };
-      const nextQ = [...queuedMsgsRef.current, item];
-      queuedMsgsRef.current = nextQ;
-      setQueuedMsgs(nextQ);
+    const run = viewedRun();
+    if (run && !run.ctrl.signal.aborted) {
+      // the conversation in view is already running → queue onto its run
+      run.queue.push({ id: uid(), text });
+      setQueuedMsgs(run.queue.slice());
       return;
     }
-    // Seed the run buffer with the current thread + this message, then run.
+    // start a new run for the conversation in view (saved session id, or null = new chat)
     const userStep: Step = { _id: uid(), type: "user", text, ts: Date.now() };
-    runBufRef.current = [...thread, userStep];
-    setThread(runBufRef.current.slice());
-    void startRun(text);
+    const seed = [...thread, userStep];
+    setThread(seed);
+    beginRun(activeIdRef.current, seed, text);
   };
 
+  /** Stop the run for the conversation currently in view (only the Stop button does this). */
   const stopRun = (): void => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    queuedMsgsRef.current = [];
-    setQueuedMsgs([]);
-    setRunning(false);
-    setLiveId(null);
-    setRunningId(null);
-    // bridge resolves the prompt as "deny" on abort — drop this run's approval
-    const key = approvalKey(runSidRef.current);
-    setPendingApprovals((m) => { const n = { ...m }; delete n[key]; return n; });
+    const run = viewedRun();
+    if (!run) return;
+    run.queue = [];
+    run.ctrl.abort(); // → runStream rejects → streamRun's finally retires the run
+    if (run.sessionId) setRunningIds((s) => { const n = new Set(s); n.delete(run.sessionId!); return n; });
+    if (newChatRunIdRef.current === run.runId) setNewChatRun(null);
+    setQueuedMsgs([]); setLiveId(null);
   };
 
   const decideApproval = (decision: "allow" | "always" | "deny"): void => {
@@ -208,13 +244,12 @@ export default function App() {
     if (!step || step.type !== "user") return;
     const idx = thread.findIndex((s) => s._id === step._id);
     if (idx < 0) return;
-    stopRun(); // can't rewind a live run — stop it first
+    stopRun(); // can't rewind a live run — stop the viewed conversation's run first
     const kept = thread.slice(0, idx);
     const keepUserTurns = kept.filter((s) => s.type === "user").length;
     setThread(kept);
-    runBufRef.current = kept.slice();
     setInput(tr(step.text, lang));
-    const id = realSessionRef.current;
+    const id = activeIdRef.current;
     if (id) {
       void (async () => {
         try { await truncateSession(await resolveBridgeUrl(), id, keepUserTurns); } catch { /* ignore */ }
@@ -224,9 +259,10 @@ export default function App() {
   };
 
   const cancelQueued = (id: number): void => {
-    const next = queuedMsgsRef.current.filter((m) => m.id !== id);
-    queuedMsgsRef.current = next;
-    setQueuedMsgs(next);
+    const run = viewedRun();
+    if (!run) return;
+    run.queue = run.queue.filter((m) => m.id !== id);
+    setQueuedMsgs(run.queue.slice());
   };
 
   const openPanel = (panel: Panel): void => {
@@ -251,41 +287,50 @@ export default function App() {
   const toggleStep = (id: number): void => setCollapsed((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const loadSession = async (id: string): Promise<void> => {
-    // Do NOT stop the active run: switching away keeps it (and any pending
-    // approval) alive; switching back restores its live buffer.
+    // Switching never stops a run — it keeps streaming in the background. If this
+    // session is running, show its live buffer; otherwise load its stored steps.
     setView("chat");
-    realSessionRef.current = id;
+    setActive(id);
     setUnread((u) => { if (!u.has(id)) return u; const n = new Set(u); n.delete(id); return n; }); // clicking clears the unread dot
     setCollapsed(new Set()); setPanels([]); setActivePanelId(null);
-    if (id === runningId) {
-      setActive(id);
-      setThread(runBufRef.current.slice());
+    const run = runForSession(id);
+    if (run) {
+      setThread(run.buf.slice());
+      setLiveId(run.buf.length ? run.buf[run.buf.length - 1]!._id : null);
+      setQueuedMsgs(run.queue.slice());
       const meta = sessionList.find((s) => s.id === id);
-      if (meta) setTitleEntry(meta.title);
+      setTitleEntry(meta ? meta.title : T.convNew);
       return;
     }
+    setLiveId(null); setQueuedMsgs([]);
     try {
       const detail = await getSession(await resolveBridgeUrl(), id);
-      if (!detail) return;
-      setActive(id);
+      if (!detail || activeIdRef.current !== id) return; // bailed or switched away mid-load
       setThread(detail.steps);
       setTitleEntry(detail.title || T.convNew);
     } catch { /* ignore */ }
   };
+  // A fresh empty chat. Any in-flight run keeps going in the background (it shows
+  // in the sidebar with a running dot); only the Stop button ends a run.
   const newChat = (): void => {
-    stopRun();
-    realSessionRef.current = null;
-    runBufRef.current = [];
     setView("chat");
-    setThread([]); setActive(null); setTitleEntry(T.convNew); setCollapsed(new Set());
-    setPanels([]); setActivePanelId(null);
+    setActive(null);
+    setNewChatRun(null);
+    setThread([]); setLiveId(null); setQueuedMsgs([]);
+    setTitleEntry(T.convNew); setCollapsed(new Set()); setPanels([]); setActivePanelId(null);
   };
 
-  /** Delete a session: stop it if running, drop it from the bridge, clear its
+  /** Delete a session: stop its run if any, drop it from the bridge, clear its
    *  unread dot, and reset to a fresh chat if it was the one being viewed. */
   const removeSession = (id: string): void => {
-    if (id === runningId) stopRun(); // end the in-flight run before removing it
-    if (id === activeId) newChat();  // we were viewing it → fall back to an empty chat
+    const run = runForSession(id);
+    if (run) {
+      run.queue = [];
+      run.ctrl.abort();
+      runsRef.current.delete(run.runId);
+      setRunningIds((s) => { const n = new Set(s); n.delete(id); return n; });
+    }
+    if (id === activeId) newChat(); // we were viewing it → fall back to an empty chat
     setUnread((u) => { if (!u.has(id)) return u; const n = new Set(u); n.delete(id); return n; });
     void (async () => {
       try { await deleteSession(await resolveBridgeUrl(), id); } catch { /* ignore */ }
@@ -305,7 +350,7 @@ export default function App() {
 
   return (
     <div className="window">
-      <Sidebar recents={sessionList} activeId={activeId} runningId={runningId} unread={unread} onPick={loadSession} onDelete={removeSession} onNewChat={newChat}
+      <Sidebar recents={sessionList} activeId={activeId} runningIds={runningIds} unread={unread} onPick={loadSession} onDelete={removeSession} onNewChat={newChat}
         lang={lang} onOpenSettings={() => setView(view === "settings" ? "chat" : "settings")} />
 
       <div className="main">
@@ -359,7 +404,7 @@ export default function App() {
                   )}
 
                   <Composer value={input} onChange={setInput} onSend={send} onStop={stopRun}
-                    running={running} queuedMsgs={queuedMsgs} onCancelQueued={cancelQueued} lang={lang}
+                    running={viewRunning} queuedMsgs={queuedMsgs} onCancelQueued={cancelQueued} lang={lang}
                     model={model} models={models} onModelChange={setModel} effort={effort} onEffortChange={setEffort}
                     mode={mode} onModeChange={setMode} thinking={thinking} onThinkingToggle={() => setThinking((v) => !v)}
                     approval={pendingApprovals[approvalKey(activeId)] ? <Approval req={pendingApprovals[approvalKey(activeId)]!} lang={lang} onDecide={decideApproval} /> : null} />

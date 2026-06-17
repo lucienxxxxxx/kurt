@@ -12,7 +12,7 @@ const recents: SessionMeta[] = [
 
 function renderSidebar(over: Partial<Parameters<typeof Sidebar>[0]> = {}) {
   const props = {
-    recents, activeId: "s1", runningId: null as string | null, unread: new Set<string>(),
+    recents, activeId: "s1", runningIds: new Set<string>(), unread: new Set<string>(),
     onPick: vi.fn(), onDelete: vi.fn(), onNewChat: vi.fn(), onOpenSettings: vi.fn(), lang: "en" as const,
     ...over,
   };
@@ -49,13 +49,13 @@ describe("Sidebar", () => {
   });
 
   test("running session shows a pulsing status dot left of its title", () => {
-    renderSidebar({ runningId: "s1" });
+    renderSidebar({ runningIds: new Set(["s1"]) });
     expect(statusDot("Organize downloads")?.className).toContain("running");
     expect(statusDot("ESLint issue")?.className).not.toContain("running");
   });
 
   test("unread session shows a solid status dot; running takes precedence", () => {
-    renderSidebar({ runningId: "s1", unread: new Set(["s1", "s2"]) });
+    renderSidebar({ runningIds: new Set(["s1"]), unread: new Set(["s1", "s2"]) });
     // s2 is only unread → unread dot
     expect(statusDot("ESLint issue")?.className).toContain("unread");
     // s1 is both running and unread → running wins

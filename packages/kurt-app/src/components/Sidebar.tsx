@@ -56,10 +56,11 @@ function RecentItem({ r, active, running, unread, onPick, onDelete, lang }: {
   );
 }
 
-export function Sidebar({ recents, activeId, runningId, unread, onPick, onDelete, onNewChat, lang, onOpenSettings }: {
+export function Sidebar({ recents, activeId, runningIds, unread, onPick, onDelete, onNewChat, lang, onOpenSettings }: {
   recents: SessionMeta[];
   activeId: string | null;
-  runningId: string | null;
+  /** Session ids with an in-flight run (each conversation runs independently). */
+  runningIds: Set<string>;
   /** Session ids with a completed run the user hasn't opened yet. */
   unread: Set<string>;
   onPick: (id: string) => void;
@@ -102,7 +103,7 @@ export function Sidebar({ recents, activeId, runningId, unread, onPick, onDelete
 
         <div className="sb-section-label"><span>{tr(T.recent, lang)}</span></div>
         {recents.map((r) => (
-          <RecentItem key={r.id} r={r} active={r.id === activeId} running={r.id === runningId} unread={unread.has(r.id)} onPick={onPick} onDelete={onDelete} lang={lang} />
+          <RecentItem key={r.id} r={r} active={r.id === activeId} running={runningIds.has(r.id)} unread={unread.has(r.id)} onPick={onPick} onDelete={onDelete} lang={lang} />
         ))}
       </div>
 
