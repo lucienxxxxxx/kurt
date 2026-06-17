@@ -334,3 +334,20 @@ Result: ____ (date / pass-fail / notes).
 
 Result: ____ (date / pass-fail / notes).
 
+---
+
+## Phase 6.4 polish — context-usage meter (double ring + breakdown card)
+
+1. **Double-ring meter.** Below the composer, bottom-right, a small **donut** shows the
+   current context usage as a **percentage** (estimated context tokens ÷ the model's max
+   context, from model metadata — 128k for DeepSeek). The arc fills with usage and turns
+   amber ≥70% / red ≥90%. It grows as the conversation gets longer; it's only shown once
+   there's a conversation.
+2. **Breakdown card.** Click the ring → a card opens showing the token breakdown by
+   category — **Your messages / Thinking / Tools / Replies / System prompt** — each with a
+   proportion bar and count, plus a note that these are **estimated** (the API only reports
+   totals). If a run reported real usage, an "Actual API usage this run" line appears.
+   Click elsewhere to close.
+
+Result: ____ (date / pass-fail / notes).
+

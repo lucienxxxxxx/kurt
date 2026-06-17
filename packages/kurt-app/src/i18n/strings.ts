@@ -63,6 +63,16 @@ export const T = {
   copy: { zh: "复制", en: "Copy" },
   copied: { zh: "已复制", en: "Copied" },
   rollback: { zh: "回退", en: "Rollback" },
+  // context meter
+  ctxTitle: { zh: "上下文用量", en: "Context usage" },
+  ctxUsed: { zh: "已用 {used} / {max} tokens", en: "{used} / {max} tokens" },
+  ctxYou: { zh: "你的消息", en: "Your messages" },
+  ctxThinking: { zh: "思考", en: "Thinking" },
+  ctxTools: { zh: "工具", en: "Tools" },
+  ctxReplies: { zh: "回复", en: "Replies" },
+  ctxSystem: { zh: "系统提示", en: "System prompt" },
+  ctxApprox: { zh: "为按文本长度估算值（API 只报总量）", en: "Estimated from text length (the API reports only totals)" },
+  ctxApiTotal: { zh: "本轮 API 实际用量：{n} tokens", en: "Actual API usage this run: {n} tokens" },
   // approval modal
   apprNeeded: { zh: "需要你的许可", en: "Approval needed" },
   apprRisk: { zh: "风险", en: "Risk" },

@@ -18,6 +18,7 @@ import { DetailPanel } from "./components/DetailPanel.tsx";
 import { renderStep, type OpenOutput } from "./components/thread/steps.tsx";
 import { MdBlock } from "./components/Markdown.tsx";
 import { CopyButton, MessageTime } from "./components/MessageActions.tsx";
+import { ContextMeter } from "./components/ContextMeter.tsx";
 import { Icon } from "./components/Icon.tsx";
 import logo from "./assets/kurt_logo.svg";
 
@@ -448,7 +449,8 @@ export default function App() {
                     running={viewRunning} queuedMsgs={queuedMsgs} onCancelQueued={cancelQueued} lang={lang}
                     model={model} models={models} onModelChange={setModel} effort={effort} onEffortChange={setEffort}
                     mode={mode} onModeChange={setMode} thinking={thinking} onThinkingToggle={() => setThinking((v) => !v)}
-                    approval={pendingApprovals[approvalKey(activeId)] ? <Approval req={pendingApprovals[approvalKey(activeId)]!} lang={lang} onDecide={decideApproval} /> : null} />
+                    approval={pendingApprovals[approvalKey(activeId)] ? <Approval req={pendingApprovals[approvalKey(activeId)]!} lang={lang} onDecide={decideApproval} /> : null}
+                    meter={thread.length > 0 ? <ContextMeter steps={thread} model={model} lang={lang} apiTokens={viewStats?.tokens} /> : null} />
                 </div>
               </div>
             </div>
