@@ -155,6 +155,33 @@ describe("bridge server /run (SSE)", () => {
     expect(rec.steps.filter((s) => s.type === "user")).toHaveLength(2);
   }, 20_000);
 
+  test("POST /sessions/:id/truncate keeps N user turns (rollback)", async () => {
+    const h = startWith([{ text: "first" }, { text: "second" }]);
+    const f1 = await run(h.url, { text: "q1" });
+    const session = f1.find((f) => f.kind === "session");
+    const id = session && session.kind === "session" ? session.id : "";
+    await run(h.url, { sessionId: id, text: "q2" }); // now two user turns
+
+    const res = await fetch(h.url + `/sessions/${encodeURIComponent(id)}/truncate`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keepUserTurns: 1 }),
+    });
+    expect(res.status).toBe(200);
+    const out = (await res.json()) as { steps: { type: string }[] };
+    expect(out.steps.filter((s) => s.type === "user")).toHaveLength(1);
+
+    // persisted: reloading the session also shows just one user turn
+    const rec = (await (await fetch(h.url + `/sessions/${encodeURIComponent(id)}`)).json()) as { steps: { type: string }[] };
+    expect(rec.steps.filter((s) => s.type === "user")).toHaveLength(1);
+  }, 20_000);
+
+  test("truncate on a missing session → 404", async () => {
+    const h = startWith([{ text: "x" }]);
+    const res = await fetch(h.url + `/sessions/nope/truncate`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keepUserTurns: 0 }),
+    });
+    expect(res.status).toBe(404);
+  });
+
   test("DELETE removes a session", async () => {
     const h = startWith([{ text: "x" }]);
     const id = (await (await fetch(h.url + "/sessions", { method: "POST" })).json() as { id: string }).id;

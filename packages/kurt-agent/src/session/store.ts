@@ -93,6 +93,19 @@ export class SessionStore {
     this.releaseLock(id);
   }
 
+  /**
+   * Rewind a session to keep only its first `keepUserTurns` user turns, dropping
+   * that user message and everything after it (the "回退/rollback" feature). Returns
+   * the updated record, or null if the session is missing.
+   */
+  async truncate(id: string, keepUserTurns: number): Promise<SessionRecord | null> {
+    const rec = await this.load(id);
+    if (!rec) return null;
+    rec.messages = truncateToUserTurns(rec.messages, keepUserTurns);
+    await this.save(rec);
+    return rec;
+  }
+
   // ── Occupancy locks ──────────────────────────────────────────────────────
   // Two front-ends editing the SAME session id would silently overwrite each
   // other's history (each autosaves its own in-memory messages). A lock file
@@ -153,6 +166,24 @@ export class SessionStore {
   #file(id: string): string {
     return join(this.#dir, `${id}.json`);
   }
+}
+
+/**
+ * Keep only the first `keepUserTurns` user turns of a conversation: returns the
+ * prefix of `messages` up to (but not including) the `keepUserTurns`-th user
+ * message (0-based), so that user message and all later messages are dropped.
+ * Pure — the unit of the rollback contract.
+ */
+export function truncateToUserTurns(messages: Message[], keepUserTurns: number): Message[] {
+  if (keepUserTurns <= 0) return [];
+  let userSeen = 0;
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i]!.role === "user") {
+      if (userSeen === keepUserTurns) return messages.slice(0, i);
+      userSeen++;
+    }
+  }
+  return messages.slice(); // fewer user turns than asked → nothing to drop
 }
 
 function metaOf(rec: SessionRecord): SessionMeta {

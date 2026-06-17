@@ -5,6 +5,7 @@
  *   GET    /sessions?workspace=                  → SessionInfo[]
  *   POST   /sessions                             → SessionInfo (new)
  *   GET    /sessions/:id                          → full SessionRecord
+ *   POST   /sessions/:id/truncate  { keepUserTurns } → { steps } (rollback)
  *   DELETE /sessions/:id                          → { ok }
  *   GET    /health                                → { ok }
  *
@@ -76,6 +77,17 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
           await rt.store.save(rec);
           return json(toInfo(rec));
         }
+      }
+
+      // Rollback: keep only the first N user turns, drop that message and after.
+      const mt = pathname.match(/^\/sessions\/(.+)\/truncate$/);
+      if (mt && req.method === "POST") {
+        const id = decodeURIComponent(mt[1]!);
+        const body = (await req.json().catch(() => ({}))) as { keepUserTurns?: number };
+        const keep = Math.max(0, Math.floor(Number(body.keepUserTurns ?? 0)));
+        const rec = await rt.store.truncate(id, keep);
+        if (!rec) return json({ error: "not found" }, 404);
+        return json({ id: rec.id, title: rec.title, updatedAt: rec.updatedAt, steps: messagesToSteps(rec.messages) });
       }
 
       const m = pathname.match(/^\/sessions\/(.+)$/);
