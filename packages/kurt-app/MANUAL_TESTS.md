@@ -110,6 +110,10 @@ shell command, e.g. "create the file /tmp/kurt-test then delete it with rm -f".
 4. **Always allow** → that command kind runs now and **doesn't prompt again** this session.
 5. **Stop** while a modal is open → the run aborts and the modal closes (= deny).
 6. Non-sensitive commands (ls, cat, normal scripts) run **without** a prompt.
+7. **Slow / waiting streams don't drop (bridge idleTimeout).** Leave an approval prompt
+   untouched for **>10 seconds**, then choose Allow → it still completes (the run wasn't
+   killed). Likewise a long model "thinking" pause or a >10s tool run keeps streaming.
+   (Bun.serve's default 10s idle timeout is disabled for the `/run` SSE stream.)
 
 Result: ____ (date / pass-fail / notes).
 

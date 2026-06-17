@@ -31,6 +31,11 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
   const server = Bun.serve({
     port: opts.port ?? 0,
     hostname: opts.host ?? "127.0.0.1",
+    // Disable Bun's default 10s idle timeout: the /run SSE stream is long-lived
+    // and legitimately goes quiet — while the model thinks, while a tool runs, and
+    // especially while a sensitive command's approval prompt waits for the human.
+    // A 10s cap would close those connections (and abort the run via cancel()).
+    idleTimeout: 0,
     async fetch(req) {
       const url = new URL(req.url);
       const { pathname } = url;
