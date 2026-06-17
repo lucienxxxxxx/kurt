@@ -25,15 +25,17 @@ function RecentItemMenu({ lang, onClose }: { lang: Lang; onClose: () => void }) 
   );
 }
 
-function RecentItem({ r, active, running, onPick, lang }: {
-  r: SessionMeta; active: boolean; running: boolean; onPick: (id: string) => void; lang: Lang;
+function RecentItem({ r, active, running, unread, onPick, lang }: {
+  r: SessionMeta; active: boolean; running: boolean; unread: boolean; onPick: (id: string) => void; lang: Lang;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  // One status slot, left of the title: running (pulsing) → unread (solid) → none.
+  const status = running ? "running" : unread ? "unread" : "";
   return (
     <div className={"recent-item" + (active ? " active" : "") + (running ? " running" : "")}
       onClick={() => onPick(r.id)} title={tr(r.title, lang)}>
+      <span className={"r-status" + (status ? " " + status : "")} aria-hidden={!status} />
       <span className="r-label">{tr(r.title, lang)}</span>
-      {running && <span className="live-dot" />}
       <div style={{ position: "relative" }}>
         <button className={"r-more" + (menuOpen ? " open" : "")}
           onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}>
@@ -45,10 +47,12 @@ function RecentItem({ r, active, running, onPick, lang }: {
   );
 }
 
-export function Sidebar({ recents, activeId, runningId, onPick, onNewChat, lang, onOpenSettings }: {
+export function Sidebar({ recents, activeId, runningId, unread, onPick, onNewChat, lang, onOpenSettings }: {
   recents: SessionMeta[];
   activeId: string | null;
   runningId: string | null;
+  /** Session ids with a completed run the user hasn't opened yet. */
+  unread: Set<string>;
   onPick: (id: string) => void;
   onNewChat: () => void;
   lang: Lang;
@@ -88,7 +92,7 @@ export function Sidebar({ recents, activeId, runningId, onPick, onNewChat, lang,
 
         <div className="sb-section-label"><span>{tr(T.recent, lang)}</span></div>
         {recents.map((r) => (
-          <RecentItem key={r.id} r={r} active={r.id === activeId} running={r.id === runningId} onPick={onPick} lang={lang} />
+          <RecentItem key={r.id} r={r} active={r.id === activeId} running={r.id === runningId} unread={unread.has(r.id)} onPick={onPick} lang={lang} />
         ))}
       </div>
 

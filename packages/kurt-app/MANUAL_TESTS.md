@@ -203,3 +203,18 @@ Result: ____ (date / pass-fail / notes).
 
 Result: ____ (date / pass-fail / notes).
 
+---
+
+## Phase 6.4 polish — session status dot (running / unread)
+
+1. **Running dot.** Start a run in a conversation. Its row in the sidebar shows a small
+   **pulsing** accent dot to the **left of the title**.
+2. **Unread dot.** While that run is going, switch to a **different** session (or New Chat).
+   When the run **finishes**, the original session's row shows a **solid** accent dot
+   (with a soft halo) — the "unread" marker. (If you stay on the running session the
+   whole time, it does NOT become unread — you've seen it.)
+3. **Click clears it.** Click the unread session → it opens and the dot **disappears**.
+4. **Alignment.** Rows with no dot still align with dotted rows (the dot slot is reserved).
+
+Result: ____ (date / pass-fail / notes).
+

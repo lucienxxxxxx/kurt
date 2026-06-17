@@ -12,12 +12,17 @@ const recents: SessionMeta[] = [
 
 function renderSidebar(over: Partial<Parameters<typeof Sidebar>[0]> = {}) {
   const props = {
-    recents, activeId: "s1", runningId: null,
+    recents, activeId: "s1", runningId: null as string | null, unread: new Set<string>(),
     onPick: vi.fn(), onNewChat: vi.fn(), onOpenSettings: vi.fn(), lang: "en" as const,
     ...over,
   };
   render(<Sidebar {...props} />);
   return props;
+}
+
+/** The status dot lives just before the .r-label of a recent item. */
+function statusDot(label: string): Element | null | undefined {
+  return screen.getByText(label).closest(".recent-item")?.querySelector(".r-status");
 }
 
 describe("Sidebar", () => {
@@ -41,5 +46,20 @@ describe("Sidebar", () => {
     expect(props.onPick).toHaveBeenCalledWith("s2");
     fireEvent.click(screen.getByText("New chat"));
     expect(props.onNewChat).toHaveBeenCalled();
+  });
+
+  test("running session shows a pulsing status dot left of its title", () => {
+    renderSidebar({ runningId: "s1" });
+    expect(statusDot("Organize downloads")?.className).toContain("running");
+    expect(statusDot("ESLint issue")?.className).not.toContain("running");
+  });
+
+  test("unread session shows a solid status dot; running takes precedence", () => {
+    renderSidebar({ runningId: "s1", unread: new Set(["s1", "s2"]) });
+    // s2 is only unread → unread dot
+    expect(statusDot("ESLint issue")?.className).toContain("unread");
+    // s1 is both running and unread → running wins
+    expect(statusDot("Organize downloads")?.className).toContain("running");
+    expect(statusDot("Organize downloads")?.className).not.toContain("unread");
   });
 });

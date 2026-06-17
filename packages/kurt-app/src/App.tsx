@@ -32,6 +32,8 @@ export default function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [titleEntry, setTitleEntry] = useState<Loc>(T.convNew);
   const [sessionList, setSessionList] = useState<SessionMeta[]>([]);
+  // Sessions whose run finished while you weren't viewing them → unread dot.
+  const [unread, setUnread] = useState<Set<string>>(() => new Set());
 
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const [input, setInput] = useState("");
@@ -143,6 +145,9 @@ export default function App() {
       } else {
         setRunning(false);
         setRunningId(null);
+        // Finished while you were looking elsewhere → mark its sidebar dot unread.
+        const sid = runSidRef.current;
+        if (sid && sid !== activeIdRef.current) setUnread((u) => new Set(u).add(sid));
         void refreshSessions(); // the new/updated session now shows in the sidebar
       }
     }
@@ -221,6 +226,7 @@ export default function App() {
     // approval) alive; switching back restores its live buffer.
     setView("chat");
     realSessionRef.current = id;
+    setUnread((u) => { if (!u.has(id)) return u; const n = new Set(u); n.delete(id); return n; }); // clicking clears the unread dot
     setCollapsed(new Set()); setPanels([]); setActivePanelId(null);
     if (id === runningId) {
       setActive(id);
@@ -257,7 +263,7 @@ export default function App() {
 
   return (
     <div className="window">
-      <Sidebar recents={sessionList} activeId={activeId} runningId={runningId} onPick={loadSession} onNewChat={newChat}
+      <Sidebar recents={sessionList} activeId={activeId} runningId={runningId} unread={unread} onPick={loadSession} onNewChat={newChat}
         lang={lang} onOpenSettings={() => setView(view === "settings" ? "chat" : "settings")} />
 
       <div className="main">

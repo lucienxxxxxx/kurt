@@ -151,7 +151,10 @@ html[data-theme="dark"] .brand-logo { filter: invert(1); }
 .recent-item:hover { background: var(--bg-hover); }
 .recent-item.active { background: var(--bg-active); color: var(--text); font-weight: 550; }
 .recent-item.running .ni-ico { color: var(--accent); }
-.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex:0 0 auto; animation: pulse 1.4s infinite; }
+/* status slot, left of the recent's title: reserved width keeps titles aligned */
+.r-status { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; background: transparent; }
+.r-status.running { background: var(--accent); animation: pulse 1.4s infinite; }
+.r-status.unread { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.25;} }
 
 /* profile */
