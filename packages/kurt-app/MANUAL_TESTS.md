@@ -282,3 +282,18 @@ Result: ____ (date / pass-fail / notes).
 
 Result: ____ (date / pass-fail / notes).
 
+---
+
+## Phase 6.4 polish — links open in the system browser (never in-window)
+
+1. **Agent-reply link.** Get the agent to output a markdown link (or send yourself a message
+   like `[example](https://example.com)`). Click it → it opens in your **default browser**
+   (Safari/Chrome). The Kurt window **does NOT navigate** — the chat UI stays exactly as it
+   was (previously the webview replaced itself with the page and the app became unusable).
+2. **Works everywhere content renders.** Same for links in your own message bubbles, in a
+   markdown table cell, and in a skill's output.
+3. **In-app anchors unaffected.** Buttons like the read-file link (`Read …`) and the
+   expand/collapse rows still work normally (they're not external links).
+
+Result: ____ (date / pass-fail / notes).
+

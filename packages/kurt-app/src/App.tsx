@@ -8,6 +8,7 @@ import type { Effort, Lang, Loc, Mode, Panel, QueuedMsg, SessionMeta, Step, Them
 import { T, tr } from "./i18n/strings.ts";
 import { runStream, listSessions, getSession, getInfo, approve, truncateSession, deleteSession, type ApprovalRequest } from "./lib/bridge.ts";
 import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
+import { externalLinkFromClick, openExternal } from "./lib/external.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
 import { Settings } from "./components/Settings.tsx";
@@ -95,6 +96,19 @@ export default function App() {
 
   // Is the conversation in view running? (drives the composer's send/stop state)
   const viewRunning = activeId !== null ? runningIds.has(activeId) : newChatRunId !== null;
+
+  // Links in agent/user content must open in the system browser, NOT navigate
+  // the app's own webview (which would replace the UI). Intercept clicks globally.
+  useEffect(() => {
+    const onClick = (e: MouseEvent): void => {
+      const href = externalLinkFromClick(e);
+      if (!href) return;
+      e.preventDefault();
+      void openExternal(href);
+    };
+    document.addEventListener("click", onClick, true); // capture: beat any inner handler
+    return () => document.removeEventListener("click", onClick, true);
+  }, []);
 
   useEffect(() => { document.documentElement.setAttribute("data-theme", theme); try { localStorage.setItem("kurt-theme", theme); } catch { /* ignore */ } }, [theme]);
   useEffect(() => { document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en"); try { localStorage.setItem("kurt-lang", lang); } catch { /* ignore */ } }, [lang]);
