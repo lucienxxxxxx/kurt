@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Effort, Lang, Loc, Mode, Panel, QueuedMsg, SessionMeta, Step, Theme } from "./types.ts";
 import { T, tr } from "./i18n/strings.ts";
-import { runStream, listSessions, getSession, getInfo, approve, truncateSession, type ApprovalRequest } from "./lib/bridge.ts";
+import { runStream, listSessions, getSession, getInfo, approve, truncateSession, deleteSession, type ApprovalRequest } from "./lib/bridge.ts";
 import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
@@ -281,6 +281,18 @@ export default function App() {
     setPanels([]); setActivePanelId(null);
   };
 
+  /** Delete a session: stop it if running, drop it from the bridge, clear its
+   *  unread dot, and reset to a fresh chat if it was the one being viewed. */
+  const removeSession = (id: string): void => {
+    if (id === runningId) stopRun(); // end the in-flight run before removing it
+    if (id === activeId) newChat();  // we were viewing it → fall back to an empty chat
+    setUnread((u) => { if (!u.has(id)) return u; const n = new Set(u); n.delete(id); return n; });
+    void (async () => {
+      try { await deleteSession(await resolveBridgeUrl(), id); } catch { /* ignore */ }
+      void refreshSessions();
+    })();
+  };
+
   // group thread into segments by user message
   type UserStep = Extract<Step, { type: "user" }>;
   const segments: { user: UserStep | null; steps: Step[] }[] = [];
@@ -293,7 +305,7 @@ export default function App() {
 
   return (
     <div className="window">
-      <Sidebar recents={sessionList} activeId={activeId} runningId={runningId} unread={unread} onPick={loadSession} onNewChat={newChat}
+      <Sidebar recents={sessionList} activeId={activeId} runningId={runningId} unread={unread} onPick={loadSession} onDelete={removeSession} onNewChat={newChat}
         lang={lang} onOpenSettings={() => setView(view === "settings" ? "chat" : "settings")} />
 
       <div className="main">

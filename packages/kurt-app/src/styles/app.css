@@ -640,6 +640,8 @@ html[data-theme="dark"] img.empty-logo { filter: invert(1); }
 .menu-item.del { color: #fff; background: #d94030; border-radius: 8px; }
 .menu-item.del:hover { background: #c2352a; }
 .menu-item.del svg { color: #fff; }
+.menu-item.del.confirm { background: #a82418; font-weight: 600; }
+.menu-item.del.confirm:hover { background: #8f1e14; }
 .menu-item svg { width: 15px; height: 15px; }
 .menu-sep { height: 1px; background: var(--border); margin: 5px 4px; }
 

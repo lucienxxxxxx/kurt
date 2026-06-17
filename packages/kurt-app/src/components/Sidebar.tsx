@@ -7,7 +7,8 @@ import { T, tr } from "../i18n/strings.ts";
 import { Icon } from "./Icon.tsx";
 import logo from "../assets/kurt_logo.svg";
 
-function RecentItemMenu({ lang, onClose }: { lang: Lang; onClose: () => void }) {
+function RecentItemMenu({ lang, onClose, onDelete }: { lang: Lang; onClose: () => void; onDelete: () => void }) {
+  const [confirming, setConfirming] = useState(false);
   useEffect(() => {
     const close = () => onClose();
     window.addEventListener("click", close);
@@ -18,15 +19,23 @@ function RecentItemMenu({ lang, onClose }: { lang: Lang; onClose: () => void }) 
       <div className="menu-item" onClick={(e) => { e.stopPropagation(); onClose(); }}>
         <Icon name="projects" />{tr(T.archiveToProject, lang)}
       </div>
-      <div className="menu-item del" onClick={(e) => { e.stopPropagation(); onClose(); }}>
-        <Icon name="x" />{tr(T.deleteChat, lang)}
-      </div>
+      {confirming ? (
+        // Two-step: deleting is destructive, so the first click only arms it.
+        <div className="menu-item del confirm" onClick={(e) => { e.stopPropagation(); onDelete(); onClose(); }}>
+          <Icon name="x" />{tr(T.confirmDelete, lang)}
+        </div>
+      ) : (
+        <div className="menu-item del" onClick={(e) => { e.stopPropagation(); setConfirming(true); }}>
+          <Icon name="x" />{tr(T.deleteChat, lang)}
+        </div>
+      )}
     </div>
   );
 }
 
-function RecentItem({ r, active, running, unread, onPick, lang }: {
-  r: SessionMeta; active: boolean; running: boolean; unread: boolean; onPick: (id: string) => void; lang: Lang;
+function RecentItem({ r, active, running, unread, onPick, onDelete, lang }: {
+  r: SessionMeta; active: boolean; running: boolean; unread: boolean;
+  onPick: (id: string) => void; onDelete: (id: string) => void; lang: Lang;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   // One status slot, left of the title: running (pulsing) → unread (solid) → none.
@@ -41,19 +50,20 @@ function RecentItem({ r, active, running, unread, onPick, lang }: {
           onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}>
           <Icon name="dots3" />
         </button>
-        {menuOpen && <RecentItemMenu lang={lang} onClose={() => setMenuOpen(false)} />}
+        {menuOpen && <RecentItemMenu lang={lang} onClose={() => setMenuOpen(false)} onDelete={() => onDelete(r.id)} />}
       </div>
     </div>
   );
 }
 
-export function Sidebar({ recents, activeId, runningId, unread, onPick, onNewChat, lang, onOpenSettings }: {
+export function Sidebar({ recents, activeId, runningId, unread, onPick, onDelete, onNewChat, lang, onOpenSettings }: {
   recents: SessionMeta[];
   activeId: string | null;
   runningId: string | null;
   /** Session ids with a completed run the user hasn't opened yet. */
   unread: Set<string>;
   onPick: (id: string) => void;
+  onDelete: (id: string) => void;
   onNewChat: () => void;
   lang: Lang;
   onOpenSettings: () => void;
@@ -92,7 +102,7 @@ export function Sidebar({ recents, activeId, runningId, unread, onPick, onNewCha
 
         <div className="sb-section-label"><span>{tr(T.recent, lang)}</span></div>
         {recents.map((r) => (
-          <RecentItem key={r.id} r={r} active={r.id === activeId} running={r.id === runningId} unread={unread.has(r.id)} onPick={onPick} lang={lang} />
+          <RecentItem key={r.id} r={r} active={r.id === activeId} running={r.id === runningId} unread={unread.has(r.id)} onPick={onPick} onDelete={onDelete} lang={lang} />
         ))}
       </div>
 

@@ -245,3 +245,19 @@ Result: ____ (date / pass-fail / notes).
 
 Result: ____ (date / pass-fail / notes).
 
+---
+
+## Phase 6.4 polish — delete a session
+
+1. **Two-step delete.** Hover a session in the sidebar → click the **…** button → the menu
+   shows a red **Delete**. First click **arms** it (turns darker red, "Confirm delete");
+   click again to confirm, or click elsewhere to cancel.
+2. **It's gone.** After confirming, the session disappears from the Recent list and stays
+   gone after relaunch (removed from `~/.kurt/sessions`).
+3. **Deleting the open session** resets the main view to a fresh empty chat.
+4. **Deleting a different session** while you're viewing another leaves your current view
+   untouched; its unread dot (if any) clears.
+5. **Deleting the running session** stops its run first, then removes it.
+
+Result: ____ (date / pass-fail / notes).
+

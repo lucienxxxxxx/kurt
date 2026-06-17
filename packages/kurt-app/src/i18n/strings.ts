@@ -58,6 +58,7 @@ export const T = {
   // recent item menu
   archiveToProject: { zh: "归纳到项目", en: "Archive to project" },
   deleteChat: { zh: "删除", en: "Delete" },
+  confirmDelete: { zh: "确认删除", en: "Confirm delete" },
   // message actions
   copy: { zh: "复制", en: "Copy" },
   copied: { zh: "已复制", en: "Copied" },

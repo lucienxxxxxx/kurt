@@ -13,7 +13,7 @@ const recents: SessionMeta[] = [
 function renderSidebar(over: Partial<Parameters<typeof Sidebar>[0]> = {}) {
   const props = {
     recents, activeId: "s1", runningId: null as string | null, unread: new Set<string>(),
-    onPick: vi.fn(), onNewChat: vi.fn(), onOpenSettings: vi.fn(), lang: "en" as const,
+    onPick: vi.fn(), onDelete: vi.fn(), onNewChat: vi.fn(), onOpenSettings: vi.fn(), lang: "en" as const,
     ...over,
   };
   render(<Sidebar {...props} />);
@@ -61,5 +61,15 @@ describe("Sidebar", () => {
     // s1 is both running and unread → running wins
     expect(statusDot("Organize downloads")?.className).toContain("running");
     expect(statusDot("Organize downloads")?.className).not.toContain("unread");
+  });
+
+  test("delete menu: first click arms, second click calls onDelete with the id", () => {
+    const props = renderSidebar();
+    const item = screen.getByText("ESLint issue").closest(".recent-item")!;
+    fireEvent.click(item.querySelector(".r-more")!); // open the … menu
+    fireEvent.click(screen.getByText("Delete")); // arm
+    expect(props.onDelete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Confirm delete")); // confirm
+    expect(props.onDelete).toHaveBeenCalledWith("s2");
   });
 });
