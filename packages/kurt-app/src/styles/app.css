@@ -313,7 +313,8 @@ code.inl {
 .think-body p:last-child { margin-bottom: 0; }
 
 /* tool block */
-.tool-line { display: flex; align-items: baseline; gap: 9px; margin-bottom: 9px; flex-wrap: wrap; }
+/* the whole header row toggles expand/collapse (not just the chevron) */
+.tool-line { display: flex; align-items: baseline; gap: 9px; margin-bottom: 9px; flex-wrap: wrap; cursor: pointer; user-select: none; }
 .tool-name { font-family: var(--font-serif); font-weight: 700; font-size: 16px; color: var(--text); }
 .tool-title { color: var(--text-muted); font-size: 14.5px; }
 .tool-toggle { margin-left: auto; }
@@ -428,7 +429,7 @@ code.inl {
 .fp-md hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
 
 /* skill step */
-.skill-line { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; flex-wrap: wrap; }
+.skill-line { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; flex-wrap: wrap; cursor: pointer; user-select: none; }
 .skill-badge {
   width: 22px; height: 22px;
   display: grid; place-items: center;

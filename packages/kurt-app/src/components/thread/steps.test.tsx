@@ -32,6 +32,30 @@ describe("renderStep", () => {
     expect(screen.getByText("ls -la")).toBeInTheDocument();
   });
 
+  test("clicking anywhere on the tool-line row toggles (not just the chevron)", () => {
+    const onToggle = vi.fn();
+    const step: Step = { _id: 2, type: "tool", name: "web_search", title: "", cmd: "q", out: "" };
+    render(<>{renderStep(step, ctx({ onToggle }))}</>);
+    fireEvent.click(screen.getByText("web_search").closest(".tool-line")!);
+    expect(onToggle).toHaveBeenCalledWith(2);
+  });
+
+  test("clicking the chevron still toggles (bubbles to the row)", () => {
+    const onToggle = vi.fn();
+    const step: Step = { _id: 2, type: "tool", name: "web_search", title: "", cmd: "q", out: "" };
+    const { container } = render(<>{renderStep(step, ctx({ onToggle }))}</>);
+    fireEvent.click(container.querySelector(".tool-line .tool-toggle")!);
+    expect(onToggle).toHaveBeenCalledWith(2);
+  });
+
+  test("clicking the skill-line row toggles", () => {
+    const onToggle = vi.fn();
+    const step: Step = { _id: 4, type: "skill", name: "web_search", title: "", input: "q", output: "o" };
+    render(<>{renderStep(step, ctx({ onToggle }))}</>);
+    fireEvent.click(screen.getByText("web_search").closest(".skill-line")!);
+    expect(onToggle).toHaveBeenCalledWith(4);
+  });
+
   test("read step renders the file link and calls onOpenFile", () => {
     const onOpenFile = vi.fn();
     const step: Step = { _id: 3, type: "read", file: ".eslintrc.js", lines: "1-18" };

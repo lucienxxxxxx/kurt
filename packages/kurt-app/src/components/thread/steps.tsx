@@ -69,10 +69,10 @@ export function ToolStepView({ step, open, onToggle, lang, onOpenOutput }: {
 
   return (
     <div className="step act">
-      <div className="tool-line">
+      <div className="tool-line" onClick={onToggle} title={tr(open ? T.collapse : T.expand, lang)}>
         <span className="tool-name">{step.name}</span>
         <span className="tool-title">{tr(step.title, lang)}</span>
-        <button className="icon-btn tool-toggle" onClick={onToggle} title={tr(open ? T.collapse : T.expand, lang)}>
+        <button className="icon-btn tool-toggle" tabIndex={-1} aria-hidden="true">
           <Icon name={open ? "chevD" : "chevR"} />
         </button>
       </div>
@@ -112,11 +112,11 @@ export function SkillStepView({ step, open, onToggle, lang }: {
 }) {
   return (
     <div className="step skill-step">
-      <div className="skill-line">
+      <div className="skill-line" onClick={onToggle} title={tr(open ? T.collapse : T.expand, lang)}>
         <span className="skill-badge"><Icon name="skills" /></span>
         <span className="skill-name">{step.name}</span>
         <span className="skill-title">{tr(step.title, lang)}</span>
-        <button className="icon-btn tool-toggle" onClick={onToggle} title={tr(open ? T.collapse : T.expand, lang)}>
+        <button className="icon-btn tool-toggle" tabIndex={-1} aria-hidden="true">
           <Icon name={open ? "chevD" : "chevR"} />
         </button>
       </div>
