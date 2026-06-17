@@ -4,7 +4,7 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-17 · `main` @ `f2af055`(工具/技能整行可点击展开折叠;前置 `39436d7` 会话删除)
+- **最后更新**:2026-06-17 · `main` @ `9b58bfc`(按会话并发后台运行:切换/新建/设置都不打断 run,只有停止按钮停;前置 `f2af055` 整行展开折叠)
 - **门禁**:kurt-agent **150** · kurt-tui **70** · kurt-bridge **24** · kurt-app build+**Vitest 39**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
@@ -47,6 +47,7 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
 | 6.4-打磨3 | **markdown 表格**(`MdBlock` 解析 GFM 表格:表头+`\|---\|`分隔+正文,列对齐 `:--/--:/:-:`,单元格内联 md;`.md-table` 描边/斑马纹/横向滚动);**切会话滚到底**(`activeId` 变化时 `scrollTop=scrollHeight`);**授权框按会话保留**:approval 以 run 的 sessionId 为键,切走不再 abort run、run 流入 `runBufRef` 每会话缓冲、仅当查看该会话时镜像到可见 thread,切回重新显示(`loadSession` 不再 `stopRun`;New Chat 仍结束 run);**授权框与输入框贴合**(`margin-bottom:0`+下方直角+无下边框)。Markdown.test +2(表格)。 | ✅ 完成 |
 | 6.4-打磨4 | **侧栏会话状态点**(标题左侧一个状态槽:运行中=脉冲 accent 点;运行在非当前会话**完成**→实心未读点 + soft halo;点击会话清除未读;槽位预留宽度保持对齐)。App 用 `unread:Set<sessionId>`,仅当完成时 `runSid!==activeId` 标记;`loadSession` 清除。Sidebar.test +2(运行点/未读点+优先级)。 | ✅ 完成 |
 | 6.4-修2 | **bridge SSE 空闲超时**:`Bun.serve` 默认 `idleTimeout:10s` 会掐断长时间无数据的 `/run` SSE 流(模型思考/工具运行/**审批弹窗等待人答**),触发 `cancel()`→abort run。设 `idleTimeout:0` 禁用。MANUAL_TESTS §6.4b 加「审批搁置>10s 仍可完成」核对点。 | ✅ 完成 |
+| 6.4-打磨8 | **按会话并发后台运行**:切换会话/新建对话/进设置都不再打断 run;每个会话独立后台运行(可同时多个),只有当前查看会话的停止按钮(或对其删除/回退)才结束它。运行状态从单 run(running/runningId/abortRef/runBufRef)重构为 `Map<runId,Run>`(各自 AbortController/缓冲/idMap 每轮重置/队列);渲染只镜像当前查看的 run;`runningIds:Set` 驱动侧栏点+发送/停止;send 对查看中的忙 run 排队、否则起新 run;loadSession 显示运行中会话的实时缓冲、在别处完成则标未读。bridge 本就支持跨会话并发(独立 runTurn/会话文件、无全局锁)。Sidebar 改收 `runningIds:Set`。 | ✅ 完成 |
 | 6.4-打磨7 | **工具/技能整行点击展开折叠**:onClick 从小箭头按钮移到整个 `.tool-line` / `.skill-line` 行(对齐 thinking 的 `.think-head`),箭头变纯视觉(tabIndex -1/aria-hidden,点击冒泡到行),行加 cursor:pointer。steps.test +3。 | ✅ 完成 |
 | 6.4-打磨6 | **会话删除**:侧栏 `…` 菜单的「删除」改为两步确认(首点变深红「确认删除」、再点执行、点别处取消),接已有 `DELETE /sessions/:id`;`App.removeSession` 删运行中会话先停 run、删当前查看会话回退到空聊天、清未读点、刷新列表。Sidebar.test +1(arm→confirm→onDelete)。 | ✅ 完成 |
 | 6.4-打磨5 | **消息操作 + 代码块复制**:agent 回复底部无背景 **复制** 按钮 + **时间**(流式结束后才显示);用户气泡移入右对齐 `.query-row`,底部 **复制 + 回退 + 时间**;**回退** = 删除该用户消息及之后所有内容 + 文本填回输入框 + 截断后端会话(新 `POST /sessions/:id/truncate`,`SessionStore.truncate`/`truncateToUserTurns`),先停活动 run;**代码块** 右上角复制按钮(`MdBlock` 加 `lang`)。时间为客户端戳(`ts?` 仅客户端,重载会话无时间)。MessageActions.test +4、Markdown 代码复制 +1、agent truncate +5、bridge truncate +2。 | ✅ 完成 |
