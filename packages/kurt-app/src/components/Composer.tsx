@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Effort, Lang, Mode, QueuedMsg } from "../types.ts";
 import { T, tr } from "../i18n/strings.ts";
 import { Icon } from "./Icon.tsx";
+import { ModelLogo } from "./ModelLogo.tsx";
 
 function MenuPopover({ open, children }: { open: boolean; children: React.ReactNode }) {
   if (!open) return null;
@@ -33,12 +34,12 @@ function ModelMenu({ value, options, onChange, open, onToggle, thinking, onThink
   return (
     <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
       <button className="pill-btn" onClick={onToggle}>
-        <Icon name="spark" />{value}<Icon name="chevD" className="chev" />
+        <ModelLogo model={value} />{value}<Icon name="chevD" className="chev" />
       </button>
       <MenuPopover open={open}>
         {opts.map((m) => (
           <div key={m} className={"menu-item" + (m === value ? " sel" : "")} onClick={() => { onChange(m); onToggle(); }}>
-            <Icon name="spark" />{m}
+            <ModelLogo model={m} />{m}
             {m === value && <span style={{ marginLeft: "auto" }}><Icon name="check" /></span>}
           </div>
         ))}
