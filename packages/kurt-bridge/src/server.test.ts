@@ -126,9 +126,11 @@ describe("bridge server /run (SSE)", () => {
     const session = frames.find((f) => f.kind === "session");
     const id = session && session.kind === "session" ? session.id : "";
     expect(id).toBeTruthy();
-    // A new session's title is finalized AFTER the turn (auto-summary, or — with no
-    // summarizer — a fallback to the first user message). The opening frame is empty.
-    expect(session && session.kind === "session" && session.title).toBe("");
+    // A new session gets an immediate temp title (the first message) in the opening
+    // frame; with no summarizer it stays that. (Also persisted right away — listable.)
+    expect(session && session.kind === "session" && session.title).toBe("do the thing");
+    const listed = (await (await fetch(h.url + `/sessions?workspace=${encodeURIComponent(ws)}`)).json()) as { id: string }[];
+    expect(listed.some((s) => s.id === id)).toBe(true); // shows up mid-run, not only at the end
     const rec0 = (await (await fetch(h.url + `/sessions/${encodeURIComponent(id)}`)).json()) as { title: string };
     expect(rec0.title).toBe("do the thing");
 
@@ -156,7 +158,8 @@ describe("bridge server /run (SSE)", () => {
     const frames = await run(server.url, { text: "what's the weather in paris" });
     const session = frames.find((f) => f.kind === "session");
     const id = session && session.kind === "session" ? session.id : "";
-    expect(session && session.kind === "session" && session.title).toBe(""); // opening frame: no title yet
+    // opening frame: immediate temp title (the first message); replaced by the summary after the turn
+    expect(session && session.kind === "session" && session.title).toBe("what's the weather in paris");
     const rec = (await (await fetch(server.url + `/sessions/${encodeURIComponent(id)}`)).json()) as { title: string };
     expect(rec.title).toBe("Weather in Paris");
   }, 20_000);

@@ -177,8 +177,13 @@ export async function runTurn(rt: Runtime, opts: RunOptions): Promise<void> {
   const rec = (opts.sessionId ? await rt.store.load(opts.sessionId) : null) ?? rt.store.create(rt.workspace, rt.model.name);
   const isNewSession = !rec.title; // brand-new conversation → title is auto-summarized after this turn
   rec.messages.push({ role: "user", content: [{ type: "text", text: opts.text }] });
-  // For a new session the title stays empty for now (the desktop shows "新会话")
-  // and is filled by an auto-summary once this turn completes (see below).
+  if (isNewSession) {
+    // Temp title = the start of the user's message, PERSISTED right away so the new
+    // session shows up in the sidebar immediately (it isn't otherwise saved until the
+    // turn ends). The LLM auto-summary replaces it once the turn completes (below).
+    rec.title = opts.text.slice(0, 60).trim();
+    await rt.store.save(rec);
+  }
   opts.onFrame({ kind: "session", id: rec.id, title: rec.title });
 
   // Per-run permission: known-allowed keys pass; otherwise emit an approval frame
@@ -221,14 +226,13 @@ export async function runTurn(rt: Runtime, opts: RunOptions): Promise<void> {
       else if (ev.type === "error") opts.onFrame({ kind: "error", message: ev.message });
     }
     rec.messages.push(...messagesFromEvents(captured));
-    // Auto-summarize a concise title for a brand-new conversation (falls back to
-    // the first user message if there's no summarizer or it fails / was aborted).
-    if (isNewSession && !rec.title) {
-      let title = "";
-      if (rt.makeTitle && !opts.signal.aborted) {
-        try { title = (await rt.makeTitle(rec.messages)).trim(); } catch { /* fall back */ }
-      }
-      rec.title = title || opts.text.slice(0, 60).trim();
+    // Replace the temp (first-message) title with a concise auto-summary. Keep the
+    // temp title if there's no summarizer, it fails, or the run was aborted.
+    if (isNewSession && rt.makeTitle && !opts.signal.aborted) {
+      try {
+        const summary = (await rt.makeTitle(rec.messages)).trim();
+        if (summary) rec.title = summary;
+      } catch { /* keep the temp title */ }
     }
     await rt.store.save(rec);
     opts.onFrame({ kind: "done" });
