@@ -4,7 +4,7 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-17 · `main` @ `c96be6f`(桌面端打磨:侧栏会话状态点 运行中/未读/点击清除;前置 `0b35228` markdown 表格+切会话滚底+授权框按会话保留+授权框贴合输入框)
+- **最后更新**:2026-06-17 · `main` @ `f40a9de`(修 bridge:禁用 Bun.serve 默认 10s idleTimeout,避免 SSE/审批等待被掐断;前置 `c96be6f` 侧栏会话状态点)
 - **门禁**:kurt-agent **145** · kurt-tui **70** · kurt-bridge **22** · kurt-app build+**Vitest 30**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
@@ -46,6 +46,7 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
 | 6.4-打磨2 | **用户消息支持 markdown**(用户气泡走与 agent 回复相同的 `MdBlock`:粗体/行内码/标题/列表/代码块);**授权框改内联面板**:不再是居中遮罩弹窗,而是渲染在 composer 内、输入框正上方,等宽、同 16px 圆角,从输入框背后向上升起(`approvalRise`),其余窗口保持可交互。Markdown.test + Approval.test(断言非 overlay)。 | ✅ 完成 |
 | 6.4-打磨3 | **markdown 表格**(`MdBlock` 解析 GFM 表格:表头+`\|---\|`分隔+正文,列对齐 `:--/--:/:-:`,单元格内联 md;`.md-table` 描边/斑马纹/横向滚动);**切会话滚到底**(`activeId` 变化时 `scrollTop=scrollHeight`);**授权框按会话保留**:approval 以 run 的 sessionId 为键,切走不再 abort run、run 流入 `runBufRef` 每会话缓冲、仅当查看该会话时镜像到可见 thread,切回重新显示(`loadSession` 不再 `stopRun`;New Chat 仍结束 run);**授权框与输入框贴合**(`margin-bottom:0`+下方直角+无下边框)。Markdown.test +2(表格)。 | ✅ 完成 |
 | 6.4-打磨4 | **侧栏会话状态点**(标题左侧一个状态槽:运行中=脉冲 accent 点;运行在非当前会话**完成**→实心未读点 + soft halo;点击会话清除未读;槽位预留宽度保持对齐)。App 用 `unread:Set<sessionId>`,仅当完成时 `runSid!==activeId` 标记;`loadSession` 清除。Sidebar.test +2(运行点/未读点+优先级)。 | ✅ 完成 |
+| 6.4-修2 | **bridge SSE 空闲超时**:`Bun.serve` 默认 `idleTimeout:10s` 会掐断长时间无数据的 `/run` SSE 流(模型思考/工具运行/**审批弹窗等待人答**),触发 `cancel()`→abort run。设 `idleTimeout:0` 禁用。MANUAL_TESTS §6.4b 加「审批搁置>10s 仍可完成」核对点。 | ✅ 完成 |
 | 6.4d | 打包:`bun build --compile` bridge → Tauri sidecar 二进制 + 代码签名/公证 `.app` | ⏸ 暂缓(用户选择)—— 桌面端**功能已完整**,停在 `tauri dev` 形态;打包时再做(需 Apple 签名身份,或先出未签名本地构建) |
 
 ## 已实现(main)
