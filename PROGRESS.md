@@ -4,7 +4,7 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-17 · `main` @ `aa43f74`(用户消息上方加留白 `.query-row padding-top`;前置 `09b4efb` 运行读数/hover 操作行/限定选择)
+- **最后更新**:2026-06-17 · `main` @ `646b221`(思考开关移入模型菜单:分隔线+「思考」行+苹果风椭圆开关;前置 `aa43f74` 用户消息留白)
 - **门禁**:kurt-agent **150** · kurt-tui **70** · kurt-bridge **24** · kurt-app build+**Vitest 48**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
