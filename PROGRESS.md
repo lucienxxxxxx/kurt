@@ -4,7 +4,7 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-17 · `main` @ `906d16c`(接入 ask_user:bridge 发 `ask` frame、`POST /answer` 解决;桌面端弹出提问面板(同授权框,选项/自由输入/跳过);前置 `aec7dd3` 修白屏/置底)
+- **最后更新**:2026-06-17 · `main` @ `78e267f`(设置新增「默认折叠细节」:思考/工具/技能卡默认收起只留主文本,可单独展开;前置 `906d16c` ask_user)
 - **门禁**:kurt-agent **150** · kurt-tui **70** · kurt-bridge **26** · kurt-app build+**Vitest 66**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
@@ -47,6 +47,7 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
 | 6.4-打磨3 | **markdown 表格**(`MdBlock` 解析 GFM 表格:表头+`\|---\|`分隔+正文,列对齐 `:--/--:/:-:`,单元格内联 md;`.md-table` 描边/斑马纹/横向滚动);**切会话滚到底**(`activeId` 变化时 `scrollTop=scrollHeight`);**授权框按会话保留**:approval 以 run 的 sessionId 为键,切走不再 abort run、run 流入 `runBufRef` 每会话缓冲、仅当查看该会话时镜像到可见 thread,切回重新显示(`loadSession` 不再 `stopRun`;New Chat 仍结束 run);**授权框与输入框贴合**(`margin-bottom:0`+下方直角+无下边框)。Markdown.test +2(表格)。 | ✅ 完成 |
 | 6.4-打磨4 | **侧栏会话状态点**(标题左侧一个状态槽:运行中=脉冲 accent 点;运行在非当前会话**完成**→实心未读点 + soft halo;点击会话清除未读;槽位预留宽度保持对齐)。App 用 `unread:Set<sessionId>`,仅当完成时 `runSid!==activeId` 标记;`loadSession` 清除。Sidebar.test +2(运行点/未读点+优先级)。 | ✅ 完成 |
 | 6.4-修2 | **bridge SSE 空闲超时**:`Bun.serve` 默认 `idleTimeout:10s` 会掐断长时间无数据的 `/run` SSE 流(模型思考/工具运行/**审批弹窗等待人答**),触发 `cancel()`→abort run。设 `idleTimeout:0` 禁用。MANUAL_TESTS §6.4b 加「审批搁置>10s 仍可完成」核对点。 | ✅ 完成 |
+| 6.4-打磨17 | **「默认折叠细节」设置**:设置→通用 加开关,开后思考/工具/技能卡默认收起、只留主回复文本;`collapsed` 集合重解释为「相对默认的反选」,`renderStep` 用 `open = collapseDetails ? collapsed.has : !collapsed.has`,单步切换仍可单独展开。持久化 `kurt-collapse-details`,切换即时重渲染。steps.test +2。 | ✅ 完成 |
 | 6.4-打磨16 | **ask_user 接入前端**:沿用授权框那套——bridge `runTurn` 注入 per-run `AskProvider`,发 `ask` RunFrame(question/options),阻塞到 `POST /answer`(或中断→"");`Runtime.pendingAsks`/`resolveAsk`,`makeTools(permission, ask)` 加 `AskUserTool`,`ask_user` 进 READ_ONLY(全模式)。桌面端新 `Ask` 面板(输入框上方,问题+A/B 选项按钮+自由输入+跳过),按会话保留、答完/结束/停止清除;bridge 客户端加 `AskRequest`/`ask` 帧/`onAsk`/`answer()`。server.test ask 往返 +1、Ask.test +5。引擎未改(AskUserTool/AskProvider 早已导出)。 | ✅ 完成 |
 | 6.4-修5 | **会话视图白屏 + 首开置底修复**:① 白屏根因—`loadSession` 异步取 steps、await 后才 setThread,慢/失败/竞态(尤其从新会话切入)回落到 empty-state。加每会话 `sessionCache`:切换即时显示缓存(无白屏/闪)、stale fetch 也写缓存、失败保留旧内容、首次打开显示中性加载区而非 logo;run 结束刷新缓存、回退/删除失效。② 置底根因—滚动恢复挂在 `[activeId]`,在异步内容提交前就量了旧高度。改 `wantScroll` 标志 + `[thread]` 内容到屏后再滚(首开到底/重访恢复位置)。 | ✅ 完成 |
 | 6.4-打磨15 | **按会话记忆滚动位置 + Kurt 人设 prompt**:① thread 容器 onScroll 按会话(id,新会话用 "")记 scrollTop;切换时恢复该会话上次位置,首次打开(无记录)落到底部;按启动周期记忆。② 重写 bridge `defaultSystem`:身份→关系→原则→协作方式(认知伙伴,不替代判断;用户掌目标/价值/决策,Kurt 掌推理/连接/探索;抓本质、复杂题深入、要事列收益/风险/隐藏假设;用用户语言),保留工具/WORKSPACE_DIR/request_write_access 操作规则。 | ✅ 完成 |
