@@ -20,6 +20,7 @@ export type RunFrame =
   | { kind: "session"; id: string; title: string } // the resolved/created session for this run
   | { kind: "step"; step: Step } // a step was created or changed — upsert by _id
   | { kind: "approval"; id: string; key: string; title: string; command: string; explanation: string; risk: string } // a sensitive op awaits POST /approve
+  | { kind: "ask"; id: string; question: string; options?: string[] } // ask_user awaits POST /answer
   | { kind: "usage"; inputTokens: number; outputTokens: number; totalTokens: number }
   | { kind: "done" }
   | { kind: "aborted"; reason: string }

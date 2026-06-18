@@ -30,6 +30,7 @@ import {
   MemoryTool,
   UpdatePlanTool,
   RequestWriteAccessTool,
+  AskUserTool,
   DuckDuckGoSearch,
   sessionsDir,
   type Event,
@@ -39,6 +40,7 @@ import {
   type Tool,
   type PermissionProvider,
   type PermissionDecision,
+  type AskProvider,
 } from "kurt-agent";
 import { kurtHome } from "kurt-agent";
 import { join, dirname } from "node:path";
@@ -53,9 +55,9 @@ export type ApprovalDecision = "allow" | "always" | "deny";
 /** Operating mode (mirrors kurt-tui): chat = read-only, plan = +planning, agent = full. */
 export type Mode = "chat" | "agent" | "plan";
 
-// request_write_access is in every mode: it's approval-gated, and in read-only
-// modes it just enables READING dirs outside the workspace (no write tool present).
-const READ_ONLY = ["read_file", "ls", "grep", "web_search", "memory", "request_write_access"];
+// request_write_access + ask_user are in every mode: both are safe (gated / just a
+// prompt) and useful regardless of whether the agent can also write or run things.
+const READ_ONLY = ["read_file", "ls", "grep", "web_search", "memory", "request_write_access", "ask_user"];
 const MODE_TOOLS: Record<Mode, "all" | string[]> = {
   agent: "all",
   chat: READ_ONLY,
@@ -108,11 +110,14 @@ export interface Runtime {
   store: SessionStore;
   /** Mutable so `reconfigure` can swap the model when the key/model changes. */
   model: ModelProvider;
-  /** Build the tool set for a run, gating sensitive ops through `permission`. */
-  makeTools: (permission: PermissionProvider) => Tool[];
+  /** Build the tool set for a run: `permission` gates sensitive ops, `ask` lets the
+   *  agent put a question to the user (the ask_user tool). */
+  makeTools: (permission: PermissionProvider, ask: AskProvider) => Tool[];
   system: string;
   /** In-flight approvals awaiting POST /approve, keyed by approval id. */
   pendingApprovals: Map<string, PendingApproval>;
+  /** In-flight ask_user questions awaiting POST /answer, keyed by ask id. */
+  pendingAsks: Map<string, { resolve: (answer: string) => void }>;
   /** Rule keys the user chose "always allow" for (this bridge's lifetime). */
   allowlist: Set<string>;
   /** Status for GET /info (production runtime sets this). */
@@ -141,7 +146,7 @@ export interface RunOptions {
 export function createRuntime(opts: {
   workspace: string;
   model: ModelProvider;
-  makeTools: (permission: PermissionProvider) => Tool[];
+  makeTools: (permission: PermissionProvider, ask: AskProvider) => Tool[];
   system?: string;
   store?: SessionStore;
   makeTitle?: (messages: Message[]) => Promise<string>;
@@ -153,9 +158,19 @@ export function createRuntime(opts: {
     system: opts.system ?? defaultSystem(opts.workspace),
     store: opts.store ?? new SessionStore(),
     pendingApprovals: new Map(),
+    pendingAsks: new Map(),
     allowlist: new Set(),
     makeTitle: opts.makeTitle,
   };
+}
+
+/** Resolve a pending ask_user question (called by POST /answer). Returns false if unknown. */
+export function resolveAsk(rt: Runtime, id: string, answer: string): boolean {
+  const pending = rt.pendingAsks.get(id);
+  if (!pending) return false;
+  rt.pendingAsks.delete(id);
+  pending.resolve(answer);
+  return true;
 }
 
 /** Resolve a pending approval (called by POST /approve). Returns false if unknown. */
@@ -209,8 +224,30 @@ export async function runTurn(rt: Runtime, opts: RunOptions): Promise<void> {
     },
   };
 
+  // Per-run ask_user: emit an `ask` frame and block until the desktop answers
+  // (POST /answer), or the run aborts → empty answer (skipped).
+  const ask: AskProvider = {
+    async ask(req, signal): Promise<string> {
+      const id = crypto.randomUUID();
+      const answer = new Promise<string>((resolve) => {
+        rt.pendingAsks.set(id, { resolve });
+      });
+      opts.onFrame({ kind: "ask", id, question: req.question, options: req.options });
+      const onAbort = (): void => {
+        const p = rt.pendingAsks.get(id);
+        if (p) { rt.pendingAsks.delete(id); p.resolve(""); }
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+      try {
+        return await answer;
+      } finally {
+        signal?.removeEventListener("abort", onAbort);
+      }
+    },
+  };
+
   const mode: Mode = opts.mode ?? "agent";
-  const tools = toolsForMode(rt.makeTools(permission), mode);
+  const tools = toolsForMode(rt.makeTools(permission, ask), mode);
   const system = rt.system + modeGuidance(mode);
   // Per-run model override from the composer menus (falls back to the configured model).
   const override = opts.model || opts.effort || opts.thinking !== undefined;
@@ -307,7 +344,7 @@ export function productionRuntime(workspace = process.cwd()): Runtime {
 
   // Tools are rebuilt per run so the sensitive-command gate (ShellTool's permission)
   // is bound to that run's SSE stream → approval prompts reach the right desktop run.
-  const makeTools = (permission: PermissionProvider): Tool[] => [
+  const makeTools = (permission: PermissionProvider, ask: AskProvider): Tool[] => [
     new ReadFileTool({ roots: writable }),
     new LsTool({ roots: writable }),
     new GrepTool({ roots: writable }),
@@ -320,6 +357,8 @@ export function productionRuntime(workspace = process.cwd()): Runtime {
     // Lets the agent request access to a dir OUTSIDE the workspace (e.g. ~/Downloads);
     // routes through the approval modal, then the dir joins `writable` (read + write).
     new RequestWriteAccessTool(writable, permission),
+    // Lets the agent put a clarifying question to the user (answered via a popup).
+    new AskUserTool(ask),
   ];
 
   const rt = createRuntime({ workspace, model, makeTools, store: new SessionStore(sessionsDir()) });

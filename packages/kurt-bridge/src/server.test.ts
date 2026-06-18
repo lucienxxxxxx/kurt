@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MockModel, SessionStore, type Tool } from "kurt-agent";
+import { MockModel, SessionStore, AskUserTool, type Tool } from "kurt-agent";
 import { createRuntime, productionRuntime, runTurn } from "./runtime.ts";
 import { startServer, type ServerHandle } from "./server.ts";
 import type { RunFrame, Step } from "./types.ts";
@@ -266,9 +266,51 @@ describe("approval round-trip", () => {
   }, 20_000);
 });
 
+describe("ask_user round-trip", () => {
+  test("ask_user emits an `ask` frame; POST /answer feeds the answer back to the tool", async () => {
+    const rt = createRuntime({
+      workspace: ws,
+      model: new MockModel([{ toolCalls: [{ name: "ask_user", input: { question: "Which one?", options: ["A", "B"] } }] }, { text: "done" }]),
+      makeTools: (_permission, ask) => [new AskUserTool(ask)],
+      store: new SessionStore(sessions),
+    });
+    server = startServer(rt);
+
+    const res = await fetch(server.url + "/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "go" }) });
+    const reader = res.body!.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    const frames: RunFrame[] = [];
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const block = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        const line = block.split("\n").find((l) => l.startsWith("data: "));
+        if (!line) continue;
+        const f = JSON.parse(line.slice(6)) as RunFrame;
+        frames.push(f);
+        if (f.kind === "ask") {
+          void fetch(server.url + "/answer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: f.id, answer: "B" }) });
+        }
+      }
+    }
+
+    const askFrame = frames.find((f) => f.kind === "ask");
+    expect(askFrame && askFrame.kind === "ask" && askFrame.question).toBe("Which one?");
+    const byId = new Map<number, Step>();
+    for (const f of frames) if (f.kind === "step") byId.set(f.step._id, f.step);
+    const tool = [...byId.values()].find((s) => s.type === "tool");
+    expect(tool && tool.type === "tool" && tool.out).toContain("User answered: B");
+  }, 20_000);
+});
+
 describe("modes (tool gating)", () => {
   const named = (name: string): Tool => ({ spec: { name, description: "", inputSchema: { type: "object", properties: {} } }, execute: async () => ({ content: "ok" }) });
-  const allNames = ["read_file", "ls", "grep", "web_search", "memory", "write_file", "shell", "update_plan", "request_write_access"];
+  const allNames = ["read_file", "ls", "grep", "web_search", "memory", "write_file", "shell", "update_plan", "request_write_access", "ask_user"];
 
   async function toolNamesForMode(mode: "chat" | "agent" | "plan"): Promise<string[]> {
     const model = new MockModel([{ text: "hi" }]);
@@ -277,9 +319,10 @@ describe("modes (tool gating)", () => {
     return model.requests[0]!.tools.map((t) => t.name);
   }
 
-  test("chat mode → read-only tools only (no write/shell)", async () => {
+  test("chat mode → read-only tools only (no write/shell), plus ask_user", async () => {
     const names = await toolNamesForMode("chat");
     expect(names).toContain("read_file");
+    expect(names).toContain("ask_user"); // available in every mode
     expect(names).not.toContain("write_file");
     expect(names).not.toContain("shell");
     expect(names).not.toContain("update_plan");

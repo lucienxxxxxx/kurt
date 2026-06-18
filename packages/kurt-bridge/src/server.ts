@@ -2,6 +2,8 @@
  * The bridge HTTP/SSE server (Bun.serve), bound to localhost. The desktop app
  * drives it:
  *   POST   /run            { sessionId?, text }  → text/event-stream of RunFrames
+ *   POST   /approve        { id, decision }      → resolve a sensitive-op approval
+ *   POST   /answer         { id, answer }        → resolve an ask_user question
  *   GET    /sessions?workspace=                  → SessionInfo[]
  *   POST   /sessions                             → SessionInfo (new)
  *   GET    /sessions/:id                          → full SessionRecord
@@ -12,7 +14,7 @@
  * Closing the /run response (client stop) aborts the run.
  */
 
-import { runTurn, resolveApproval, type Runtime, type ApprovalDecision, type ModelConfig, type Mode } from "./runtime.ts";
+import { runTurn, resolveApproval, resolveAsk, type Runtime, type ApprovalDecision, type ModelConfig, type Mode } from "./runtime.ts";
 import { messagesToSteps } from "./events.ts";
 import type { RunFrame, SessionInfo } from "./types.ts";
 
@@ -63,6 +65,12 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
       if (pathname === "/approve" && req.method === "POST") {
         const body = (await req.json().catch(() => ({}))) as { id?: string; decision?: ApprovalDecision };
         const ok = body.id ? resolveApproval(rt, body.id, body.decision ?? "deny") : false;
+        return json({ ok });
+      }
+
+      if (pathname === "/answer" && req.method === "POST") {
+        const body = (await req.json().catch(() => ({}))) as { id?: string; answer?: string };
+        const ok = body.id ? resolveAsk(rt, body.id, typeof body.answer === "string" ? body.answer : "") : false;
         return json({ ok });
       }
 
