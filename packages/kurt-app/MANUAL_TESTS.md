@@ -178,15 +178,24 @@ Launch **without** `DEEPSEEK_API_KEY` in the env (to prove the in-app key is use
 KURT_WORKSPACE="$HOME/some-safe-dir" bun run --cwd packages/kurt-app tauri dev
 ```
 
-1. Open **Settings** (gear) → **Model / API**. It shows **API key · not set** and the model id.
-2. Paste your key → **Save** → the status flips to **configured** (button shows "Saved").
-3. Go back to chat and send a task → it runs (the bridge rebuilt the model with your key,
-   no restart). Before saving, a run would have errored with an auth/⚠ step.
-4. Quit and relaunch (still no env key) → Settings still shows **configured** (persisted
-   to `~/.kurt/desktop.json`, mode 0600) and runs work.
+1. Open **Settings** (gear) → **Model / API**. Structured fields: **Base URL**, **API key**
+   (status shows configured/not set), **Models** (comma-separated), and an **API format**
+   toggle (**OpenAI / Claude**). Below them, a **raw `desktop.json`** editor.
+2. Fill the key (and optionally Base URL / Models) → **Save** → values persist to
+   `~/.kurt/desktop.json` (0600); the composer's model menu reflects the **Models** list.
+3. Go back to chat and send a task → it runs (the bridge rebuilt the model, no restart).
+4. **Raw JSON editor.** It's **read-only** by default (preview). Click **Edit** → it becomes
+   editable and the button turns into **Confirm**. Type invalid JSON → an "Invalid JSON"
+   marker shows and **Confirm is disabled**. Fix it → **Confirm** saves and the box returns to
+   read-only; the structured fields above update to match.
+5. **Claude format** is stored as a preference for now — requests still use the
+   OpenAI-compatible client (point **Base URL** at a Claude-compatible gateway if needed).
 
 Note: env `DEEPSEEK_API_KEY`, when set, takes precedence over the saved key (dev). Keychain
 storage is a later hardening; for now the key is plaintext (0600) on disk.
+
+6. **Enter no longer sends.** In the composer, pressing **Enter** inserts a newline;
+   **Cmd/Ctrl+Enter** sends. The Send button (↑) still sends.
 
 5. **Model / effort menus** (now **borderless**, in the row **below** the input box on the
    **left** — the context ring is on the right of the same row): the model dropdown lists

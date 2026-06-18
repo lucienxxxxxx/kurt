@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import type { Lang, Theme } from "../types.ts";
 import { T, tr, type StringKey } from "../i18n/strings.ts";
-import { getInfo, setConfig, type BridgeInfo } from "../lib/bridge.ts";
+import { getConfig, setConfig, type DesktopConfig } from "../lib/bridge.ts";
 import { resolveBridgeUrl } from "../lib/bridgeUrl.ts";
 import { Icon } from "./Icon.tsx";
 import logo from "../assets/kurt_logo.svg";
@@ -60,56 +60,105 @@ function AppearancePanel({ theme, setTheme, lang, setLang }: { theme: Theme; set
 }
 
 function ApiPanel({ lang }: { lang: Lang }) {
-  const [status, setStatus] = useState<BridgeInfo | null>(null);
-  const [key, setKey] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [justSaved, setJustSaved] = useState(false);
+  const [cfg, setCfg] = useState<DesktopConfig | null>(null);
+  // structured form state
+  const [baseURL, setBaseURL] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [modelsText, setModelsText] = useState("");
+  const [format, setFormat] = useState<"openai" | "claude">("openai");
+  const [savedFlag, setSavedFlag] = useState(false);
+  // raw JSON editor state
+  const [jsonText, setJsonText] = useState("");
+  const [editingJson, setEditingJson] = useState(false);
+  const [jsonErr, setJsonErr] = useState(false);
 
-  useEffect(() => {
-    void (async () => {
-      try { setStatus(await getInfo(await resolveBridgeUrl())); } catch { /* bridge not ready */ }
-    })();
-  }, []);
+  const apply = (c: DesktopConfig): void => {
+    setCfg(c);
+    setBaseURL(c.baseURL);
+    setApiKey(c.apiKey);
+    setModelsText(c.models.join(", "));
+    setFormat(c.format);
+    if (!editingJson) setJsonText(JSON.stringify(c, null, 2));
+  };
+  const refetch = async (): Promise<void> => {
+    try { const c = await getConfig(await resolveBridgeUrl()); if (c) apply(c); } catch { /* bridge not ready */ }
+  };
+  useEffect(() => { void refetch(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const save = async (): Promise<void> => {
-    if (!key.trim() || saving) return;
-    setSaving(true);
-    try {
-      const info = await setConfig(await resolveBridgeUrl(), { apiKey: key.trim() });
-      if (info) setStatus(info);
-      setKey("");
-      setJustSaved(true);
-      setTimeout(() => setJustSaved(false), 2000);
-    } finally {
-      setSaving(false);
-    }
+  const saveForm = async (): Promise<void> => {
+    const models = modelsText.split(",").map((s) => s.trim()).filter(Boolean);
+    await setConfig(await resolveBridgeUrl(), { baseURL: baseURL.trim(), apiKey: apiKey.trim(), models, format });
+    await refetch();
+    setSavedFlag(true);
+    setTimeout(() => setSavedFlag(false), 2000);
   };
 
+  const onJsonChange = (v: string): void => {
+    setJsonText(v);
+    try { JSON.parse(v); setJsonErr(false); } catch { setJsonErr(true); }
+  };
+  const toggleJson = async (): Promise<void> => {
+    if (!editingJson) { setEditingJson(true); setJsonErr(false); return; } // Edit → editable
+    let parsed: unknown;
+    try { parsed = JSON.parse(jsonText); } catch { setJsonErr(true); return; } // Confirm: must be valid
+    if (typeof parsed !== "object" || parsed === null) { setJsonErr(true); return; }
+    await setConfig(await resolveBridgeUrl(), parsed as Partial<DesktopConfig>);
+    await refetch();
+    setEditingJson(false);
+    setJsonErr(false);
+  };
+
+  const hasKey = (cfg?.apiKey ?? "").length > 0;
   return (
     <div className="set-panel">
       <div className="set-row">
         <div className="set-row-head">
+          <div className="set-row-title">{tr(T.apiBaseUrlLabel, lang)}</div>
+          <div className="set-row-sub">{tr(T.apiBaseUrlDesc, lang)}</div>
+        </div>
+        <input className="api-input" value={baseURL} spellCheck={false} placeholder="https://api.deepseek.com" onChange={(e) => setBaseURL(e.target.value)} />
+      </div>
+      <div className="set-row">
+        <div className="set-row-head">
           <div className="set-row-title">
-            {tr(T.apiKeyLabel, lang)} · <span style={{ color: status?.hasKey ? "var(--green)" : "var(--text-muted)" }}>{tr(status?.hasKey ? T.apiKeySet : T.apiKeyNone, lang)}</span>
+            {tr(T.apiKeyLabel, lang)} · <span style={{ color: hasKey ? "var(--green)" : "var(--text-muted)" }}>{tr(hasKey ? T.apiKeySet : T.apiKeyNone, lang)}</span>
           </div>
           <div className="set-row-sub">{tr(T.apiKeyDesc, lang)}</div>
         </div>
-        <div className="api-row">
-          <input className="api-input" type="password" value={key} placeholder={tr(T.apiKeyPlaceholder, lang)}
-            onChange={(e) => setKey(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void save(); }} spellCheck={false} />
-          <button className="pill-btn" disabled={saving || !key.trim()} onClick={() => void save()}>
-            {justSaved ? tr(T.saved, lang) : tr(T.save, lang)}
+        <input className="api-input" type="password" value={apiKey} spellCheck={false} placeholder={tr(T.apiKeyPlaceholder, lang)} onChange={(e) => setApiKey(e.target.value)} />
+      </div>
+      <div className="set-row">
+        <div className="set-row-head">
+          <div className="set-row-title">{tr(T.apiModelsLabel, lang)}</div>
+          <div className="set-row-sub">{tr(T.apiModelsDesc, lang)}</div>
+        </div>
+        <input className="api-input" value={modelsText} spellCheck={false} placeholder="deepseek-v4-flash, deepseek-v4-pro" onChange={(e) => setModelsText(e.target.value)} />
+      </div>
+      <div className="set-row inline">
+        <div className="set-row-head">
+          <div className="set-row-title">{tr(T.apiFormatLabel, lang)}</div>
+          <div className="set-row-sub">{tr(T.apiFormatDesc, lang)}</div>
+        </div>
+        <SegRow<"openai" | "claude"> value={format} onChange={setFormat}
+          options={[{ value: "openai", label: tr(T.apiFormatOpenai, lang) }, { value: "claude", label: tr(T.apiFormatClaude, lang) }]} />
+      </div>
+      <div className="api-row" style={{ justifyContent: "flex-end" }}>
+        <button className="pill-btn" onClick={() => void saveForm()}>{savedFlag ? tr(T.saved, lang) : tr(T.save, lang)}</button>
+      </div>
+
+      <div className="set-row">
+        <div className="set-row-head">
+          <div className="set-row-title">{tr(T.apiRawLabel, lang)}{jsonErr && <span style={{ color: "var(--accent)", marginLeft: 8 }}>· {tr(T.apiJsonInvalid, lang)}</span>}</div>
+          <div className="set-row-sub">{tr(T.apiRawDesc, lang)}</div>
+        </div>
+        <textarea className={"api-json" + (editingJson ? " editing" : "")} value={jsonText} readOnly={!editingJson} spellCheck={false}
+          onChange={(e) => onJsonChange(e.target.value)} rows={8} />
+        <div className="api-row" style={{ justifyContent: "flex-end" }}>
+          <button className="pill-btn" disabled={editingJson && jsonErr} onClick={() => void toggleJson()}>
+            {editingJson ? tr(T.confirm, lang) : tr(T.edit, lang)}
           </button>
         </div>
       </div>
-      {status?.model && (
-        <div className="set-row inline">
-          <div className="set-row-head">
-            <div className="set-row-title">{tr(T.apiModelLabel, lang)}</div>
-          </div>
-          <div className="set-row-sub" style={{ fontFamily: "var(--font-mono)" }}>{status.model}</div>
-        </div>
-      )}
     </div>
   );
 }

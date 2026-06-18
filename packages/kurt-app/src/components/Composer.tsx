@@ -163,7 +163,8 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
   }, [openMenu]);
 
   const key = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (running && !value.trim()) return; onSend(); }
+    // Enter inserts a newline; only Cmd/Ctrl+Enter sends (no accidental sends).
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if (running && !value.trim()) return; onSend(); }
   };
   const toggle = (name: "plus" | "model" | "effort" | "mode") => setOpenMenu((v) => (v === name ? null : name));
 

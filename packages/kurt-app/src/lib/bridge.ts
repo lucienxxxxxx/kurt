@@ -178,8 +178,22 @@ export async function getInfo(baseUrl: string): Promise<BridgeInfo | null> {
   return res.ok ? ((await res.json()) as BridgeInfo) : null;
 }
 
-/** Set model config (e.g. the API key) in the running bridge; it persists + rebuilds the model. */
-export async function setConfig(baseUrl: string, patch: { apiKey?: string; model?: string; baseURL?: string }): Promise<BridgeInfo | null> {
+/** The full desktop.json the bridge runs on (mirrors kurt-bridge ModelConfig). */
+export interface DesktopConfig {
+  apiKey: string;
+  baseURL: string;
+  models: string[];
+  format: "openai" | "claude";
+}
+
+/** GET the full config (incl. the key — localhost). */
+export async function getConfig(baseUrl: string): Promise<DesktopConfig | null> {
+  const res = await fetch(`${baseUrl}/config`);
+  return res.ok ? ((await res.json()) as DesktopConfig) : null;
+}
+
+/** Set model config in the running bridge; it persists + rebuilds the model. */
+export async function setConfig(baseUrl: string, patch: Partial<DesktopConfig>): Promise<BridgeInfo | null> {
   const res = await fetch(`${baseUrl}/config`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
