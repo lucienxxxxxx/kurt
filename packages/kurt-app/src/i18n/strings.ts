@@ -17,6 +17,7 @@ export const T = {
   openSettings: { zh: "打开设置", en: "Open settings" },
   // step labels
   thoughtFor: { zh: "已思考 {n}s", en: "Thought for {n}s" },
+  thoughtDone: { zh: "已思考", en: "Thought" },
   thinking: { zh: "正在思考…", en: "Thinking…" },
   expand: { zh: "展开", en: "Expand" },
   collapse: { zh: "折叠", en: "Collapse" },

@@ -10,6 +10,7 @@ const ctx = (over = {}) => ({
   collapsed: new Set<number>(),
   collapseDetails: false,
   liveId: null as number | null,
+  lastTextId: null as number | null,
   onToggle: vi.fn(),
   onOpenFile: vi.fn(),
   onOpenOutput: vi.fn(),
@@ -68,6 +69,15 @@ describe("renderStep", () => {
     render(<>{renderStep(step, ctx({ onToggle }))}</>);
     fireEvent.click(screen.getByText("web_search").closest(".skill-line")!);
     expect(onToggle).toHaveBeenCalledWith(4);
+  });
+
+  test("text step shows the copy footer only when it's the run's last text", () => {
+    const step: Step = { _id: 7, type: "text", text: "Final answer." };
+    const { container: shown } = render(<>{renderStep(step, ctx({ lastTextId: 7 }))}</>);
+    expect(shown.querySelector(".msg-actions")).toBeInTheDocument();
+    cleanup();
+    const { container: hidden } = render(<>{renderStep(step, ctx({ lastTextId: 9 }))}</>);
+    expect(hidden.querySelector(".msg-actions")).toBeNull(); // intermediate text → no footer
   });
 
   test("read step renders the file link and calls onOpenFile", () => {

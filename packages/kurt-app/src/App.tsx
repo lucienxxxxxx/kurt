@@ -450,6 +450,11 @@ export default function App() {
   });
 
   const stepCtx = { lang, collapsed, collapseDetails, liveId, onToggle: toggleStep, onOpenFile: openFile, onOpenOutput: openToolOutput };
+  // The id of the run's LAST text step (per segment) — only it shows the copy/time footer.
+  const lastTextId = (steps: Step[]): number | null => {
+    for (let i = steps.length - 1; i >= 0; i--) if (steps[i]!.type === "text") return steps[i]!._id;
+    return null;
+  };
 
   return (
     <div className="window">
@@ -502,7 +507,7 @@ export default function App() {
                                 </div>
                               </div>
                             )}
-                            {seg.steps.length > 0 && <div className="timeline">{seg.steps.map((s) => renderStep(s, stepCtx))}</div>}
+                            {seg.steps.length > 0 && <div className="timeline">{seg.steps.map((s) => renderStep(s, { ...stepCtx, lastTextId: lastTextId(seg.steps) }))}</div>}
                           </div>
                         ))}
                         {viewStats && (

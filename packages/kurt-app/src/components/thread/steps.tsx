@@ -28,21 +28,23 @@ export function ThinkingStepView({ step, open, onToggle, typing, lang }: {
     <div className="step thinking-step">
       <div className={"think-head" + (open ? " open" : "")} onClick={onToggle}>
         <Icon name="chevR" className="chev" />
-        <span>{typing ? tr(T.thinking, lang) : tr(T.thoughtFor, lang, { n: step.sec ?? 0 })}</span>
+        <span>{typing ? tr(T.thinking, lang) : step.sec ? tr(T.thoughtFor, lang, { n: step.sec }) : tr(T.thoughtDone, lang)}</span>
       </div>
       {open && <div className="think-body"><MdBlock text={tr(step.text, lang)} lang={lang} /></div>}
     </div>
   );
 }
 
-export function TextStepView({ step, typing, lang }: { step: TextStep; typing: boolean; lang: Lang }) {
+export function TextStepView({ step, typing, lang, showActions }: { step: TextStep; typing: boolean; lang: Lang; showActions: boolean }) {
   const txt = tr(step.text, lang);
   return (
     <div className="step">
       <div className={"step-text" + (typing ? " typing-cursor" : "")}>
         <MdBlock text={txt} lang={lang} />
       </div>
-      {!typing && (
+      {/* Only the run's FINAL reply carries the copy/time footer — intermediate
+          text (interleaved with tools) stays clean. */}
+      {!typing && showActions && (
         <div className="msg-actions">
           <CopyButton text={txt} lang={lang} />
           <MessageTime ts={step.ts} />
@@ -142,7 +144,7 @@ export function SkillStepView({ step, open, onToggle, lang }: {
 
 export function renderStep(
   step: Step,
-  ctx: { lang: Lang; collapsed: Set<number>; collapseDetails: boolean; liveId: number | null; onToggle: (id: number) => void; onOpenFile: (f: string) => void; onOpenOutput: (o: OpenOutput) => void },
+  ctx: { lang: Lang; collapsed: Set<number>; collapseDetails: boolean; liveId: number | null; lastTextId: number | null; onToggle: (id: number) => void; onOpenFile: (f: string) => void; onOpenOutput: (o: OpenOutput) => void },
 ) {
   // `collapsed` is a "toggled away from the default" set. Default open unless the
   // "collapse details by default" setting is on (then detail steps start collapsed).
@@ -158,6 +160,6 @@ export function renderStep(
     case "skill":
       return <SkillStepView key={step._id} step={step} open={open} onToggle={() => ctx.onToggle(step._id)} lang={ctx.lang} />;
     default:
-      return <TextStepView key={step._id} step={step} typing={typing} lang={ctx.lang} />;
+      return <TextStepView key={step._id} step={step} typing={typing} lang={ctx.lang} showActions={step._id === ctx.lastTextId} />;
   }
 }

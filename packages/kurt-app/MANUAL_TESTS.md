@@ -140,6 +140,21 @@ Result: ____ (date / pass-fail / notes).
 
 ---
 
+## Phase 6.4 — thinking-time fix + de-emphasized tool calls + last-reply copy
+
+1. **Thinking time is correct.** After the agent thinks for a while, the collapsed thinking
+   header shows **"已思考 Ns"** with the real elapsed seconds (not "0s"). Reloaded sessions
+   (no stored timing) show just **"已思考"** (no bogus 0s).
+2. **Copy only on the final reply.** Within one run that interleaves text and tools, only the
+   **last** text block carries the Copy + time footer; intermediate text blocks have none, so
+   text and tool cards aren't visually broken up.
+3. **Tool/skill calls are faded.** Thinking, tool, and skill rows all use the same muted, light
+   styling (no bold serif name, no accent badge) so they don't compete with the main reply.
+
+Result: ____ (date / pass-fail / notes).
+
+---
+
 ## Phase 6.4 — "Collapse details by default" setting
 
 Settings → **General** → **"默认折叠细节 / Collapse details by default"** toggle.

@@ -329,8 +329,9 @@ code.inl {
 /* tool block */
 /* the whole header row toggles expand/collapse (not just the chevron) */
 .tool-line { display: flex; align-items: baseline; gap: 9px; margin-bottom: 9px; flex-wrap: wrap; cursor: pointer; user-select: none; }
-.tool-name { font-family: var(--font-serif); font-weight: 700; font-size: 16px; color: var(--text); }
-.tool-title { color: var(--text-muted); font-size: 14.5px; }
+/* tool/skill calls are de-emphasized like the thinking step (muted, no serif) */
+.tool-name { font-weight: 600; font-size: 14.5px; color: var(--text-muted); }
+.tool-title { color: var(--text-faint); font-size: 14.5px; }
 .tool-toggle { margin-left: auto; }
 
 .tool-card {
@@ -448,13 +449,13 @@ code.inl {
   width: 22px; height: 22px;
   display: grid; place-items: center;
   border-radius: 6px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--bg-active);
+  color: var(--text-muted);
   flex: 0 0 22px;
 }
 .skill-badge svg { width: 14px; height: 14px; }
-.skill-name { font-family: var(--font-serif); font-weight: 700; font-size: 15px; color: var(--text); }
-.skill-title { color: var(--text-muted); font-size: 14px; }
+.skill-name { font-weight: 600; font-size: 14.5px; color: var(--text-muted); }
+.skill-title { color: var(--text-faint); font-size: 14px; }
 .skill-line .tool-toggle { margin-left: auto; }
 .skill-card {
   background: var(--tool-bg);
