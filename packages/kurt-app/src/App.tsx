@@ -70,6 +70,7 @@ export default function App() {
   const [queuedMsgs, setQueuedMsgs] = useState<QueuedMsg[]>([]); // the VIEWED run's queue
   // Live run readout for the VIEWED conversation (elapsed + tokens); null when idle.
   const [viewStats, setViewStats] = useState<{ startedAt: number; tokens: number } | null>(null);
+  const [loadingSession, setLoadingSession] = useState(false); // fetching a session's steps (no cache yet)
   const [, forceTick] = useState(0);
   const [panels, setPanels] = useState<Panel[]>([]);
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
@@ -79,6 +80,7 @@ export default function App() {
   const approvalKey = (id: string | null): string => id ?? "";
 
   const runsRef = useRef<Map<number, Run>>(new Map()); // in-flight runs, by runId
+  const sessionCache = useRef<Map<string, Step[]>>(new Map()); // last-known steps per session → instant, blank-free switches
   const activeIdRef = useRef<string | null>(null);     // latest activeId, for stream callbacks
   const newChatRunIdRef = useRef<number | null>(null); // mirror of newChatRunId for callbacks
   const setActive = useCallback((id: string | null): void => { activeIdRef.current = id; setActiveId(id); }, []);
@@ -135,19 +137,23 @@ export default function App() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollPos = useRef<Map<string, number>>(new Map()); // sessionId ("" = new chat) → last scrollTop
+  const wantScroll = useRef(false); // a switch happened → restore/jump once the thread is on screen
   const onThreadScroll = (): void => {
     const el = scrollRef.current;
     if (el) scrollPos.current.set(activeIdRef.current ?? "", el.scrollTop);
   };
   useEffect(() => { const el = scrollRef.current; if (el && viewRunning) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [thread, liveId, viewRunning]);
-  // On switch: restore where you left this conversation; first time it's opened
-  // (no saved position) jump to the bottom (latest message).
+  // After a switch, once the conversation's content is actually on screen, restore
+  // where you left it — or jump to the bottom the first time it's opened. Runs on
+  // thread changes so it fires AFTER the (async-loaded) content commits, not before.
   useEffect(() => {
+    if (!wantScroll.current) return;
     const el = scrollRef.current;
-    if (!el) return;
-    const saved = scrollPos.current.get(activeId ?? "");
+    if (!el) return; // thread-scroll not mounted yet (loading/empty) → wait for content
+    wantScroll.current = false;
+    const saved = scrollPos.current.get(activeIdRef.current ?? "");
     requestAnimationFrame(() => { el.scrollTop = saved ?? el.scrollHeight; });
-  }, [activeId]);
+  }, [thread]);
   // Tick once a second while a run readout is showing, so elapsed time advances.
   const runStatusOn = viewStats !== null;
   useEffect(() => {
@@ -233,6 +239,7 @@ export default function App() {
         void streamRun(run, next.text); // continue the same conversation
       } else {
         runsRef.current.delete(run.runId);
+        if (run.sessionId) sessionCache.current.set(run.sessionId, run.buf.slice()); // keep the switch cache fresh
         if (run.sessionId) setRunningIds((s) => { const n = new Set(s); n.delete(run.sessionId!); return n; });
         if (run.sessionId && run.sessionId !== activeIdRef.current) setUnread((u) => new Set(u).add(run.sessionId!));
         if (newChatRunIdRef.current === run.runId) setNewChatRun(null);
@@ -305,6 +312,7 @@ export default function App() {
     setInput(tr(step.text, lang));
     const id = activeIdRef.current;
     if (id) {
+      sessionCache.current.set(id, kept); // reflect the rewind in the switch cache
       void (async () => {
         try { await truncateSession(await resolveBridgeUrl(), id, keepUserTurns); } catch { /* ignore */ }
         void refreshSessions();
@@ -342,28 +350,45 @@ export default function App() {
 
   const loadSession = async (id: string): Promise<void> => {
     // Switching never stops a run — it keeps streaming in the background. If this
-    // session is running, show its live buffer; otherwise load its stored steps.
+    // session is running, show its live buffer; otherwise show cached steps instantly
+    // (no blank/flash) and refresh from the bridge in the background.
     setView("chat");
     setActive(id);
     setUnread((u) => { if (!u.has(id)) return u; const n = new Set(u); n.delete(id); return n; }); // clicking clears the unread dot
     setCollapsed(new Set()); setPanels([]); setActivePanelId(null);
+    wantScroll.current = true;
+    const meta = sessionList.find((s) => s.id === id);
+    const title = meta && meta.title ? meta.title : T.convNew;
+
     const run = runForSession(id);
     if (run) {
+      setLoadingSession(false);
       setThread(run.buf.slice());
       setLiveId(run.buf.length ? run.buf[run.buf.length - 1]!._id : null);
       setQueuedMsgs(run.queue.slice());
       setViewStats({ startedAt: run.startedAt, tokens: run.tokens });
-      const meta = sessionList.find((s) => s.id === id);
-      setTitleEntry(meta && meta.title ? meta.title : T.convNew);
+      setTitleEntry(title);
       return;
     }
-    setLiveId(null); setQueuedMsgs([]); setViewStats(null);
+
+    setLiveId(null); setQueuedMsgs([]); setViewStats(null); setTitleEntry(title);
+    const cached = sessionCache.current.get(id);
+    if (cached) {
+      setLoadingSession(false);
+      setThread(cached); // instant — switching back never blanks
+    } else {
+      setThread([]);
+      setLoadingSession(true); // show a neutral loading area, not the empty-state, while fetching
+    }
     try {
       const detail = await getSession(await resolveBridgeUrl(), id);
-      if (!detail || activeIdRef.current !== id) return; // bailed or switched away mid-load
-      setThread(detail.steps);
-      setTitleEntry(detail.title || T.convNew);
-    } catch { /* ignore */ }
+      if (detail) sessionCache.current.set(id, detail.steps); // cache even if we've since switched away
+      if (activeIdRef.current !== id) return; // a newer switch owns the view now
+      setLoadingSession(false);
+      if (detail) { setThread(detail.steps); setTitleEntry(detail.title || T.convNew); }
+    } catch {
+      if (activeIdRef.current === id) setLoadingSession(false); // keep whatever we showed
+    }
   };
   // A fresh empty chat. Any in-flight run keeps going in the background (it shows
   // in the sidebar with a running dot); only the Stop button ends a run.
@@ -371,6 +396,7 @@ export default function App() {
     setView("chat");
     setActive(null);
     setNewChatRun(null);
+    setLoadingSession(false); wantScroll.current = true;
     setThread([]); setLiveId(null); setQueuedMsgs([]); setViewStats(null);
     setTitleEntry(T.convNew); setCollapsed(new Set()); setPanels([]); setActivePanelId(null);
   };
@@ -385,6 +411,7 @@ export default function App() {
       runsRef.current.delete(run.runId);
       setRunningIds((s) => { const n = new Set(s); n.delete(id); return n; });
     }
+    sessionCache.current.delete(id); // gone — drop its cached steps
     if (id === activeId) newChat(); // we were viewing it → fall back to an empty chat
     setUnread((u) => { if (!u.has(id)) return u; const n = new Set(u); n.delete(id); return n; });
     void (async () => {
@@ -423,7 +450,9 @@ export default function App() {
 
               <div className="main-lower">
                 <div className="main-col">
-                  {thread.length === 0 ? (
+                  {loadingSession ? (
+                    <div className="thread-loading" />
+                  ) : thread.length === 0 ? (
                     <div className="empty-state">
                       <img className="empty-logo" src={logo} alt="Kurt" />
                       <h2>{tr(T.emptyTitle, lang)}</h2>

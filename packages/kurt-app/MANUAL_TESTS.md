@@ -374,10 +374,15 @@ Result: ____ (date / pass-fail / notes).
 ## Phase 6.4 polish — per-session scroll memory + Kurt persona prompt
 
 1. **First open → bottom.** After launching the app, open a (long) conversation for the first
-   time → it lands at the **bottom** (latest message).
+   time → it lands at the **bottom** (latest message). (Even though steps load async, it ends
+   up at the bottom, not the top.)
 2. **Remembers your spot.** Scroll up to the middle of conversation A, switch to B, then switch
    **back to A** → it returns to **where you left off** (not the bottom). B (first opened) lands
    at its bottom; once you scroll it and come back, it remembers too. (Memory is per-launch.)
+3. **No blank on rapid switching.** Click back and forth between sessions quickly, many times →
+   the view **never goes blank** (each session is cached, so revisits are instant; a slow/failed
+   fetch keeps the last content rather than emptying). A first-ever open shows a brief neutral
+   loading area, not the empty-state logo.
 3. **Persona.** Kurt's replies reflect the "cognitive partner" framing (helps you think, doesn't
    replace your judgment; structures complex problems; concise on simple ones) — driven by the
    rewritten system prompt; it still uses tools and respects request_write_access.

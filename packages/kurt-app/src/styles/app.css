@@ -224,6 +224,8 @@ html[data-theme="dark"] .brand-logo { filter: invert(1); }
 .thread-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; }
 .thread-scroll::-webkit-scrollbar-track { margin-right: 4px; }
 .thread-inner { max-width: 760px; margin: 0 auto; padding: 30px 28px 40px; }
+/* neutral placeholder while a session's steps load (avoids the empty-state flash) */
+.thread-loading { flex: 1 1 auto; min-height: 0; }
 
 /* user query row: bubble + its action footer, both hugging the right */
 /* extra breathing room above each user turn (padding, not margin — sibling
