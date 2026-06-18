@@ -134,9 +134,20 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("kurt-thinking", thinking ? "1" : "0"); } catch { /* ignore */ } }, [thinking]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollPos = useRef<Map<string, number>>(new Map()); // sessionId ("" = new chat) → last scrollTop
+  const onThreadScroll = (): void => {
+    const el = scrollRef.current;
+    if (el) scrollPos.current.set(activeIdRef.current ?? "", el.scrollTop);
+  };
   useEffect(() => { const el = scrollRef.current; if (el && viewRunning) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [thread, liveId, viewRunning]);
-  // On session switch, jump straight to the latest message (bottom), not the top.
-  useEffect(() => { const el = scrollRef.current; if (el) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [activeId]);
+  // On switch: restore where you left this conversation; first time it's opened
+  // (no saved position) jump to the bottom (latest message).
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const saved = scrollPos.current.get(activeId ?? "");
+    requestAnimationFrame(() => { el.scrollTop = saved ?? el.scrollHeight; });
+  }, [activeId]);
   // Tick once a second while a run readout is showing, so elapsed time advances.
   const runStatusOn = viewStats !== null;
   useEffect(() => {
@@ -424,7 +435,7 @@ export default function App() {
                       </div>
                     </div>
                   ) : (
-                    <div className="thread-scroll" ref={scrollRef}>
+                    <div className="thread-scroll" ref={scrollRef} onScroll={onThreadScroll}>
                       <div className="thread-inner">
                         {segments.map((seg, i) => (
                           <div key={i}>
