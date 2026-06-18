@@ -4,7 +4,7 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-17 · `main` @ `c5571d4`(发送按钮改上箭头;新增「跟随系统」主题;智能体菜单移入底部一行;下拉菜单顶部加标题;前置 `29b8952` 模型/effort 移底部)
+- **最后更新**:2026-06-17 · `main` @ `380830c`(按会话记忆滚动位置:首开到底、切回到上次位置;system prompt 重写为 Kurt 认知伙伴人设;前置 `c5571d4` 发送箭头/系统主题/底部菜单)
 - **门禁**:kurt-agent **150** · kurt-tui **70** · kurt-bridge **25** · kurt-app build+**Vitest 61**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
@@ -47,6 +47,7 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
 | 6.4-打磨3 | **markdown 表格**(`MdBlock` 解析 GFM 表格:表头+`\|---\|`分隔+正文,列对齐 `:--/--:/:-:`,单元格内联 md;`.md-table` 描边/斑马纹/横向滚动);**切会话滚到底**(`activeId` 变化时 `scrollTop=scrollHeight`);**授权框按会话保留**:approval 以 run 的 sessionId 为键,切走不再 abort run、run 流入 `runBufRef` 每会话缓冲、仅当查看该会话时镜像到可见 thread,切回重新显示(`loadSession` 不再 `stopRun`;New Chat 仍结束 run);**授权框与输入框贴合**(`margin-bottom:0`+下方直角+无下边框)。Markdown.test +2(表格)。 | ✅ 完成 |
 | 6.4-打磨4 | **侧栏会话状态点**(标题左侧一个状态槽:运行中=脉冲 accent 点;运行在非当前会话**完成**→实心未读点 + soft halo;点击会话清除未读;槽位预留宽度保持对齐)。App 用 `unread:Set<sessionId>`,仅当完成时 `runSid!==activeId` 标记;`loadSession` 清除。Sidebar.test +2(运行点/未读点+优先级)。 | ✅ 完成 |
 | 6.4-修2 | **bridge SSE 空闲超时**:`Bun.serve` 默认 `idleTimeout:10s` 会掐断长时间无数据的 `/run` SSE 流(模型思考/工具运行/**审批弹窗等待人答**),触发 `cancel()`→abort run。设 `idleTimeout:0` 禁用。MANUAL_TESTS §6.4b 加「审批搁置>10s 仍可完成」核对点。 | ✅ 完成 |
+| 6.4-打磨15 | **按会话记忆滚动位置 + Kurt 人设 prompt**:① thread 容器 onScroll 按会话(id,新会话用 "")记 scrollTop;切换时恢复该会话上次位置,首次打开(无记录)落到底部;按启动周期记忆。② 重写 bridge `defaultSystem`:身份→关系→原则→协作方式(认知伙伴,不替代判断;用户掌目标/价值/决策,Kurt 掌推理/连接/探索;抓本质、复杂题深入、要事列收益/风险/隐藏假设;用用户语言),保留工具/WORKSPACE_DIR/request_write_access 操作规则。 | ✅ 完成 |
 | 6.4-打磨14 | **发送上箭头 + 跟随系统主题 + 智能体入底部 + 菜单标题**:① 发送按钮用上箭头图标(`arrowUp`);② 新增主题「跟随系统」——`Theme` 加 `system`,App 用 `matchMedia(prefers-color-scheme)` 解析并随系统实时切换,Settings 加第三张主题卡(浅/深对角预览);③ 模式(智能体/对话/计划)菜单从工具栏移入无边框 `.composer-footer`(左:模式/模型/effort,右:上下文环),工具栏留 +/麦克风/发送;④ 各下拉顶部加标题(`MenuPopover` title→`.menu-title`):模式/模型/强度/添加。 | ✅ 完成 |
 | 6.4-打磨13 | **模型/effort 移到输入框下方一行**:model/effort 菜单从工具栏移入新 `.composer-footer`(输入框下方),改无边框(`.composer-footer .pill-btn` 透明边框/背景,hover 微底色),左侧 model+effort、右侧上下文双环同排;工具栏保留 +/模式/麦克风/发送。 | ✅ 完成 |
 | 6.4-打磨12 | **上下文用量双环 + 明细卡**:composer 下方右侧 donut 双环显示上下文占比=估算上下文 token / 模型最大上下文(`modelContextWindow`,deepseek 128k),≥70% 琥珀、≥90% 红;点击弹卡按类别(你的消息/思考/工具/回复/系统)给比例条+计数,注明为估算(API 只报总量),有真实用量则附 API 合计。新 `lib/tokens.ts`(estimateTokens)、`lib/models.ts`、`ContextMeter`、Composer `meter` 槽。估算式,直播/重载/无 key 都可用。tokens.test +6、ContextMeter.test +3。 | ✅ 完成 |
