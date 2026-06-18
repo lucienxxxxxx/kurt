@@ -170,9 +170,12 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
   return (
     <div className="composer-wrap">
       <div className="composer-inner">
-        {approval}
-        <div className="composer">
-          <QueueSection items={queuedMsgs} onCancel={onCancelQueued} lang={lang} />
+        {/* When a banner (approval/ask) is present, it + the input box live inside one
+            shared rounded shell, so the input reads as an inset box connected to the banner. */}
+        <div className={"composer-shell" + (approval ? " has-banner" : "")}>
+          {approval}
+          <div className="composer">
+            <QueueSection items={queuedMsgs} onCancel={onCancelQueued} lang={lang} />
           <textarea ref={taRef} value={value} rows={1}
             placeholder={tr(running ? T.phRunning : T.phEmpty, lang)}
             onChange={(e) => onChange(e.target.value)} onKeyDown={key} />
@@ -185,6 +188,7 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
             ) : (
               <button className="send-btn" onClick={onSend} disabled={!value.trim()} title={tr(T.send, lang)}><Icon name="arrowUp" /></button>
             )}
+          </div>
           </div>
         </div>
         {/* below the input box: borderless model/effort on the left, context ring on the right */}

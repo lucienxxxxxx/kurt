@@ -852,22 +852,28 @@ html[data-theme="dark"] img.empty-logo { filter: invert(1); }
 
 /* approval panel — inline, directly above the composer (not a modal).
    Same width / rounded corners as the input box; rises up from behind it. */
+/* The approval/ask panel is a banner at the TOP of the shared composer shell —
+   transparent (the shell draws the container); the input box sits inset below it. */
 .approval-inline {
   width: 100%;
-  margin-bottom: 0;            /* no gap — joins the composer directly below */
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
-  border-bottom: none;         /* the composer's top border is the shared seam */
-  border-radius: 16px 16px 0 0; /* rounded top, rectangular bottom */
-  box-shadow: 0 -3px 18px rgba(0,0,0,0.07);
-  padding: 16px 16px 13px;
-  transform-origin: bottom center;
-  animation: approvalRise .2s cubic-bezier(.2,.7,.3,1) both;
+  padding: 12px 13px 9px;
+  animation: approvalDrop .18s cubic-bezier(.2,.7,.3,1) both;
 }
-@keyframes approvalRise {
-  from { transform: translateY(16px) scale(.985); opacity: 0; }
+@keyframes approvalDrop {
+  from { transform: translateY(-6px); opacity: 0; }
   to   { transform: none; opacity: 1; }
 }
+
+/* shell that wraps the banner + the input box into one rounded container */
+.composer-shell.has-banner {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+  padding: 5px;
+}
+.composer-shell.has-banner .composer { box-shadow: none; border-radius: 13px; }
+.composer-shell.has-banner .composer:focus-within { box-shadow: none; }
 .approval-head { display: flex; align-items: center; gap: 9px; }
 .approval-badge {
   width: 24px; height: 24px; flex: 0 0 24px;

@@ -124,9 +124,11 @@ Result: ____ (date / pass-fail / notes).
 Ask something deliberately ambiguous so the agent calls `ask_user` (e.g. "整理我的文件，
 但你决定按什么方式分类，先问我").
 
-1. **Prompt appears.** A panel rises above the input box (same place/shape as the approval
-   panel): a title, the agent's **question**, the **options** as A/B/… buttons (if any), and
-   a free-form input + **Skip**. The run is paused until you answer.
+1. **Prompt appears.** The question shows as a **banner at the top of the composer**: the
+   input box and the banner are wrapped in **one rounded container**, with the input box as
+   an inset box below the banner (same treatment as the approval panel). Shows a title, the
+   agent's **question**, **options** as A/B/… buttons (if any), and a free-form input +
+   **Skip**. The run is paused until you answer.
 2. **Pick an option** → its text is sent back; the agent continues using your choice.
 3. **Type a free-form answer + Enter** (or the ↑ button) → sent back; agent continues.
 4. **Skip** → the agent is told you didn't answer and proceeds.
@@ -213,13 +215,12 @@ Result: ____ (date / pass-fail / notes).
    block) — **not** the literal `**`, `` ` ``, `##` characters. The agent's reply
    already rendered markdown; both sides now match.
 
-2. **Approval is an inline panel, not a modal.** Trigger an approval (e.g. ask it to
-   `rm` a file, or read `~/Downloads` → request_write_access). Instead of a dimmed
-   modal in the center of the window, the approval card now appears **directly above
-   the input box**, the **same width** as the composer, with the **same rounded
-   corners**, and animates **upward from behind the input box**. There is no overlay
-   dimming the rest of the window. Deny / Always allow / Allow once still work the same,
-   and the panel disappears once you choose (or on Stop).
+2. **Approval is an inline banner, not a modal.** Trigger an approval (e.g. ask it to
+   `rm` a file, or read `~/Downloads` → request_write_access). Instead of a dimmed modal,
+   the approval shows as a **banner at the top of the composer**: the banner + the input box
+   are wrapped in **one rounded container**, with the input box inset below the banner (the
+   two are visually connected). No overlay. Deny / Always allow / Allow once work the same,
+   and it disappears once you choose (or on Stop).
 
 Result: ____ (date / pass-fail / notes).
 
