@@ -142,9 +142,11 @@ export function SkillStepView({ step, open, onToggle, lang }: {
 
 export function renderStep(
   step: Step,
-  ctx: { lang: Lang; collapsed: Set<number>; liveId: number | null; onToggle: (id: number) => void; onOpenFile: (f: string) => void; onOpenOutput: (o: OpenOutput) => void },
+  ctx: { lang: Lang; collapsed: Set<number>; collapseDetails: boolean; liveId: number | null; onToggle: (id: number) => void; onOpenFile: (f: string) => void; onOpenOutput: (o: OpenOutput) => void },
 ) {
-  const open = !ctx.collapsed.has(step._id);
+  // `collapsed` is a "toggled away from the default" set. Default open unless the
+  // "collapse details by default" setting is on (then detail steps start collapsed).
+  const open = ctx.collapseDetails ? ctx.collapsed.has(step._id) : !ctx.collapsed.has(step._id);
   const typing = step._id === ctx.liveId;
   switch (step.type) {
     case "thinking":

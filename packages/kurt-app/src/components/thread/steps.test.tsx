@@ -8,6 +8,7 @@ afterEach(cleanup);
 const ctx = (over = {}) => ({
   lang: "en" as const,
   collapsed: new Set<number>(),
+  collapseDetails: false,
   liveId: null as number | null,
   onToggle: vi.fn(),
   onOpenFile: vi.fn(),
@@ -21,6 +22,19 @@ describe("renderStep", () => {
     render(<>{renderStep(step, ctx())}</>);
     expect(screen.getByText("Thought for 4s")).toBeInTheDocument();
     expect(screen.getByText("reasoning here")).toBeInTheDocument();
+  });
+
+  test("collapseDetails hides a thinking step's body by default (still shows the header)", () => {
+    const step: Step = { _id: 1, type: "thinking", sec: 4, text: { zh: "想", en: "reasoning here" } };
+    render(<>{renderStep(step, ctx({ collapseDetails: true }))}</>);
+    expect(screen.getByText("Thought for 4s")).toBeInTheDocument(); // header still there
+    expect(screen.queryByText("reasoning here")).toBeNull(); // body collapsed
+  });
+
+  test("collapseDetails + an explicit toggle expands that one step", () => {
+    const step: Step = { _id: 1, type: "thinking", sec: 4, text: { zh: "想", en: "reasoning here" } };
+    render(<>{renderStep(step, ctx({ collapseDetails: true, collapsed: new Set([1]) }))}</>);
+    expect(screen.getByText("reasoning here")).toBeInTheDocument(); // toggled → expanded
   });
 
   test("tool step shows name, IN and OUT", () => {

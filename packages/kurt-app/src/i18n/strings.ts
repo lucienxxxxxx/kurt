@@ -116,6 +116,8 @@ export const T = {
   startupRunDesc: { zh: "登录后自动启动 Kurt", en: "Start Kurt automatically when you sign in" },
   sendOnEnter: { zh: "回车直接发送", en: "Send with Enter" },
   sendOnEnterDesc: { zh: "关闭后需要 Cmd+Enter 才发送", en: "When off, requires Cmd+Enter to send" },
+  collapseDetails: { zh: "默认折叠细节", en: "Collapse details by default" },
+  collapseDetailsDesc: { zh: "对话中只显示主要回复,思考/工具等细节默认折叠(仍可单独展开)", en: "Show only the main reply; thinking / tool-use details start collapsed (you can still expand each)" },
   aboutVersion: { zh: "版本", en: "Version" },
   aboutTagline: { zh: "桌面端 Agent 助手", en: "Your desktop Agent companion" },
 } satisfies Record<string, LocalizedString>;

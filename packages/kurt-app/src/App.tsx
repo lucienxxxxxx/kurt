@@ -62,6 +62,8 @@ export default function App() {
   const [effort, setEffort] = useState<Effort>("med");
   const [mode, setMode] = useState<Mode>(() => persisted<Mode>("kurt-mode", "agent"));
   const [thinking, setThinking] = useState<boolean>(() => { try { return localStorage.getItem("kurt-thinking") === "1"; } catch { return false; } });
+  // When on, thinking/tool/skill detail cards start collapsed (only the main text shows).
+  const [collapseDetails, setCollapseDetails] = useState<boolean>(() => { try { return localStorage.getItem("kurt-collapse-details") === "1"; } catch { return false; } });
 
   const [liveId, setLiveId] = useState<number | null>(null);
   // Which sessions have an in-flight run (sidebar dots + composer state). A run
@@ -137,6 +139,7 @@ export default function App() {
   useEffect(() => { document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en"); try { localStorage.setItem("kurt-lang", lang); } catch { /* ignore */ } }, [lang]);
   useEffect(() => { try { localStorage.setItem("kurt-mode", mode); } catch { /* ignore */ } }, [mode]);
   useEffect(() => { try { localStorage.setItem("kurt-thinking", thinking ? "1" : "0"); } catch { /* ignore */ } }, [thinking]);
+  useEffect(() => { try { localStorage.setItem("kurt-collapse-details", collapseDetails ? "1" : "0"); } catch { /* ignore */ } }, [collapseDetails]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollPos = useRef<Map<string, number>>(new Map()); // sessionId ("" = new chat) → last scrollTop
@@ -446,7 +449,7 @@ export default function App() {
     else { if (!segments.length) segments.push({ user: null, steps: [] }); segments[segments.length - 1]!.steps.push(step); }
   });
 
-  const stepCtx = { lang, collapsed, liveId, onToggle: toggleStep, onOpenFile: openFile, onOpenOutput: openToolOutput };
+  const stepCtx = { lang, collapsed, collapseDetails, liveId, onToggle: toggleStep, onOpenFile: openFile, onOpenOutput: openToolOutput };
 
   return (
     <div className="window">
@@ -455,7 +458,8 @@ export default function App() {
 
       <div className="main">
         {view === "settings" ? (
-          <Settings theme={theme} setTheme={setTheme} lang={lang} setLang={setLang} onClose={() => setView("chat")} />
+          <Settings theme={theme} setTheme={setTheme} lang={lang} setLang={setLang}
+            collapseDetails={collapseDetails} setCollapseDetails={setCollapseDetails} onClose={() => setView("chat")} />
         ) : (
           <div className="main-chat">
             <div className="main-content">

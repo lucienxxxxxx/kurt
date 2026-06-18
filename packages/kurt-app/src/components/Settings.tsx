@@ -114,11 +114,18 @@ function ApiPanel({ lang }: { lang: Lang }) {
   );
 }
 
-function GeneralPanel({ lang }: { lang: Lang }) {
+function GeneralPanel({ lang, collapseDetails, setCollapseDetails }: { lang: Lang; collapseDetails: boolean; setCollapseDetails: (v: boolean) => void }) {
   const [startup, setStartup] = useState(false);
   const [sendOnEnter, setSendOnEnter] = useState(true);
   return (
     <div className="set-panel">
+      <div className="set-row inline">
+        <div className="set-row-head">
+          <div className="set-row-title">{tr(T.collapseDetails, lang)}</div>
+          <div className="set-row-sub">{tr(T.collapseDetailsDesc, lang)}</div>
+        </div>
+        <button className={"toggle" + (collapseDetails ? " on" : "")} onClick={() => setCollapseDetails(!collapseDetails)}><span className="toggle-knob" /></button>
+      </div>
       <div className="set-row inline">
         <div className="set-row-head">
           <div className="set-row-title">{tr(T.startupRun, lang)}</div>
@@ -148,8 +155,9 @@ function AboutPanel({ lang }: { lang: Lang }) {
   );
 }
 
-export function Settings({ theme, setTheme, lang, setLang, onClose }: {
-  theme: Theme; setTheme: (t: Theme) => void; lang: Lang; setLang: (l: Lang) => void; onClose: () => void;
+export function Settings({ theme, setTheme, lang, setLang, collapseDetails, setCollapseDetails, onClose }: {
+  theme: Theme; setTheme: (t: Theme) => void; lang: Lang; setLang: (l: Lang) => void;
+  collapseDetails: boolean; setCollapseDetails: (v: boolean) => void; onClose: () => void;
 }) {
   const [cat, setCat] = useState<"appearance" | "api" | "general" | "about">("appearance");
   const cats: { id: "appearance" | "api" | "general" | "about"; icon: string; label: StringKey }[] = [
@@ -175,7 +183,7 @@ export function Settings({ theme, setTheme, lang, setLang, onClose }: {
         <div className="set-detail">
           {cat === "appearance" && <AppearancePanel theme={theme} setTheme={setTheme} lang={lang} setLang={setLang} />}
           {cat === "api" && <ApiPanel lang={lang} />}
-          {cat === "general" && <GeneralPanel lang={lang} />}
+          {cat === "general" && <GeneralPanel lang={lang} collapseDetails={collapseDetails} setCollapseDetails={setCollapseDetails} />}
           {cat === "about" && <AboutPanel lang={lang} />}
         </div>
       </div>

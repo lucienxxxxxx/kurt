@@ -138,6 +138,22 @@ Result: ____ (date / pass-fail / notes).
 
 ---
 
+## Phase 6.4 — "Collapse details by default" setting
+
+Settings → **General** → **"默认折叠细节 / Collapse details by default"** toggle.
+
+1. **On.** New (and existing) **thinking / tool / skill** cards in the thread start
+   **collapsed** — only the headers + the main agent reply text show. The setting persists
+   across relaunch.
+2. **Still expandable.** Click an individual thinking/tool/skill header → it expands (and the
+   chevron flips); click again to collapse. The per-step toggle overrides the default.
+3. **Off (default).** Details are expanded as before; toggling a card collapses it.
+4. Flipping the setting re-renders the current conversation with the new default immediately.
+
+Result: ____ (date / pass-fail / notes).
+
+---
+
 ## Phase 6.4c — set the API key in-app
 
 Launch **without** `DEEPSEEK_API_KEY` in the env (to prove the in-app key is used):
