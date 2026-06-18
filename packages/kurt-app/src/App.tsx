@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Effort, Lang, Loc, Mode, Panel, QueuedMsg, SessionMeta, Step, Theme } from "./types.ts";
 import { T, tr } from "./i18n/strings.ts";
-import { runStream, listSessions, getSession, getInfo, approve, truncateSession, deleteSession, type ApprovalRequest } from "./lib/bridge.ts";
+import { runStream, listSessions, getSession, getInfo, approve, answer, truncateSession, deleteSession, type ApprovalRequest, type AskRequest } from "./lib/bridge.ts";
 import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
 import { externalLinkFromClick, openExternal } from "./lib/external.ts";
 import { fmtElapsed, fmtTokens } from "./lib/format.ts";
@@ -14,6 +14,7 @@ import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
 import { Settings } from "./components/Settings.tsx";
 import { Approval } from "./components/Approval.tsx";
+import { Ask } from "./components/Ask.tsx";
 import { DetailPanel } from "./components/DetailPanel.tsx";
 import { renderStep, type OpenOutput } from "./components/thread/steps.tsx";
 import { MdBlock } from "./components/Markdown.tsx";
@@ -77,6 +78,8 @@ export default function App() {
   // Approvals are keyed by the session their run belongs to, so switching
   // sessions doesn't lose a pending prompt — it re-appears when you switch back.
   const [pendingApprovals, setPendingApprovals] = useState<Record<string, ApprovalRequest>>({});
+  // ask_user questions, also keyed by session (same survive-switch behavior).
+  const [pendingAsks, setPendingAsks] = useState<Record<string, AskRequest>>({});
   const approvalKey = (id: string | null): string => id ?? "";
 
   const runsRef = useRef<Map<number, Run>>(new Map()); // in-flight runs, by runId
@@ -224,13 +227,18 @@ export default function App() {
             upsertRun(run, { ...bridgeStep, _id: appId } as Step);
           },
           onApproval: (req) => { if (run.sessionId) setPendingApprovals((m) => ({ ...m, [run.sessionId!]: req })); },
+          onAsk: (req) => { if (run.sessionId) setPendingAsks((m) => ({ ...m, [run.sessionId!]: req })); },
           onUsage: (u) => { run.tokens += u.totalTokens; if (isViewing(run)) setViewStats({ startedAt: run.startedAt, tokens: run.tokens }); },
           onError: (message) => upsertRun(run, { _id: uid(), type: "text", text: `⚠ ${message}`, ts: Date.now() } as Step),
         },
         run.ctrl.signal,
       );
     } finally {
-      if (run.sessionId) setPendingApprovals((m) => { const n = { ...m }; delete n[run.sessionId!]; return n; });
+      if (run.sessionId) {
+        const sid = run.sessionId;
+        setPendingApprovals((m) => { const n = { ...m }; delete n[sid]; return n; });
+        setPendingAsks((m) => { const n = { ...m }; delete n[sid]; return n; });
+      }
       const next = run.ctrl.signal.aborted ? undefined : run.queue.shift();
       if (next) {
         const userStep: Step = { _id: uid(), type: "user", text: next.text, ts: Date.now() };
@@ -296,6 +304,16 @@ export default function App() {
     setPendingApprovals((m) => { const n = { ...m }; delete n[key]; return n; });
     void (async () => {
       try { await approve(await resolveBridgeUrl(), req.id, decision); } catch { /* ignore */ }
+    })();
+  };
+
+  const answerAsk = (text: string): void => {
+    const key = approvalKey(activeId);
+    const req = pendingAsks[key];
+    if (!req) return;
+    setPendingAsks((m) => { const n = { ...m }; delete n[key]; return n; });
+    void (async () => {
+      try { await answer(await resolveBridgeUrl(), req.id, text); } catch { /* ignore */ }
     })();
   };
 
@@ -500,7 +518,13 @@ export default function App() {
                     running={viewRunning} queuedMsgs={queuedMsgs} onCancelQueued={cancelQueued} lang={lang}
                     model={model} models={models} onModelChange={setModel} effort={effort} onEffortChange={setEffort}
                     mode={mode} onModeChange={setMode} thinking={thinking} onThinkingToggle={() => setThinking((v) => !v)}
-                    approval={pendingApprovals[approvalKey(activeId)] ? <Approval req={pendingApprovals[approvalKey(activeId)]!} lang={lang} onDecide={decideApproval} /> : null}
+                    approval={
+                      pendingApprovals[approvalKey(activeId)]
+                        ? <Approval req={pendingApprovals[approvalKey(activeId)]!} lang={lang} onDecide={decideApproval} />
+                        : pendingAsks[approvalKey(activeId)]
+                          ? <Ask req={pendingAsks[approvalKey(activeId)]!} lang={lang} onAnswer={answerAsk} />
+                          : null
+                    }
                     meter={thread.length > 0 ? <ContextMeter steps={thread} model={model} lang={lang} apiTokens={viewStats?.tokens} /> : null} />
                 </div>
               </div>

@@ -890,6 +890,31 @@ html[data-theme="dark"] img.empty-logo { filter: invert(1); }
 .approval-allow:hover { background: var(--accent-press); }
 .approval-allow svg { width: 15px; height: 15px; }
 
+/* ask_user panel (reuses .approval-inline shell) */
+.ask-question { margin-top: 8px; font-size: 14.5px; line-height: 1.55; color: var(--text); }
+.ask-options { display: flex; flex-direction: column; gap: 6px; margin-top: 11px; }
+.ask-option {
+  display: flex; align-items: flex-start; gap: 9px; text-align: left;
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg-elevated); color: var(--text); font-size: 14px; cursor: pointer;
+  transition: border-color .14s, background .14s;
+}
+.ask-option:hover { border-color: var(--accent); background: var(--accent-soft); }
+.ask-letter {
+  flex: 0 0 18px; height: 18px; display: grid; place-items: center;
+  border-radius: 5px; background: var(--bg-active); color: var(--text-muted);
+  font-size: 11px; font-weight: 700; margin-top: 1px;
+}
+.ask-form { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.ask-input {
+  flex: 1 1 auto; height: 36px; padding: 0 12px;
+  border: 1px solid var(--border-strong); border-radius: 10px;
+  background: var(--bg-elevated); color: var(--text);
+  font-family: var(--font-sans); font-size: 14.5px; outline: none;
+}
+.ask-input:focus { border-color: var(--accent); }
+.ask-skip { flex: 0 0 auto; }
+
 .set-panel.about { align-items: center; text-align: center; padding-top: 40px; gap: 8px; }
 .about-logo { width: 64px; height: 64px; object-fit: contain; margin-bottom: 8px; }
 html[data-theme="dark"] .about-logo { filter: invert(1); }

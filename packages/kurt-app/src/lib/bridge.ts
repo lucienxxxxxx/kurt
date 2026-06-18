@@ -17,11 +17,19 @@ export interface ApprovalRequest {
 }
 export type ApprovalDecision = "allow" | "always" | "deny";
 
+/** An ask_user question awaiting the user's answer (sent back via `answer`). */
+export interface AskRequest {
+  id: string;
+  question: string;
+  options?: string[];
+}
+
 /** SSE frames the bridge streams during a run. */
 export type RunFrame =
   | { kind: "session"; id: string; title: string }
   | { kind: "step"; step: Step } // a step created/changed — upsert by _id
   | ({ kind: "approval" } & ApprovalRequest) // sensitive op blocks until POST /approve
+  | ({ kind: "ask" } & AskRequest) // ask_user blocks until POST /answer
   | { kind: "usage"; inputTokens: number; outputTokens: number; totalTokens: number }
   | { kind: "done" }
   | { kind: "aborted"; reason: string }
@@ -46,6 +54,7 @@ export interface RunHandlers {
   onSession?: (id: string, title: string) => void;
   onStep?: (step: Step) => void;
   onApproval?: (req: ApprovalRequest) => void;
+  onAsk?: (req: AskRequest) => void;
   onUsage?: (u: { inputTokens: number; outputTokens: number; totalTokens: number }) => void;
   onError?: (message: string) => void;
   onAborted?: (reason: string) => void;
@@ -106,6 +115,7 @@ function dispatch(block: string, handlers: RunHandlers): void {
     case "session": handlers.onSession?.(frame.id, frame.title); break;
     case "step": handlers.onStep?.(frame.step); break;
     case "approval": handlers.onApproval?.(frame); break;
+    case "ask": handlers.onAsk?.(frame); break;
     case "usage": handlers.onUsage?.(frame); break;
     case "error": handlers.onError?.(frame.message); break;
     case "aborted": handlers.onAborted?.(frame.reason); break;
@@ -119,6 +129,15 @@ export async function approve(baseUrl: string, id: string, decision: ApprovalDec
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id, decision }),
+  });
+}
+
+/** Answer a pending ask_user question (POST /answer). "" = skipped. */
+export async function answer(baseUrl: string, id: string, text: string): Promise<void> {
+  await fetch(`${baseUrl}/answer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, answer: text }),
   });
 }
 

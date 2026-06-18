@@ -119,6 +119,25 @@ Result: ____ (date / pass-fail / notes).
 
 ---
 
+## Phase 6.4 — ask_user prompt (agent asks you a question)
+
+Ask something deliberately ambiguous so the agent calls `ask_user` (e.g. "整理我的文件，
+但你决定按什么方式分类，先问我").
+
+1. **Prompt appears.** A panel rises above the input box (same place/shape as the approval
+   panel): a title, the agent's **question**, the **options** as A/B/… buttons (if any), and
+   a free-form input + **Skip**. The run is paused until you answer.
+2. **Pick an option** → its text is sent back; the agent continues using your choice.
+3. **Type a free-form answer + Enter** (or the ↑ button) → sent back; agent continues.
+4. **Skip** → the agent is told you didn't answer and proceeds.
+5. **Survives session switch.** While the question is showing, switch to another session and
+   back → the question is still there (it's per-session, like approvals). Stop cancels it.
+6. Works in **all modes** (chat/agent/plan).
+
+Result: ____ (date / pass-fail / notes).
+
+---
+
 ## Phase 6.4c — set the API key in-app
 
 Launch **without** `DEEPSEEK_API_KEY` in the env (to prove the in-app key is used):

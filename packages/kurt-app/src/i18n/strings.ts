@@ -78,6 +78,10 @@ export const T = {
   ctxSystem: { zh: "系统提示", en: "System prompt" },
   ctxApprox: { zh: "为按文本长度估算值（API 只报总量）", en: "Estimated from text length (the API reports only totals)" },
   ctxApiTotal: { zh: "本轮 API 实际用量：{n} tokens", en: "Actual API usage this run: {n} tokens" },
+  // ask_user prompt
+  askTitle: { zh: "需要你的回答", en: "A question for you" },
+  askPlaceholder: { zh: "输入你的回答…", en: "Type your answer…" },
+  askSkip: { zh: "跳过", en: "Skip" },
   // approval modal
   apprNeeded: { zh: "需要你的许可", en: "Approval needed" },
   apprRisk: { zh: "风险", en: "Risk" },
