@@ -50,6 +50,10 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
       if (pathname === "/info" && req.method === "GET") {
         return json(rt.info ? rt.info() : { hasKey: false, model: rt.model.name, models: [] });
       }
+      // GET → the full desktop.json (incl. the key — localhost, the user's own machine).
+      if (pathname === "/config" && req.method === "GET") {
+        return json(rt.fullConfig ? rt.fullConfig() : {});
+      }
       if (pathname === "/config" && req.method === "POST") {
         const patch = (await req.json().catch(() => ({}))) as ModelConfig;
         rt.reconfigure?.(patch);

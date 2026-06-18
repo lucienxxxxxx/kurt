@@ -370,4 +370,26 @@ describe("model config (/info, /config)", () => {
     expect(info.hasKey).toBe(true);
     expect(existsSync(join(home, "desktop.json"))).toBe(true); // persisted (mode 0600)
   }, 20_000);
+
+  test("GET/POST /config exposes the full desktop.json (baseURL / models / format)", async () => {
+    home = realpathSync(mkdtempSync(join(tmpdir(), "bridge-home-")));
+    process.env.KURT_HOME = home;
+    delete process.env.DEEPSEEK_API_KEY;
+    server = startServer(productionRuntime(ws));
+
+    let cfg = (await (await fetch(server.url + "/config")).json()) as { apiKey: string; baseURL: string; models: string[]; format: string };
+    expect(cfg.format).toBe("openai");
+    expect(Array.isArray(cfg.models)).toBe(true);
+
+    await fetch(server.url + "/config", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey: "sk-x", baseURL: "https://gw.example/v1", models: ["m1", "m2"], format: "claude" }),
+    });
+    cfg = (await (await fetch(server.url + "/config")).json()) as { apiKey: string; baseURL: string; models: string[]; format: string };
+    expect(cfg).toMatchObject({ apiKey: "sk-x", baseURL: "https://gw.example/v1", models: ["m1", "m2"], format: "claude" });
+
+    const info = (await (await fetch(server.url + "/info")).json()) as { model: string; models: string[] };
+    expect(info.models).toEqual(["m1", "m2"]); // composer menu follows the configured list
+    expect(info.model).toBe("m1");
+  }, 20_000);
 });

@@ -97,11 +97,14 @@ export interface RuntimeInfo {
 /** Model ids the desktop can pick from (DeepSeek; matches kurt-agent capabilities). */
 export const KNOWN_MODELS = ["deepseek-v4-flash", "deepseek-v4-pro"];
 
-/** Model config the desktop can set at runtime (key never leaves the machine). */
+/** Model config the desktop can set at runtime (lives in ~/.kurt/desktop.json). */
 export interface ModelConfig {
   apiKey?: string;
-  model?: string;
   baseURL?: string;
+  /** Selectable model ids (the composer's model menu); the first is the default. */
+  models?: string[];
+  /** Wire format. Only "openai" is implemented today; "claude" is stored for later. */
+  format?: "openai" | "claude";
 }
 
 export interface Runtime {
@@ -124,6 +127,9 @@ export interface Runtime {
   info?: () => RuntimeInfo;
   /** Apply + persist model config and rebuild the model (POST /config). */
   reconfigure?: (patch: ModelConfig) => void;
+  /** Full current config for GET /config (the raw desktop.json, incl. the key —
+   *  this is a localhost bridge for the machine's own user). */
+  fullConfig?: () => Required<ModelConfig>;
   /** Build a model for one run with the given model id / effort / thinking (current key/baseURL). */
   modelFor?: (model?: string, effort?: string, thinking?: boolean) => ModelProvider;
   /** Summarize a new conversation into a short title (production runtime sets this;
@@ -317,12 +323,18 @@ function configPath(): string {
   return join(kurtHome(), "desktop.json");
 }
 function loadConfig(): Required<ModelConfig> {
-  let saved: ModelConfig = {};
-  try { saved = JSON.parse(readFileSync(configPath(), "utf8")) as ModelConfig; } catch { /* none */ }
+  let saved: ModelConfig & { model?: string } = {};
+  try { saved = JSON.parse(readFileSync(configPath(), "utf8")) as ModelConfig & { model?: string }; } catch { /* none */ }
+  // Migrate the old single `model` field → a `models` list.
+  const models = Array.isArray(saved.models) && saved.models.length ? saved.models
+    : saved.model ? [saved.model]
+    : process.env.DEEPSEEK_MODEL ? [process.env.DEEPSEEK_MODEL]
+    : [...KNOWN_MODELS];
   return {
     apiKey: process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY ?? saved.apiKey ?? "",
-    model: saved.model ?? process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
     baseURL: saved.baseURL ?? process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
+    models,
+    format: saved.format ?? "openai",
   };
 }
 function saveConfig(cfg: Required<ModelConfig>): void {
@@ -334,7 +346,9 @@ function saveConfig(cfg: Required<ModelConfig>): void {
 /** Build the real runtime from the environment + ~/.kurt config (DeepSeek; core tools; ~/.kurt sessions). */
 export function productionRuntime(workspace = process.cwd()): Runtime {
   const cfg = loadConfig();
-  const buildModel = (modelId: string = cfg.model, effort?: string, thinking?: boolean): ModelProvider =>
+  // NOTE: `format` is stored but not yet wired — only the OpenAI-compatible client
+  // exists (a real Anthropic provider is a later task). baseURL can point at a gateway.
+  const buildModel = (modelId: string = cfg.models[0] ?? "", effort?: string, thinking?: boolean): ModelProvider =>
     withRetry(new OpenAICompatModel({ name: "deepseek", baseURL: cfg.baseURL, model: modelId, apiKey: cfg.apiKey, effort, thinking }));
   const model = buildModel();
   const sandbox = process.platform === "darwin" ? new SeatbeltSandbox() : new DirectSandbox();
@@ -362,15 +376,17 @@ export function productionRuntime(workspace = process.cwd()): Runtime {
   ];
 
   const rt = createRuntime({ workspace, model, makeTools, store: new SessionStore(sessionsDir()) });
-  rt.info = () => ({ hasKey: cfg.apiKey.length > 0, model: cfg.model, models: KNOWN_MODELS });
+  rt.info = () => ({ hasKey: cfg.apiKey.length > 0, model: cfg.models[0] ?? "", models: cfg.models });
+  rt.fullConfig = () => ({ apiKey: cfg.apiKey, baseURL: cfg.baseURL, models: cfg.models, format: cfg.format });
   rt.reconfigure = (patch) => {
     if (patch.apiKey !== undefined) cfg.apiKey = patch.apiKey;
-    if (patch.model) cfg.model = patch.model;
-    if (patch.baseURL) cfg.baseURL = patch.baseURL;
+    if (patch.baseURL !== undefined) cfg.baseURL = patch.baseURL;
+    if (Array.isArray(patch.models) && patch.models.length) cfg.models = patch.models;
+    if (patch.format !== undefined) cfg.format = patch.format;
     saveConfig(cfg);
     rt.model = buildModel(); // take effect immediately (no restart)
   };
-  rt.modelFor = (modelId, effort, thinking) => buildModel(modelId || cfg.model, effort, thinking);
+  rt.modelFor = (modelId, effort, thinking) => buildModel(modelId || cfg.models[0], effort, thinking);
   // Auto-title: one cheap, tool-free model call summarizing the opening exchange.
   rt.makeTitle = async (messages) => {
     const req: ModelRequest = {
