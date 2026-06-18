@@ -117,7 +117,18 @@ export default function App() {
     return () => document.removeEventListener("click", onClick, true);
   }, []);
 
-  useEffect(() => { document.documentElement.setAttribute("data-theme", theme); try { localStorage.setItem("kurt-theme", theme); } catch { /* ignore */ } }, [theme]);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = (): void => {
+      const resolved = theme === "system" ? (mq.matches ? "dark" : "light") : theme;
+      document.documentElement.setAttribute("data-theme", resolved);
+    };
+    apply();
+    try { localStorage.setItem("kurt-theme", theme); } catch { /* ignore */ }
+    if (theme !== "system") return;
+    mq.addEventListener("change", apply); // follow the OS while on "system"
+    return () => mq.removeEventListener("change", apply);
+  }, [theme]);
   useEffect(() => { document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en"); try { localStorage.setItem("kurt-lang", lang); } catch { /* ignore */ } }, [lang]);
   useEffect(() => { try { localStorage.setItem("kurt-mode", mode); } catch { /* ignore */ } }, [mode]);
   useEffect(() => { try { localStorage.setItem("kurt-thinking", thinking ? "1" : "0"); } catch { /* ignore */ } }, [thinking]);

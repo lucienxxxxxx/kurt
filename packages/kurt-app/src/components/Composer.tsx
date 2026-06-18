@@ -8,16 +8,21 @@ import { T, tr } from "../i18n/strings.ts";
 import { Icon } from "./Icon.tsx";
 import { ModelLogo } from "./ModelLogo.tsx";
 
-function MenuPopover({ open, children }: { open: boolean; children: React.ReactNode }) {
+function MenuPopover({ open, title, children }: { open: boolean; title?: string; children: React.ReactNode }) {
   if (!open) return null;
-  return <div className="menu" style={{ position: "absolute", bottom: 40, left: 0 }}>{children}</div>;
+  return (
+    <div className="menu" style={{ position: "absolute", bottom: 40, left: 0 }}>
+      {title && <div className="menu-title">{title}</div>}
+      {children}
+    </div>
+  );
 }
 
 function PlusMenu({ lang, open, onToggle }: { lang: Lang; open: boolean; onToggle: () => void }) {
   return (
     <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
       <button className="pill-btn ghost" onClick={onToggle}><Icon name="plus" /></button>
-      <MenuPopover open={open}>
+      <MenuPopover open={open} title={tr(T.menuAdd, lang)}>
         <div className="menu-item" onClick={onToggle}><Icon name="paperclip" />{tr(T.addAttach, lang)}</div>
         <div className="menu-item" onClick={onToggle}><Icon name="folder" />{tr(T.chooseFolder, lang)}</div>
         <div className="menu-item" onClick={onToggle}><Icon name="globe" />{tr(T.pasteUrl, lang)}</div>
@@ -36,7 +41,7 @@ function ModelMenu({ value, options, onChange, open, onToggle, thinking, onThink
       <button className="pill-btn" onClick={onToggle}>
         <ModelLogo model={value} />{value}<Icon name="chevD" className="chev" />
       </button>
-      <MenuPopover open={open}>
+      <MenuPopover open={open} title={tr(T.menuModel, lang)}>
         {opts.map((m) => (
           <div key={m} className={"menu-item" + (m === value ? " sel" : "")} onClick={() => { onChange(m); onToggle(); }}>
             <ModelLogo model={m} />{m}
@@ -61,7 +66,7 @@ function EffortMenu({ value, onChange, lang, open, onToggle }: { value: Effort; 
       <button className="pill-btn" onClick={onToggle}>
         <Icon name="sliders" />{label(value)}<Icon name="chevD" className="chev" />
       </button>
-      <MenuPopover open={open}>
+      <MenuPopover open={open} title={tr(T.menuEffort, lang)}>
         {(["low", "med", "high", "max"] as Effort[]).map((k) => (
           <div key={k} className={"menu-item" + (k === value ? " sel" : "")} onClick={() => { onChange(k); onToggle(); }}>
             <Icon name="sliders" />{label(k)}{k === "max" ? tr(T.effortMaxNote, lang) : ""}
@@ -79,7 +84,7 @@ function ModeMenu({ value, onChange, lang, open, onToggle }: { value: Mode; onCh
       <button className="pill-btn" onClick={onToggle}>
         <Icon name="chat" />{label(value)}<Icon name="chevD" className="chev" />
       </button>
-      <MenuPopover open={open}>
+      <MenuPopover open={open} title={tr(T.menuMode, lang)}>
         {(["chat", "agent", "plan"] as Mode[]).map((m) => (
           <div key={m} className={"menu-item" + (m === value ? " sel" : "")} onClick={() => { onChange(m); onToggle(); }}>
             <Icon name="chat" />{label(m)}
@@ -173,18 +178,18 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
             onChange={(e) => onChange(e.target.value)} onKeyDown={key} />
           <div className="composer-bar">
             <PlusMenu lang={lang} open={openMenu === "plus"} onToggle={() => toggle("plus")} />
-            <ModeMenu value={mode} onChange={onModeChange} lang={lang} open={openMenu === "mode"} onToggle={() => toggle("mode")} />
             <div className="bar-spacer" />
             <button className="pill-btn ghost" title={tr(T.voice, lang)}><Icon name="mic" /></button>
             {running && !value.trim() ? (
               <button className="send-btn stop" onClick={onStop} title={tr(T.stop, lang)}><Icon name="stop" /></button>
             ) : (
-              <button className="send-btn" onClick={onSend} disabled={!value.trim()} title={tr(T.send, lang)}><Icon name="send" /></button>
+              <button className="send-btn" onClick={onSend} disabled={!value.trim()} title={tr(T.send, lang)}><Icon name="arrowUp" /></button>
             )}
           </div>
         </div>
         {/* below the input box: borderless model/effort on the left, context ring on the right */}
         <div className="composer-footer">
+          <ModeMenu value={mode} onChange={onModeChange} lang={lang} open={openMenu === "mode"} onToggle={() => toggle("mode")} />
           <ModelMenu value={model} options={models} onChange={onModelChange} open={openMenu === "model"} onToggle={() => toggle("model")}
             thinking={thinking} onThinkingToggle={onThinkingToggle} lang={lang} />
           <EffortMenu value={effort} onChange={onEffortChange} lang={lang} open={openMenu === "effort"} onToggle={() => toggle("effort")} />

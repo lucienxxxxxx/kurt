@@ -2,7 +2,7 @@
  *  from kurt-agent; the app talks to the bridge over HTTP). */
 
 export type Lang = "zh" | "en";
-export type Theme = "light" | "dark";
+export type Theme = "light" | "dark" | "system";
 export type Effort = "low" | "med" | "high" | "max";
 export type Mode = "chat" | "agent" | "plan";
 

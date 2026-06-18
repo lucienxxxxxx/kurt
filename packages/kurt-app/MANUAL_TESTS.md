@@ -352,3 +352,20 @@ Result: ____ (date / pass-fail / notes).
 
 Result: ____ (date / pass-fail / notes).
 
+---
+
+## Phase 6.4 polish — send arrow, system theme, agent in footer, menu titles
+
+1. **Send button is an up-arrow.** The send button (circle, bottom-right of the input box)
+   shows an **↑** instead of the paper-plane.
+2. **System color mode.** Settings → Appearance has a third theme card **"跟随系统 / System"**.
+   Pick it → the UI matches the OS appearance and **flips live** when you change the macOS
+   light/dark setting. Persists across relaunch.
+3. **Agent (mode) menu moved to the footer.** The **智能体/对话/计划** menu is now in the
+   borderless row **below** the input box, alongside model + effort (left), with the context
+   ring on the right. The toolbar inside the box keeps **+ / mic / send**.
+4. **Menu titles.** Opening the +, mode, model, or effort dropdown shows a small **title** at
+   the top — e.g. the mode menu shows **"模式 / Mode"**, model "模型", effort "强度", + "添加".
+
+Result: ____ (date / pass-fail / notes).
+

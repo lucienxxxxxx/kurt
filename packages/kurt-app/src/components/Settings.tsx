@@ -44,6 +44,7 @@ function AppearancePanel({ theme, setTheme, lang, setLang }: { theme: Theme; set
         <div className="mode-cards">
           <ModeCard theme="light" active={theme === "light"} label={tr(T.modeLight, lang)} onClick={() => setTheme("light")} />
           <ModeCard theme="dark" active={theme === "dark"} label={tr(T.modeDark, lang)} onClick={() => setTheme("dark")} />
+          <ModeCard theme="system" active={theme === "system"} label={tr(T.modeSystem, lang)} onClick={() => setTheme("system")} />
         </div>
       </div>
       <div className="set-row inline">
