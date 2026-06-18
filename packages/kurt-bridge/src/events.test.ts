@@ -3,13 +3,17 @@ import type { Message } from "kurt-agent";
 import { StepAccumulator, messagesToSteps } from "./events.ts";
 
 describe("StepAccumulator", () => {
-  test("thinking deltas accumulate into one step; closed with elapsed sec on next event", () => {
+  test("thinking deltas accumulate into one step; closed with elapsed sec AND re-emitted", () => {
     let t = 1000;
     const acc = new StepAccumulator(() => t);
     acc.apply({ type: "thinking", text: "let me " });
     acc.apply({ type: "thinking", text: "think" });
     t = 4000; // 3s later
-    acc.apply({ type: "llm_delta", text: "answer" });
+    const changed = acc.apply({ type: "llm_delta", text: "answer" });
+    // the closed thinking step (with its final sec) must be re-emitted so the client
+    // upserts it — otherwise it keeps the initial undefined sec and renders "0s".
+    expect(changed.find((s) => s.type === "thinking")).toMatchObject({ type: "thinking", sec: 3 });
+    expect(changed.find((s) => s.type === "text")).toMatchObject({ type: "text", text: "answer" });
     const steps = acc.steps();
     expect(steps).toHaveLength(2);
     expect(steps[0]).toMatchObject({ type: "thinking", text: "let me think", sec: 3 });

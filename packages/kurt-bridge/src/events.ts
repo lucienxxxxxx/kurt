@@ -60,15 +60,20 @@ export class StepAccumulator {
     return [step];
   }
 
-  /** When a thinking block ends, stamp its elapsed seconds. */
+  /** When a thinking block ends, stamp its elapsed seconds AND re-emit it, so the
+   *  client upserts the final `sec` (otherwise it keeps the initial undefined → "0s"). */
   #closeThinking(passthrough: Step[]): Step[] {
+    let closed: Step | undefined;
     if (this.#thinkingIndex !== null && this.#thinkingStartedAt !== null) {
       const t = this.#steps[this.#thinkingIndex];
-      if (t && t.type === "thinking") t.sec = Math.max(1, Math.round((this.now() - this.#thinkingStartedAt) / 1000));
+      if (t && t.type === "thinking") {
+        t.sec = Math.max(1, Math.round((this.now() - this.#thinkingStartedAt) / 1000));
+        closed = t;
+      }
     }
     this.#thinkingStartedAt = null;
     this.#thinkingIndex = null;
-    return passthrough;
+    return closed ? [closed, ...passthrough] : passthrough;
   }
 
   #appendText(text: string): Step[] {
