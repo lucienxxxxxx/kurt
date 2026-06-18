@@ -595,8 +595,13 @@ html[data-theme="dark"] img.empty-logo { filter: invert(1); }
 }
 .run-status-text { font-variant-numeric: tabular-nums; }
 
-/* context meter — double-ring donut below the composer (bottom-right) + its card */
-.ctx-meter { position: relative; display: flex; justify-content: flex-end; margin-top: 8px; }
+/* row below the input box: borderless model/effort menus (left) + context ring (right) */
+.composer-footer { display: flex; align-items: center; gap: 4px; margin-top: 8px; padding: 0 2px; }
+.composer-footer .pill-btn { border-color: transparent; background: transparent; }
+.composer-footer .pill-btn:hover { border-color: transparent; background: var(--bg-hover); color: var(--text); }
+
+/* context meter — double-ring donut + its card */
+.ctx-meter { position: relative; display: flex; align-items: center; }
 .ctx-ring-btn {
   border: none; background: transparent; padding: 0; cursor: pointer;
   width: 30px; height: 30px; color: var(--accent);

@@ -174,9 +174,6 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
           <div className="composer-bar">
             <PlusMenu lang={lang} open={openMenu === "plus"} onToggle={() => toggle("plus")} />
             <ModeMenu value={mode} onChange={onModeChange} lang={lang} open={openMenu === "mode"} onToggle={() => toggle("mode")} />
-            <ModelMenu value={model} options={models} onChange={onModelChange} open={openMenu === "model"} onToggle={() => toggle("model")}
-              thinking={thinking} onThinkingToggle={onThinkingToggle} lang={lang} />
-            <EffortMenu value={effort} onChange={onEffortChange} lang={lang} open={openMenu === "effort"} onToggle={() => toggle("effort")} />
             <div className="bar-spacer" />
             <button className="pill-btn ghost" title={tr(T.voice, lang)}><Icon name="mic" /></button>
             {running && !value.trim() ? (
@@ -186,7 +183,14 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
             )}
           </div>
         </div>
-        {meter}
+        {/* below the input box: borderless model/effort on the left, context ring on the right */}
+        <div className="composer-footer">
+          <ModelMenu value={model} options={models} onChange={onModelChange} open={openMenu === "model"} onToggle={() => toggle("model")}
+            thinking={thinking} onThinkingToggle={onThinkingToggle} lang={lang} />
+          <EffortMenu value={effort} onChange={onEffortChange} lang={lang} open={openMenu === "effort"} onToggle={() => toggle("effort")} />
+          <div className="bar-spacer" />
+          {meter}
+        </div>
       </div>
     </div>
   );
