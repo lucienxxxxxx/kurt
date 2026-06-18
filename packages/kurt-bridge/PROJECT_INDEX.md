@@ -31,7 +31,7 @@ kurt-app (Tauri webview) ──fetch/SSE──▶ 127.0.0.1:<port>  (this pkg)
 | `src/types.ts` | Wire contract: `Step` union, `RunFrame` (session/step/usage/done/aborted/error), `SessionInfo` | (types) |
 | `src/events.ts` | **StepAccumulator** — pure fold of engine `Event` → desktop `Step` (read_file→read, skill→skill, else→tool; thinking elapsed-seconds) | `StepAccumulator` |
 | `src/runtime.ts` | Engine composition: `createRuntime` (generic, injectable model/tools/**makeTitle** — testable) + `productionRuntime` (DeepSeek + core tools + sandbox + shared SessionStore + auto-title model call); `runTurn` (load/create session → stream events as frames → persist; a **new** session gets an immediate temp title (first message) and is **saved right away** so it lists in the sidebar mid-run, then `rt.makeTitle` replaces it with an auto-summary after the turn) | `createRuntime`, `productionRuntime`, `runTurn`, `Runtime` |
-| `src/server.ts` | `Bun.serve` on localhost (`idleTimeout:0` — SSE/approval streams legitimately go quiet): `POST /run` (SSE), `POST /approve`, `GET /sessions`, `GET /sessions/:id` (→ reconstructed steps), `POST /sessions/:id/truncate` (rollback: keep N user turns), `POST/DELETE /sessions`, `/health`; client-close aborts the run | `startServer`, `ServerHandle` |
+| `src/server.ts` | `Bun.serve` on localhost (`idleTimeout:0` — SSE/approval streams legitimately go quiet): `POST /run` (SSE), `POST /approve`, `GET /sessions`, `GET /sessions/:id` (→ reconstructed steps), `POST /sessions/:id/truncate` (rollback: keep N user turns), `POST /answer` (resolve an ask_user question), `POST/DELETE /sessions`, `/health`; client-close aborts the run | `startServer`, `ServerHandle` |
 | `src/index.ts` | Bin the Tauri sidecar spawns; prints `KURT_BRIDGE_PORT=<n>` to stdout; when stdin is piped (sidecar) exits on EOF (parent died → no orphan) | — |
 | `src/*.test.ts` | `events.test.ts` (8, pure) · `server.test.ts` (16, real HTTP/SSE + MockModel + fake tool; incl. truncate + modes + config) | — |
 
@@ -43,4 +43,5 @@ kurt-app (Tauri webview) ──fetch/SSE──▶ 127.0.0.1:<port>  (this pkg)
 
 ## 6. Status / debt
 - **6.2/6.3/6.4a/6.4b done** — `kurt-app` drives it live (auto-spawned sidecar; no orphan); reload reconstructs steps; **sensitive commands gated** via per-run permission → `approval` frame → `POST /approve` (the safety gap is closed).
-- Remaining: per-run model/effort config (menus still cosmetic); MCP / skills / ask_user / memory-preload not yet in the bridge's tool set; auth = env (Keychain in 6.4c); compiled sidecar + signing (6.4d).
+- **ask_user wired (6.4)**: per-run `AskProvider` → `ask` frame → `POST /answer` (mirrors approval); ask_user is in every mode.
+- Remaining: MCP / skills / memory-preload not yet in the bridge's tool set; auth = env (Keychain later); compiled sidecar + signing (6.4d).

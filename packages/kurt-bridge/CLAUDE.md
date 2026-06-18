@@ -28,4 +28,5 @@ cd packages/kurt-bridge && bun test && bun run typecheck   # 门禁
 - **会话存储共享**:用 kurt-agent 的 `SessionStore`(`~/.kurt/sessions`),和 TUI、桌面端是同一份。
 - **SSE upsert 语义**:`step` frame 每次发的是该 `_id` 的当前快照;客户端按 `_id` upsert(后到覆盖)。
 - **敏感命令审批(6.4b 已做)**:`runTurn` 用 per-run `PermissionProvider` —— 命中 allowlist 直接放行,否则发 `approval` SSE frame 并阻塞,等 `POST /approve`(allow/always/deny)经 `resolveApproval` 解决;always 入内存 allowlist。工具按 run 构建(`makeTools(permission)`)以绑定该 run 的 SSE 流。
-- 后续:MCP/skills/ask/记忆预载尚未接进 bridge 的工具集(6.3/6.4);auth 仅 env。
+- **ask_user 已接(6.4)**:per-run `AskProvider` → `ask` SSE frame → `POST /answer`(沿用审批那套);`ask_user` 全模式可用。
+- 后续:MCP/skills/记忆预载尚未接进 bridge 的工具集;auth 仅 env。
