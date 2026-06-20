@@ -53,6 +53,41 @@ export interface Panel {
   forceCode?: boolean;
 }
 
+/** Workspace tab kinds shown under the conversation title. `session` is the chat
+ *  thread itself (always present, not closable). */
+export type TabKind = "session" | "terminal" | "files" | "plan" | "preview";
+
+/** How a preview tab renders its target. */
+export type PreviewKind = "markdown" | "html" | "pdf" | "code" | "text" | "output";
+
+/** One workspace tab. `meta` carries kind-specific payload. */
+export interface Tab {
+  id: string;
+  kind: TabKind;
+  title: string;
+  closable: boolean;
+  meta?: {
+    /** preview: file path (also the read source) */
+    file?: string;
+    /** preview: how to render */
+    previewKind?: PreviewKind;
+    /** preview/output: inline content when not read from disk */
+    content?: string;
+    /** preview/output: secondary label */
+    subtitle?: string;
+    /** terminal/files: root directory (defaults to workspace) */
+    cwd?: string;
+  };
+}
+
+/** Workspace tab layout: `primaryId` is the left/main pane; `secondaryId` is the
+ *  right pane when split (null = no split). */
+export interface TabsState {
+  tabs: Tab[];
+  primaryId: string;
+  secondaryId: string | null;
+}
+
 /** A queued message (sent after the current run finishes). */
 export interface QueuedMsg {
   id: number;
