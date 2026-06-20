@@ -103,8 +103,9 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
 
       if (pathname === "/sessions") {
         if (req.method === "GET") {
-          // Default to THIS bridge's workspace so the desktop sees just its own history.
-          const workspace = url.searchParams.get("workspace") ?? rt.workspace;
+          // List ALL sessions globally (one unified history, not tied to the launch
+          // workspace) — unless a workspace filter is explicitly requested.
+          const workspace = url.searchParams.get("workspace") ?? undefined;
           return json((await rt.store.list(workspace)).map(toInfo));
         }
         if (req.method === "POST") {
