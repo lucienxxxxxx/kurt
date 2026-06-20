@@ -420,15 +420,14 @@ code.inl {
   padding: 0 12px;
   border-bottom: 1px solid var(--border);
   position: relative;
-  overflow-x: auto;
+  overflow: hidden;           /* no horizontal scrollbar — tabs keep a min width */
   user-select: none;
 }
-.ws-tabs::-webkit-scrollbar { height: 0; }
 /* the focused group's strip gets a subtle accent underline */
 .ws-tabs.focused { box-shadow: inset 0 -2px 0 var(--accent-soft); }
 .ws-tab {
   display: flex; align-items: center; gap: 6px;
-  max-width: 200px;
+  min-width: 84px; max-width: 200px; flex: 0 1 auto;
   padding: 8px 10px;
   font-size: 13px; color: var(--text-muted);
   border-bottom: 2px solid transparent;
@@ -450,7 +449,7 @@ code.inl {
 }
 .ws-tab-close:hover { background: var(--bg-active); color: var(--text); }
 .ws-tab-close svg { width: 12px; height: 12px; }
-.ws-add-wrap { position: relative; }
+.ws-add-wrap { position: relative; flex: 0 0 auto; }
 .ws-add {
   width: 26px; height: 26px; margin-left: 4px;
   display: grid; place-items: center;
