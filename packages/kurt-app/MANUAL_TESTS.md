@@ -530,3 +530,27 @@ Visual/interactive — must run in `bun run tauri dev` (the PTY is native; plain
    (no orphan). Quitting the app kills all shells.
 
 Result: ____ (date / pass-fail / notes).
+
+---
+
+## Thread UX — conditional bottom-follow + smooth streaming
+
+Visual/interactive — `bun run tauri dev`.
+
+1. **Follow while at bottom.** With the thread scrolled to the bottom, send a message → as the
+   reply streams, the view stays pinned to the latest content automatically.
+2. **Scroll up = release control.** While a reply is streaming, scroll up to read history → the
+   view stays where you put it; streaming no longer yanks you to the bottom.
+3. **Jump to latest.** After scrolling up with new content arriving, a floating **回到最新 / Jump
+   to latest** pill appears (bottom-center). It does NOT move your position on its own.
+4. **Resume follow.** Click the pill (smooth scroll to bottom) OR manually scroll back near the
+   bottom → following resumes, the pill disappears, and streaming pins again.
+5. **Next turn defaults to latest.** Send another message while scrolled up → it jumps to the
+   bottom and follows (sending is an explicit "show latest").
+6. **Per-session.** Scroll position + follow-state are per conversation: switch away and back and
+   your spot is restored (first open lands at the bottom).
+7. **Smooth streaming.** The streaming reply's bottom edge is softly faded so new tokens "emerge"
+   rather than snapping in; Markdown headings/lists, code blocks and tables stay stable (no
+   reflow/flicker) as text appends. The thinking→first-text hand-off fades in gently.
+
+Result: ____ (date / pass-fail / notes).
