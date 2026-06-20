@@ -12,6 +12,12 @@
  *      `tool_result` — even on abort or tool failure. No dangling tool_calls.
  *   3. Resilience: a throwing tool becomes a `tool_result(isError:true)` and the
  *      loop keeps going; it never crashes the engine.
+ *
+ * Parallel tool calls: when the model requests several tools in ONE turn it is
+ * asserting they're independent, so the loop runs them concurrently (bounded by
+ * `maxParallel`). `tool_result` EVENTS surface as each finishes (live), while the
+ * `tool_result` BLOCKS recorded in history stay in the model's original call order.
+ * A single tool call is just a pool of one — identical to sequential execution.
  */
 
 import type { ContentBlock, Event, Message, ToolResultBlock, ToolUseBlock } from "./types.ts";
@@ -32,6 +38,8 @@ export interface RunLoopOptions {
   signal?: AbortSignal;
   /** Safety bound on loop iterations. Default 50. */
   maxTurns?: number;
+  /** Max tool calls to run concurrently within a single turn. Default 8. */
+  maxParallel?: number;
 }
 
 /**
@@ -144,18 +152,16 @@ async function drive(
       emit({ type: "tool_call", id: call.id, name: call.name, input: call.input });
     }
 
-    // Execute each call, ALWAYS producing exactly one paired tool_result.
-    const resultBlocks: ToolResultBlock[] = [];
-    for (const call of toolCalls) {
+    // Run the calls — independent calls in the SAME turn execute concurrently
+    // (bounded). Each ALWAYS produces exactly one paired tool_result: its event is
+    // emitted the moment that call finishes (live), and its block is slotted into
+    // history at the call's original index (order preserved for the model).
+    const resultBlocks: ToolResultBlock[] = new Array<ToolResultBlock>(toolCalls.length);
+    await mapPool(toolCalls, options.maxParallel ?? 8, async (call, i) => {
       const result = await runTool(toolMap.get(call.name), call, emit, signal);
       emit({ type: "tool_result", id: call.id, content: result.content, isError: result.isError === true });
-      resultBlocks.push({
-        type: "tool_result",
-        toolUseId: call.id,
-        content: result.content,
-        isError: result.isError === true,
-      });
-    }
+      resultBlocks[i] = { type: "tool_result", toolUseId: call.id, content: result.content, isError: result.isError === true };
+    });
     messages.push({ role: "tool", content: resultBlocks });
 
     emit({ type: "turn_end", turn, stopReason });
@@ -166,6 +172,22 @@ async function drive(
   }
 
   emit({ type: "error", message: `Exceeded maxTurns (${maxTurns})`, fatal: true });
+}
+
+/** Run `fn` over `items` with at most `limit` in flight at once, preserving each
+ *  item's index. `limit` of 1 (or a single item) is plain sequential execution. */
+async function mapPool<T>(items: T[], limit: number, fn: (item: T, index: number) => Promise<void>): Promise<void> {
+  const n = items.length;
+  if (n === 0) return;
+  const workers = Math.max(1, Math.min(Math.floor(limit) || 1, n));
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < n) {
+      const i = next++;
+      await fn(items[i]!, i);
+    }
+  };
+  await Promise.all(Array.from({ length: workers }, () => worker()));
 }
 
 /** Resolve a single tool call to a result, never throwing. */

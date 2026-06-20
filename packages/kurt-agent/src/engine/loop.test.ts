@@ -245,4 +245,83 @@ describe("runLoop — Phase 1 承重墙", () => {
     expect(thinking).toBeDefined();
     expect((thinking as { text: string }).text).toBe("let me reason about this");
   });
+
+  // ── Parallel tool calls ──────────────────────────────────────────────────
+  const named = (name: string, run: () => Promise<ToolResult>): Tool => ({
+    spec: { name, description: "", inputSchema: { type: "object" as const, properties: {} } },
+    execute: run,
+  });
+  const idByName = (events: Event[], n: string): string =>
+    (events.find((e) => e.type === "tool_call" && (e as { name: string }).name === n) as { id: string }).id;
+
+  test("independent calls in one turn run concurrently; events live, history in call order", async () => {
+    let running = 0;
+    let peak = 0;
+    const mk = (name: string, delay: number) => named(name, async () => {
+      running++; peak = Math.max(peak, running);
+      await new Promise((r) => setTimeout(r, delay));
+      running--;
+      return { content: `${name}-result` };
+    });
+    const model = new MockModel([
+      { toolCalls: [{ name: "slow", input: {} }, { name: "fast", input: {} }] },
+      { text: "done" },
+    ]);
+    const events = await collect(runLoop({
+      system: "s",
+      messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+      tools: [mk("slow", 25), mk("fast", 3)],
+      model,
+    }));
+
+    expect(peak).toBe(2); // both in flight at once (sequential would peak at 1)
+    assertNoDanglingToolCalls(events);
+
+    // result EVENTS surface as each finishes → fast before slow despite call order
+    const resultIds = events.filter((e) => e.type === "tool_result").map((e) => (e as { id: string }).id);
+    expect(resultIds.indexOf(idByName(events, "fast"))).toBeLessThan(resultIds.indexOf(idByName(events, "slow")));
+
+    // history BLOCKS keep the model's original call order (slow, then fast)
+    const toolMsg = model.requests[1]!.messages.find((m) => m.role === "tool");
+    const blocks = toolMsg!.content as { toolUseId: string }[];
+    expect(blocks.map((b) => b.toolUseId)).toEqual([idByName(events, "slow"), idByName(events, "fast")]);
+  });
+
+  test("parallel calls stay resilient: a throwing one errors, the others still succeed, all paired", async () => {
+    const model = new MockModel([
+      { toolCalls: [{ name: "a", input: {} }, { name: "boom", input: {} }, { name: "b", input: {} }] },
+      { text: "done" },
+    ]);
+    const events = await collect(runLoop({
+      system: "s",
+      messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+      tools: [named("a", async () => ({ content: "a" })), new ThrowingTool(), named("b", async () => ({ content: "b" }))],
+      model,
+    }));
+    assertNoDanglingToolCalls(events);
+    const results = events.filter((e) => e.type === "tool_result") as { isError: boolean }[];
+    expect(results).toHaveLength(3);
+    expect(results.filter((r) => r.isError)).toHaveLength(1); // boom
+    expect(results.filter((r) => !r.isError)).toHaveLength(2); // a, b
+    expect(types(events).at(-1)).toBe("turn_end");
+  });
+
+  test("maxParallel:1 forces sequential execution (peak concurrency 1)", async () => {
+    let running = 0;
+    let peak = 0;
+    const mk = (name: string) => named(name, async () => {
+      running++; peak = Math.max(peak, running);
+      await new Promise((r) => setTimeout(r, 5));
+      running--;
+      return { content: name };
+    });
+    await collect(runLoop({
+      system: "s",
+      messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+      tools: [mk("x"), mk("y")],
+      model: new MockModel([{ toolCalls: [{ name: "x", input: {} }, { name: "y", input: {} }] }, { text: "done" }]),
+      maxParallel: 1,
+    }));
+    expect(peak).toBe(1);
+  });
 });

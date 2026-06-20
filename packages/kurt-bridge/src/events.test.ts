@@ -54,6 +54,18 @@ describe("StepAccumulator", () => {
     expect(acc.steps()[0]).toMatchObject({ type: "tool", name: "write_file", title: "src/foo.ts" });
   });
 
+  test("parallel tool calls: interleaved/out-of-order results map by id", () => {
+    const acc = new StepAccumulator();
+    acc.apply({ type: "tool_call", id: "a", name: "shell", input: { command: "sleep 1" } });
+    acc.apply({ type: "tool_call", id: "b", name: "shell", input: { command: "echo hi" } });
+    acc.apply({ type: "tool_result", id: "b", content: "hi", isError: false }); // b finishes first
+    acc.apply({ type: "tool_result", id: "a", content: "slept", isError: false });
+    const steps = acc.steps();
+    expect(steps).toHaveLength(2);
+    expect(steps[0]).toMatchObject({ type: "tool", cmd: "sleep 1", out: "slept" });
+    expect(steps[1]).toMatchObject({ type: "tool", cmd: "echo hi", out: "hi" });
+  });
+
   test("tool error result sets isError", () => {
     const acc = new StepAccumulator();
     acc.apply({ type: "tool_call", id: "c1", name: "shell", input: { command: "boom" } });
