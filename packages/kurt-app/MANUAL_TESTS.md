@@ -554,3 +554,18 @@ Visual/interactive — `bun run tauri dev`.
    reflow/flicker) as text appends. The thinking→first-text hand-off fades in gently.
 
 Result: ____ (date / pass-fail / notes).
+
+---
+
+## Sound effects + completion notification
+
+Visual/interactive — `bun run tauri dev` (audio needs a real window; first sound may
+require one prior user interaction due to autoplay policy).
+
+1. **Send cue.** Type a message and send → a short cue plays (send.mp3).
+2. **Completion chime.** When the agent finishes a reply → a chime plays (done.mp3).
+   Aborting (Stop) does NOT chime.
+3. **Background notification.** Start a run, switch to another app (window unfocused),
+   let it finish → a macOS notification "Kurt — <conversation> · 已完成回复" appears
+   (first time may prompt for notification permission). When the window IS focused, no
+   banner (just the chime).
