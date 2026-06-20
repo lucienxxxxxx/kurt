@@ -36,17 +36,17 @@ export function WorkspaceTabsBar({ group, groupCount, focused, lang, onActivate,
   onUnsplit: () => void;
   onAdd: (kind: TabKind) => void;
 }) {
-  const [addOpen, setAddOpen] = useState(false);
+  const [addPos, setAddPos] = useState<{ x: number; y: number } | null>(null);
   const [ctx, setCtx] = useState<{ id: string; x: number; y: number } | null>(null);
 
   useEffect(() => {
-    if (!addOpen && !ctx) return;
-    const close = () => { setAddOpen(false); setCtx(null); };
+    if (!addPos && !ctx) return;
+    const close = () => { setAddPos(null); setCtx(null); };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
     window.addEventListener("mousedown", close);
     window.addEventListener("keydown", onKey);
     return () => { window.removeEventListener("mousedown", close); window.removeEventListener("keydown", onKey); };
-  }, [addOpen, ctx]);
+  }, [addPos, ctx]);
 
   const canSplit = groupCount > 1 || group.tabs.length > 1; // need something to leave behind
 
@@ -57,7 +57,7 @@ export function WorkspaceTabsBar({ group, groupCount, focused, lang, onActivate,
           key={t.id}
           className={"ws-tab" + (group.activeId === t.id ? " active" : "")}
           onClick={() => onActivate(t.id)}
-          onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setCtx({ id: t.id, x: e.clientX, y: e.clientY }); setAddOpen(false); }}
+          onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setCtx({ id: t.id, x: e.clientX, y: e.clientY }); setAddPos(null); }}
           title={t.title}
         >
           <Icon name={KIND_ICON[t.kind]} className="ws-tab-icon" />
@@ -71,13 +71,13 @@ export function WorkspaceTabsBar({ group, groupCount, focused, lang, onActivate,
       ))}
 
       <div className="ws-add-wrap">
-        <button className="ws-add" onClick={(e) => { e.stopPropagation(); setAddOpen((v) => !v); setCtx(null); }} title={tr(T.tabAdd, lang)} aria-label={tr(T.tabAdd, lang)}>
+        <button className="ws-add" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setAddPos(addPos ? null : { x: r.left, y: r.bottom + 4 }); setCtx(null); }} title={tr(T.tabAdd, lang)} aria-label={tr(T.tabAdd, lang)}>
           <Icon name="plus" />
         </button>
-        {addOpen && (
-          <div className="ws-menu" onMouseDown={(e) => e.stopPropagation()}>
+        {addPos && (
+          <div className="ws-menu ws-ctx" style={{ left: addPos.x, top: addPos.y }} onMouseDown={(e) => e.stopPropagation()}>
             {ADDABLE.map((k) => (
-              <button key={k} className="ws-menu-item" onClick={() => { onAdd(k); setAddOpen(false); }}>
+              <button key={k} className="ws-menu-item" onClick={() => { onAdd(k); setAddPos(null); }}>
                 <Icon name={KIND_ICON[k]} /> {tr(T[KIND_LABEL[k]], lang)}
               </button>
             ))}
