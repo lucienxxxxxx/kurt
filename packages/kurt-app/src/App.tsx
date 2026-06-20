@@ -3,14 +3,14 @@
  *  over SSE independently (runs continue in the background when you switch away);
  *  the sidebar lists the bridge's sessions and loading one reconstructs its steps. */
 
-import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from "react";
-import type { Effort, Lang, Loc, Mode, QueuedMsg, SessionMeta, Step, Tab, TabKind, Theme } from "./types.ts";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import type { Effort, Lang, Loc, Mode, QueuedMsg, SessionMeta, Step, Tab, TabKind, TabsState, Theme } from "./types.ts";
 import { T, tr } from "./i18n/strings.ts";
 import { runStream, listSessions, getSession, getInfo, approve, answer, truncateSession, deleteSession, readFile, rawFileUrl, type ApprovalRequest, type AskRequest, type PlanStep } from "./lib/bridge.ts";
 import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
 import { externalLinkFromClick, openExternal } from "./lib/external.ts";
 import { fmtElapsed, fmtTokens } from "./lib/format.ts";
-import { initTabs, tabsReducer } from "./lib/tabs.ts";
+import { initTabs, tabsReducer, type TabsAction } from "./lib/tabs.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
 import { Settings } from "./components/Settings.tsx";
@@ -82,7 +82,15 @@ export default function App() {
   const [viewStats, setViewStats] = useState<{ startedAt: number; tokens: number } | null>(null);
   const [loadingSession, setLoadingSession] = useState(false); // fetching a session's steps (no cache yet)
   const [, forceTick] = useState(0);
-  const [tabs, dispatchTabs] = useReducer(tabsReducer, undefined, () => initTabs(tr(T.tabSession, lang)));
+  // Workspace tabs are PER conversation: each session id (and "new" for the unsaved
+  // chat) maps to its own tabs/split layout. `tabs` mirrors the viewed session's.
+  const sessionTabTitle = tr(T.tabSession, lang);
+  const [tabsMap, setTabsMap] = useState<Record<string, TabsState>>({});
+  const tabs = tabsMap[activeId ?? "new"] ?? initTabs(sessionTabTitle);
+  const dispatchTabs = useCallback((action: TabsAction): void => {
+    const key = activeIdRef.current ?? "new";
+    setTabsMap((m) => ({ ...m, [key]: tabsReducer(m[key] ?? initTabs(sessionTabTitle), action) }));
+  }, [sessionTabTitle]);
   const tabCounter = useRef(0);
   const plansRef = useRef<Map<string, PlanStep[]>>(new Map()); // latest plan per session (live, per launch)
   const autoPlanRef = useRef<Set<string>>(new Set());          // sessions whose Plan tab was auto-opened
@@ -232,6 +240,8 @@ export default function App() {
               if (activeIdRef.current === null && newChatRunIdRef.current === run.runId) {
                 setNewChatRun(null); // the new chat now has a real id — follow it
                 setActive(id);
+                // carry any tabs opened in the unsaved chat over to its real id
+                setTabsMap((m) => { if (!m["new"]) return m; const { new: fromNew, ...rest } = m; return { ...rest, [id]: fromNew }; });
               }
               void refreshSessions(); // it now appears in the sidebar (with a running dot)
             }
@@ -485,6 +495,7 @@ export default function App() {
     setLoadingSession(false); wantScroll.current = true;
     setThread([]); setLiveId(null); setQueuedMsgs([]); setViewStats(null);
     setTitleEntry(T.convNew); setCollapsed(new Set()); setViewPlan(undefined);
+    setTabsMap((m) => { const { new: _drop, ...rest } = m; return rest; }); // fresh tabs for the new chat
   };
 
   /** Delete a session: stop its run if any, drop it from the bridge, clear its
@@ -498,6 +509,7 @@ export default function App() {
       setRunningIds((s) => { const n = new Set(s); n.delete(id); return n; });
     }
     sessionCache.current.delete(id); // gone — drop its cached steps
+    setTabsMap((m) => { const { [id]: _drop, ...rest } = m; return rest; }); // drop its tabs/split
     if (id === activeId) newChat(); // we were viewing it → fall back to an empty chat
     setUnread((u) => { if (!u.has(id)) return u; const n = new Set(u); n.delete(id); return n; });
     void (async () => {
