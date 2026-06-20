@@ -5,6 +5,7 @@
  * floating-preview inset/shadow/radius and fill the viewport.
  * ============================================================= */
 
+:root { --z-dropdown: 1000; --z-modal: 2000; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 body {
@@ -457,7 +458,7 @@ code.inl {
 .ws-add:hover { background: var(--bg-hover); color: var(--text); }
 .ws-add svg { width: 16px; height: 16px; }
 .ws-menu {
-  position: absolute; z-index: 200;
+  position: absolute; z-index: var(--z-dropdown);
   top: 34px; left: 0;
   min-width: 150px;
   background: var(--bg-elevated);
@@ -780,8 +781,11 @@ html[data-theme="dark"] img.empty-logo { filter: invert(1); }
 .send-btn svg { width: 17px; height: 17px; }
 
 /* dropdown menu */
+/* z-index scale: panes/content = auto · composer shell = 10 · in-flow popovers
+   (queue/run-status) = 50–80 · all dropdown menus = var(--z-dropdown) so they
+   always sit above split panes · (future modals/toasts go higher). */
 .menu {
-  position: absolute; z-index: 50;
+  position: absolute; z-index: var(--z-dropdown);
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
   border-radius: 12px;

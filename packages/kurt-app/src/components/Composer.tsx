@@ -8,10 +8,17 @@ import { T, tr } from "../i18n/strings.ts";
 import { Icon } from "./Icon.tsx";
 import { ModelLogo } from "./ModelLogo.tsx";
 
-function MenuPopover({ open, title, children }: { open: boolean; title?: string; children: React.ReactNode }) {
+/** A dropdown that opens UPWARD from its trigger. Rendered position:fixed (anchored
+ *  to the button) so it escapes the workspace panes' `overflow:hidden` clipping;
+ *  horizontally clamped to stay on-screen. */
+function MenuPopover({ open, title, anchorRef, children }: { open: boolean; title?: string; anchorRef: React.RefObject<HTMLButtonElement | null>; children: React.ReactNode }) {
   if (!open) return null;
+  const r = anchorRef.current?.getBoundingClientRect();
+  const style: React.CSSProperties = r
+    ? { position: "fixed", bottom: window.innerHeight - r.top + 6, left: Math.min(r.left, window.innerWidth - 250) }
+    : { position: "absolute", bottom: 40, left: 0 };
   return (
-    <div className="menu" style={{ position: "absolute", bottom: 40, left: 0 }}>
+    <div className="menu" style={style}>
       {title && <div className="menu-title">{title}</div>}
       {children}
     </div>
@@ -19,10 +26,11 @@ function MenuPopover({ open, title, children }: { open: boolean; title?: string;
 }
 
 function PlusMenu({ lang, open, onToggle }: { lang: Lang; open: boolean; onToggle: () => void }) {
+  const btnRef = useRef<HTMLButtonElement>(null);
   return (
     <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
-      <button className="pill-btn ghost" onClick={onToggle}><Icon name="plus" /></button>
-      <MenuPopover open={open} title={tr(T.menuAdd, lang)}>
+      <button ref={btnRef} className="pill-btn ghost" onClick={onToggle}><Icon name="plus" /></button>
+      <MenuPopover open={open} anchorRef={btnRef} title={tr(T.menuAdd, lang)}>
         <div className="menu-item" onClick={onToggle}><Icon name="paperclip" />{tr(T.addAttach, lang)}</div>
         <div className="menu-item" onClick={onToggle}><Icon name="folder" />{tr(T.chooseFolder, lang)}</div>
         <div className="menu-item" onClick={onToggle}><Icon name="globe" />{tr(T.pasteUrl, lang)}</div>
@@ -36,12 +44,13 @@ function ModelMenu({ value, options, onChange, open, onToggle, thinking, onThink
   thinking: boolean; onThinkingToggle: () => void; lang: Lang;
 }) {
   const opts = options.length ? options : [value];
+  const btnRef = useRef<HTMLButtonElement>(null);
   return (
     <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
-      <button className="pill-btn" onClick={onToggle}>
+      <button ref={btnRef} className="pill-btn" onClick={onToggle}>
         <ModelLogo model={value} />{value}<Icon name="chevD" className="chev" />
       </button>
-      <MenuPopover open={open} title={tr(T.menuModel, lang)}>
+      <MenuPopover open={open} anchorRef={btnRef} title={tr(T.menuModel, lang)}>
         {opts.map((m) => (
           <div key={m} className={"menu-item" + (m === value ? " sel" : "")} onClick={() => { onChange(m); onToggle(); }}>
             <ModelLogo model={m} />{m}
@@ -61,12 +70,13 @@ function ModelMenu({ value, options, onChange, open, onToggle, thinking, onThink
 
 function EffortMenu({ value, onChange, lang, open, onToggle }: { value: Effort; onChange: (v: Effort) => void; lang: Lang; open: boolean; onToggle: () => void }) {
   const label = (k: Effort) => ({ low: tr(T.effortLow, lang), med: tr(T.effortMed, lang), high: tr(T.effortHigh, lang), max: tr(T.effortMax, lang) })[k];
+  const btnRef = useRef<HTMLButtonElement>(null);
   return (
     <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
-      <button className="pill-btn" onClick={onToggle}>
+      <button ref={btnRef} className="pill-btn" onClick={onToggle}>
         <Icon name="sliders" />{label(value)}<Icon name="chevD" className="chev" />
       </button>
-      <MenuPopover open={open} title={tr(T.menuEffort, lang)}>
+      <MenuPopover open={open} anchorRef={btnRef} title={tr(T.menuEffort, lang)}>
         {(["low", "med", "high", "max"] as Effort[]).map((k) => (
           <div key={k} className={"menu-item" + (k === value ? " sel" : "")} onClick={() => { onChange(k); onToggle(); }}>
             <Icon name="sliders" />{label(k)}{k === "max" ? tr(T.effortMaxNote, lang) : ""}
@@ -79,12 +89,13 @@ function EffortMenu({ value, onChange, lang, open, onToggle }: { value: Effort; 
 
 function ModeMenu({ value, onChange, lang, open, onToggle }: { value: Mode; onChange: (v: Mode) => void; lang: Lang; open: boolean; onToggle: () => void }) {
   const label = (m: Mode) => ({ chat: tr(T.modeChat, lang), agent: tr(T.modeAgent, lang), plan: tr(T.modePlan, lang) })[m];
+  const btnRef = useRef<HTMLButtonElement>(null);
   return (
     <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
-      <button className="pill-btn" onClick={onToggle}>
+      <button ref={btnRef} className="pill-btn" onClick={onToggle}>
         <Icon name="chat" />{label(value)}<Icon name="chevD" className="chev" />
       </button>
-      <MenuPopover open={open} title={tr(T.menuMode, lang)}>
+      <MenuPopover open={open} anchorRef={btnRef} title={tr(T.menuMode, lang)}>
         {(["chat", "agent", "plan"] as Mode[]).map((m) => (
           <div key={m} className={"menu-item" + (m === value ? " sel" : "")} onClick={() => { onChange(m); onToggle(); }}>
             <Icon name="chat" />{label(m)}
