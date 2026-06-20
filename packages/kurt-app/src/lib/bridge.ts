@@ -24,10 +24,17 @@ export interface AskRequest {
   options?: string[];
 }
 
+/** One step of the agent's plan (update_plan tool → Plan tab). */
+export interface PlanStep {
+  title: string;
+  status: "pending" | "in_progress" | "done";
+}
+
 /** SSE frames the bridge streams during a run. */
 export type RunFrame =
   | { kind: "session"; id: string; title: string }
   | { kind: "step"; step: Step } // a step created/changed — upsert by _id
+  | { kind: "plan"; steps: PlanStep[] } // the agent (re)recorded its plan
   | ({ kind: "approval" } & ApprovalRequest) // sensitive op blocks until POST /approve
   | ({ kind: "ask" } & AskRequest) // ask_user blocks until POST /answer
   | { kind: "usage"; inputTokens: number; outputTokens: number; totalTokens: number }
@@ -53,6 +60,7 @@ export interface SessionDetail {
 export interface RunHandlers {
   onSession?: (id: string, title: string) => void;
   onStep?: (step: Step) => void;
+  onPlan?: (steps: PlanStep[]) => void;
   onApproval?: (req: ApprovalRequest) => void;
   onAsk?: (req: AskRequest) => void;
   onUsage?: (u: { inputTokens: number; outputTokens: number; totalTokens: number }) => void;
@@ -114,6 +122,7 @@ function dispatch(block: string, handlers: RunHandlers): void {
   switch (frame.kind) {
     case "session": handlers.onSession?.(frame.id, frame.title); break;
     case "step": handlers.onStep?.(frame.step); break;
+    case "plan": handlers.onPlan?.(frame.steps); break;
     case "approval": handlers.onApproval?.(frame); break;
     case "ask": handlers.onAsk?.(frame); break;
     case "usage": handlers.onUsage?.(frame); break;

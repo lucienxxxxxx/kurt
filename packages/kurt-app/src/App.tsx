@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { Effort, Lang, Loc, Mode, QueuedMsg, SessionMeta, Step, Tab, TabKind, Theme } from "./types.ts";
 import { T, tr } from "./i18n/strings.ts";
-import { runStream, listSessions, getSession, getInfo, approve, answer, truncateSession, deleteSession, readFile, rawFileUrl, type ApprovalRequest, type AskRequest } from "./lib/bridge.ts";
+import { runStream, listSessions, getSession, getInfo, approve, answer, truncateSession, deleteSession, readFile, rawFileUrl, type ApprovalRequest, type AskRequest, type PlanStep } from "./lib/bridge.ts";
 import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
 import { externalLinkFromClick, openExternal } from "./lib/external.ts";
 import { fmtElapsed, fmtTokens } from "./lib/format.ts";
@@ -21,6 +21,7 @@ import { Workspace } from "./components/workspace/Workspace.tsx";
 import { PreviewTab, previewKindFor } from "./components/workspace/PreviewTab.tsx";
 import { FilesTab } from "./components/workspace/FilesTab.tsx";
 import { PlaceholderTab } from "./components/workspace/PlaceholderTab.tsx";
+import { PlanTab } from "./components/workspace/PlanTab.tsx";
 import { renderStep, type OpenOutput } from "./components/thread/steps.tsx";
 import { MdBlock } from "./components/Markdown.tsx";
 import { CopyButton, MessageTime } from "./components/MessageActions.tsx";
@@ -42,6 +43,7 @@ interface Run {
   queue: QueuedMsg[];         // messages queued onto THIS run while it streams
   startedAt: number;          // for the elapsed-time readout
   tokens: number;             // total tokens reported via usage frames
+  previewables: string[];     // previewable docs (md/html/pdf) written this run → auto-preview on done
 }
 
 const persisted = <V extends string>(key: string, fallback: V): V => {
@@ -82,6 +84,9 @@ export default function App() {
   const [, forceTick] = useState(0);
   const [tabs, dispatchTabs] = useReducer(tabsReducer, undefined, () => initTabs(tr(T.tabSession, lang)));
   const tabCounter = useRef(0);
+  const plansRef = useRef<Map<string, PlanStep[]>>(new Map()); // latest plan per session (live, per launch)
+  const autoPlanRef = useRef<Set<string>>(new Set());          // sessions whose Plan tab was auto-opened
+  const [viewPlan, setViewPlan] = useState<PlanStep[] | undefined>(undefined); // plan of the viewed session
   // Approvals are keyed by the session their run belongs to, so switching
   // sessions doesn't lose a pending prompt — it re-appears when you switch back.
   const [pendingApprovals, setPendingApprovals] = useState<Record<string, ApprovalRequest>>({});
@@ -233,6 +238,25 @@ export default function App() {
             let appId = run.idMap.get(bridgeStep._id);
             if (appId === undefined) { appId = uid(); run.idMap.set(bridgeStep._id, appId); }
             upsertRun(run, { ...bridgeStep, _id: appId } as Step);
+            // Track previewable docs written this run (md/html/pdf) for auto-preview on done.
+            if (bridgeStep.type === "tool" && bridgeStep.name === "write_file" && typeof bridgeStep.title === "string" && bridgeStep.title) {
+              const path = bridgeStep.title;
+              const kind = previewKindFor(path);
+              if ((kind === "markdown" || kind === "html" || kind === "pdf") && !run.previewables.includes(path)) run.previewables.push(path);
+            }
+          },
+          onPlan: (steps) => {
+            const sid = run.sessionId;
+            if (!sid) return;
+            plansRef.current.set(sid, steps);
+            if (isViewing(run)) {
+              setViewPlan(steps);
+              if (!autoPlanRef.current.has(sid)) { // auto split-open the Plan tab the first time
+                autoPlanRef.current.add(sid);
+                dispatchTabs({ type: "add", tab: { id: "plan", kind: "plan", title: tr(T.tabPlan, lang), closable: true } });
+                dispatchTabs({ type: "split", id: "plan" });
+              }
+            }
           },
           onApproval: (req) => { if (run.sessionId) setPendingApprovals((m) => ({ ...m, [run.sessionId!]: req })); },
           onAsk: (req) => { if (run.sessionId) setPendingAsks((m) => ({ ...m, [run.sessionId!]: req })); },
@@ -260,6 +284,10 @@ export default function App() {
         if (run.sessionId && run.sessionId !== activeIdRef.current) setUnread((u) => new Set(u).add(run.sessionId!));
         if (newChatRunIdRef.current === run.runId) setNewChatRun(null);
         if (isViewing(run)) { setLiveId(null); setQueuedMsgs([]); setViewStats(null); }
+        // Auto-preview: the run finished and produced a document → split-open the last one.
+        if (!run.ctrl.signal.aborted && run.previewables.length > 0 && isViewing(run)) {
+          openFile(run.previewables[run.previewables.length - 1]!);
+        }
         void refreshSessions();
       }
     }
@@ -267,7 +295,7 @@ export default function App() {
 
   /** Start a fresh run for `sessionId` (null = the unsaved new chat in view). */
   const beginRun = (sessionId: string | null, seed: Step[], text: string): void => {
-    const run: Run = { runId: uid(), sessionId, ctrl: new AbortController(), buf: seed, idMap: new Map(), queue: [], startedAt: Date.now(), tokens: 0 };
+    const run: Run = { runId: uid(), sessionId, ctrl: new AbortController(), buf: seed, idMap: new Map(), queue: [], startedAt: Date.now(), tokens: 0, previewables: [] };
     runsRef.current.set(run.runId, run);
     if (sessionId) setRunningIds((s) => new Set(s).add(sessionId));
     else setNewChatRun(run.runId);
@@ -398,8 +426,8 @@ export default function App() {
       case "session": return renderSessionPane();
       case "files": return <FilesTab lang={lang} onOpenFile={openFile} />;
       case "preview": return <PreviewTab tab={tab} lang={lang} />;
+      case "plan": return <PlanTab steps={viewPlan} lang={lang} />;
       case "terminal": return <PlaceholderTab icon="terminal" label={tr(T.tabTerminal, lang)} lang={lang} />;
-      case "plan": return <PlaceholderTab icon="list" label={tr(T.tabPlan, lang)} lang={lang} />;
       default: return null;
     }
   };
@@ -414,6 +442,7 @@ export default function App() {
     setActive(id);
     setUnread((u) => { if (!u.has(id)) return u; const n = new Set(u); n.delete(id); return n; }); // clicking clears the unread dot
     setCollapsed(new Set());
+    setViewPlan(plansRef.current.get(id)); // show this session's plan (if any) in the Plan tab
     wantScroll.current = true;
     const meta = sessionList.find((s) => s.id === id);
     const title = meta && meta.title ? meta.title : T.convNew;
@@ -456,7 +485,7 @@ export default function App() {
     setNewChatRun(null);
     setLoadingSession(false); wantScroll.current = true;
     setThread([]); setLiveId(null); setQueuedMsgs([]); setViewStats(null);
-    setTitleEntry(T.convNew); setCollapsed(new Set());
+    setTitleEntry(T.convNew); setCollapsed(new Set()); setViewPlan(undefined);
   };
 
   /** Delete a session: stop its run if any, drop it from the bridge, clear its
