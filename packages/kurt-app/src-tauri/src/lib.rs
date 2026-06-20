@@ -91,6 +91,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(Bridge { child: Mutex::new(None), port: Arc::new(Mutex::new(None)) })
         .manage(pty::Ptys::default())
         .invoke_handler(tauri::generate_handler![bridge_url, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill])

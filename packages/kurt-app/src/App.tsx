@@ -13,6 +13,7 @@ import { fmtElapsed, fmtTokens } from "./lib/format.ts";
 import { initTabs, tabsReducer, type TabsAction } from "./lib/tabs.ts";
 import { isNearBottom } from "./lib/scroll.ts";
 import { playSend, runComplete } from "./lib/notify.ts";
+import { pickFolder } from "./lib/dialog.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
 import { Settings } from "./components/Settings.tsx";
@@ -45,6 +46,7 @@ interface Run {
   startedAt: number;          // for the elapsed-time readout
   tokens: number;             // total tokens reported via usage frames
   previewables: string[];     // previewable docs (md/html/pdf) written this run → auto-preview on done
+  workspace: string;          // the conversation's workspace for this run
 }
 
 const persisted = <V extends string>(key: string, fallback: V): V => {
@@ -67,7 +69,10 @@ export default function App() {
   const [input, setInput] = useState("");
   const [model, setModel] = useState<string>(() => persisted<string>("kurt-model", ""));
   const [models, setModels] = useState<string[]>([]);
-  const [workspace, setWorkspace] = useState<string>(""); // bridge workspace root → terminal cwd
+  const [workspace, setWorkspace] = useState<string>(""); // bridge default workspace (fallback)
+  // The viewed conversation's workspace (folder picker). New chats default to the
+  // last-picked dir (persisted), then the bridge default.
+  const [convWorkspace, setConvWorkspace] = useState<string>(() => { try { return localStorage.getItem("kurt-workspace") || ""; } catch { return ""; } });
   const [effort, setEffort] = useState<Effort>(() => persisted<Effort>("kurt-effort", "med"));
   const [mode, setMode] = useState<Mode>(() => persisted<Mode>("kurt-mode", "agent"));
   const [thinking, setThinking] = useState<boolean>(() => { try { return localStorage.getItem("kurt-thinking") === "1"; } catch { return false; } });
@@ -233,7 +238,7 @@ export default function App() {
     void (async () => {
       try {
         const info = await getInfo(await resolveBridgeUrl());
-        if (info) { setModels(info.models); setModel((m) => m || info.model); setWorkspace(info.workspace || ""); }
+        if (info) { setModels(info.models); setModel((m) => m || info.model); setWorkspace(info.workspace || ""); setConvWorkspace((w) => w || info.workspace || ""); }
       } catch { /* bridge not ready */ }
     })();
   }, []);
@@ -261,7 +266,7 @@ export default function App() {
       const base = await resolveBridgeUrl();
       await runStream(
         base,
-        { sessionId: run.sessionId ?? undefined, text, model: model || undefined, effort, thinking, mode },
+        { sessionId: run.sessionId ?? undefined, text, model: model || undefined, effort, thinking, mode, workspace: run.workspace || undefined },
         {
           onSession: (id) => {
             const wasUnsaved = run.sessionId === null;
@@ -343,7 +348,7 @@ export default function App() {
 
   /** Start a fresh run for `sessionId` (null = the unsaved new chat in view). */
   const beginRun = (sessionId: string | null, seed: Step[], text: string): void => {
-    const run: Run = { runId: uid(), sessionId, ctrl: new AbortController(), buf: seed, idMap: new Map(), queue: [], startedAt: Date.now(), tokens: 0, previewables: [] };
+    const run: Run = { runId: uid(), sessionId, ctrl: new AbortController(), buf: seed, idMap: new Map(), queue: [], startedAt: Date.now(), tokens: 0, previewables: [], workspace: convWorkspace };
     runsRef.current.set(run.runId, run);
     if (sessionId) setRunningIds((s) => new Set(s).add(sessionId));
     else setNewChatRun(run.runId);
@@ -432,6 +437,14 @@ export default function App() {
     setQueuedMsgs(run.queue.slice());
   };
 
+  // Pick the workspace for the conversation in view; remember it as the new default.
+  const pickWorkspace = async (): Promise<void> => {
+    const dir = await pickFolder(convWorkspace || workspace);
+    if (!dir) return;
+    setConvWorkspace(dir);
+    try { localStorage.setItem("kurt-workspace", dir); } catch { /* ignore */ }
+  };
+
   // ── Workspace tabs ──────────────────────────────────────────────────────────
   /** Create/focus a tab from a group's `+` menu (files/plan/preview singletons;
    *  each terminal is its own tab). Lands in the group whose `+` was clicked. */
@@ -456,9 +469,9 @@ export default function App() {
     void (async () => {
       const base = await resolveBridgeUrl();
       if (kind === "pdf") {
-        dispatchTabs({ type: "update", id, patch: { meta: { content: rawFileUrl(base, path) } } });
+        dispatchTabs({ type: "update", id, patch: { meta: { content: rawFileUrl(base, path, convWorkspace) } } });
       } else {
-        const f = await readFile(base, path);
+        const f = await readFile(base, path, convWorkspace);
         if (f) dispatchTabs({ type: "update", id, patch: { meta: { content: f.content + (f.truncated ? "\n\n… (truncated)" : "") } } });
       }
     })();
@@ -473,10 +486,10 @@ export default function App() {
   const renderPane = (tab: Tab): React.ReactNode => {
     switch (tab.kind) {
       case "session": return renderSessionPane();
-      case "files": return <FilesTab lang={lang} onOpenFile={openFile} />;
+      case "files": return <FilesTab lang={lang} workspace={convWorkspace} onOpenFile={openFile} />;
       case "preview": return <PreviewTab tab={tab} lang={lang} />;
       case "plan": return <PlanTab steps={viewPlan} lang={lang} />;
-      case "terminal": return <Suspense fallback={<div className="ws-empty" />}><TerminalTab key={tab.id} cwd={tab.meta?.cwd || workspace} /></Suspense>;
+      case "terminal": return <Suspense fallback={<div className="ws-empty" />}><TerminalTab key={tab.id} cwd={tab.meta?.cwd || convWorkspace || workspace} /></Suspense>;
       default: return null;
     }
   };
@@ -521,7 +534,7 @@ export default function App() {
       if (detail) sessionCache.current.set(id, detail.steps); // cache even if we've since switched away
       if (activeIdRef.current !== id) return; // a newer switch owns the view now
       setLoadingSession(false);
-      if (detail) { setThread(detail.steps); setTitleEntry(detail.title || T.convNew); }
+      if (detail) { setThread(detail.steps); setTitleEntry(detail.title || T.convNew); if (detail.workspace) setConvWorkspace(detail.workspace); }
     } catch {
       if (activeIdRef.current === id) setLoadingSession(false); // keep whatever we showed
     }
@@ -536,6 +549,7 @@ export default function App() {
     setThread([]); setLiveId(null); setQueuedMsgs([]); setViewStats(null);
     setTitleEntry(T.convNew); setCollapsed(new Set()); setViewPlan(undefined);
     setTabsMap((m) => { const { new: _drop, ...rest } = m; return rest; }); // fresh tabs for the new chat
+    try { setConvWorkspace(localStorage.getItem("kurt-workspace") || workspace); } catch { setConvWorkspace(workspace); } // default to last-picked
   };
 
   /** Delete a session: stop its run if any, drop it from the bridge, clear its
@@ -634,6 +648,7 @@ export default function App() {
           running={viewRunning} queuedMsgs={queuedMsgs} onCancelQueued={cancelQueued} lang={lang}
           model={model} models={models} onModelChange={setModel} effort={effort} onEffortChange={setEffort}
           mode={mode} onModeChange={setMode} thinking={thinking} onThinkingToggle={() => setThinking((v) => !v)}
+          workspace={convWorkspace} onPickWorkspace={() => void pickWorkspace()}
           approval={
             pendingApprovals[approvalKey(activeId)]
               ? <Approval req={pendingApprovals[approvalKey(activeId)]!} lang={lang} onDecide={decideApproval} />

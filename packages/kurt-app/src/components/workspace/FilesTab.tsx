@@ -9,7 +9,7 @@ import { Icon } from "../Icon.tsx";
 import { listDir, type DirEntry } from "../../lib/bridge.ts";
 import { resolveBridgeUrl } from "../../lib/bridgeUrl.ts";
 
-function Node({ entry, depth, onOpenFile }: { entry: DirEntry; depth: number; onOpenFile: (path: string) => void }) {
+function Node({ entry, depth, workspace, onOpenFile }: { entry: DirEntry; depth: number; workspace: string; onOpenFile: (path: string) => void }) {
   const [open, setOpen] = useState(false);
   const [kids, setKids] = useState<DirEntry[] | null>(null);
 
@@ -17,11 +17,11 @@ function Node({ entry, depth, onOpenFile }: { entry: DirEntry; depth: number; on
     if (!open || kids !== null) return;
     let alive = true;
     void (async () => {
-      const listing = await listDir(await resolveBridgeUrl(), entry.path);
+      const listing = await listDir(await resolveBridgeUrl(), entry.path, workspace);
       if (alive) setKids(listing?.entries ?? []);
     })();
     return () => { alive = false; };
-  }, [open, kids, entry.path]);
+  }, [open, kids, entry.path, workspace]);
 
   const pad = { paddingLeft: 8 + depth * 14 };
   if (!entry.dir) {
@@ -39,22 +39,23 @@ function Node({ entry, depth, onOpenFile }: { entry: DirEntry; depth: number; on
         <Icon name="folder" className="files-ico" />
         <span className="files-name">{entry.name}</span>
       </button>
-      {open && kids && kids.map((k) => <Node key={k.path} entry={k} depth={depth + 1} onOpenFile={onOpenFile} />)}
+      {open && kids && kids.map((k) => <Node key={k.path} entry={k} depth={depth + 1} workspace={workspace} onOpenFile={onOpenFile} />)}
     </div>
   );
 }
 
-export function FilesTab({ lang, onOpenFile }: { lang: Lang; onOpenFile: (path: string) => void }) {
+export function FilesTab({ lang, workspace, onOpenFile }: { lang: Lang; workspace: string; onOpenFile: (path: string) => void }) {
   const [entries, setEntries] = useState<DirEntry[] | null | "error">(null);
 
   useEffect(() => {
     let alive = true;
+    setEntries(null);
     void (async () => {
-      const listing = await listDir(await resolveBridgeUrl(), "");
+      const listing = await listDir(await resolveBridgeUrl(), "", workspace);
       if (alive) setEntries(listing ? listing.entries : "error");
     })();
     return () => { alive = false; };
-  }, []);
+  }, [workspace]);
 
   return (
     <div className="files-tab">
@@ -65,7 +66,7 @@ export function FilesTab({ lang, onOpenFile }: { lang: Lang; onOpenFile: (path: 
       ) : entries.length === 0 ? (
         <div className="ws-empty">{tr(T.filesEmpty, lang)}</div>
       ) : (
-        entries.map((e) => <Node key={e.path} entry={e} depth={0} onOpenFile={onOpenFile} />)
+        entries.map((e) => <Node key={e.path} entry={e} depth={0} workspace={workspace} onOpenFile={onOpenFile} />)
       )}
     </div>
   );

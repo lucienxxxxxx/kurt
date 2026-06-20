@@ -133,7 +133,7 @@ function QueueSection({ items, onCancel, lang }: { items: QueuedMsg[]; onCancel:
   );
 }
 
-export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs, onCancelQueued, lang, model, models, onModelChange, effort, onEffortChange, mode, onModeChange, thinking, onThinkingToggle, approval, meter }: {
+export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs, onCancelQueued, lang, model, models, onModelChange, effort, onEffortChange, mode, onModeChange, thinking, onThinkingToggle, workspace, onPickWorkspace, approval, meter }: {
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
@@ -151,6 +151,9 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
   onModeChange: (m: Mode) => void;
   thinking: boolean;
   onThinkingToggle: () => void;
+  /** The conversation's workspace folder + a picker to change it. */
+  workspace: string;
+  onPickWorkspace: () => void;
   /** Approval panel, slotted in just above the input box (same width). */
   approval?: React.ReactNode;
   /** Context meter, slotted just below the input box (bottom-right). */
@@ -209,6 +212,9 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
           <ModelMenu value={model} options={models} onChange={onModelChange} open={openMenu === "model"} onToggle={() => toggle("model")}
             thinking={thinking} onThinkingToggle={onThinkingToggle} lang={lang} />
           <EffortMenu value={effort} onChange={onEffortChange} lang={lang} open={openMenu === "effort"} onToggle={() => toggle("effort")} />
+          <button className="pill-btn ws-btn" onClick={onPickWorkspace} title={workspace || tr(T.workspacePick, lang)}>
+            <Icon name="folder" /><span className="ws-btn-label">{workspace ? (workspace.split("/").pop() || workspace) : tr(T.workspacePick, lang)}</span>
+          </button>
           <div className="bar-spacer" />
           {meter}
         </div>

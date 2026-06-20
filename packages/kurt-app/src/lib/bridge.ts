@@ -54,6 +54,8 @@ export interface SessionDetail {
   id: string;
   title: string;
   updatedAt: number;
+  /** The conversation's workspace folder. */
+  workspace: string;
   steps: Step[];
 }
 
@@ -75,7 +77,7 @@ export interface RunHandlers {
  */
 export async function runStream(
   baseUrl: string,
-  body: { sessionId?: string; text: string; model?: string; effort?: string; thinking?: boolean; mode?: "chat" | "agent" | "plan" },
+  body: { sessionId?: string; text: string; model?: string; effort?: string; thinking?: boolean; mode?: "chat" | "agent" | "plan"; workspace?: string },
   handlers: RunHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -219,21 +221,23 @@ export interface DirEntry { name: string; path: string; dir: boolean }
 export interface DirListing { path: string; entries: DirEntry[] }
 export interface FileContent { path: string; content: string; truncated: boolean }
 
-/** List a workspace directory ("" = root). */
-export async function listDir(baseUrl: string, path = ""): Promise<DirListing | null> {
-  const res = await fetch(`${baseUrl}/fs?path=${encodeURIComponent(path)}`);
+const wsQuery = (workspace?: string): string => (workspace ? `&workspace=${encodeURIComponent(workspace)}` : "");
+
+/** List a directory ("" = root) within the conversation's workspace. */
+export async function listDir(baseUrl: string, path = "", workspace?: string): Promise<DirListing | null> {
+  const res = await fetch(`${baseUrl}/fs?path=${encodeURIComponent(path)}${wsQuery(workspace)}`);
   return res.ok ? ((await res.json()) as DirListing) : null;
 }
 
-/** Read a workspace text file for preview. */
-export async function readFile(baseUrl: string, path: string): Promise<FileContent | null> {
-  const res = await fetch(`${baseUrl}/file?path=${encodeURIComponent(path)}`);
+/** Read a text file (within the conversation's workspace) for preview. */
+export async function readFile(baseUrl: string, path: string, workspace?: string): Promise<FileContent | null> {
+  const res = await fetch(`${baseUrl}/file?path=${encodeURIComponent(path)}${wsQuery(workspace)}`);
   return res.ok ? ((await res.json()) as FileContent) : null;
 }
 
-/** URL serving a workspace file's raw bytes (pdf/html/img <iframe> src). */
-export function rawFileUrl(baseUrl: string, path: string): string {
-  return `${baseUrl}/raw?path=${encodeURIComponent(path)}`;
+/** URL serving a file's raw bytes (pdf/html/img <iframe> src), workspace-confined. */
+export function rawFileUrl(baseUrl: string, path: string, workspace?: string): string {
+  return `${baseUrl}/raw?path=${encodeURIComponent(path)}${wsQuery(workspace)}`;
 }
 
 export async function health(baseUrl: string): Promise<boolean> {
