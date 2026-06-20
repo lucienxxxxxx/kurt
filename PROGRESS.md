@@ -4,7 +4,7 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-17 · `main` @ `9764f39`(回车不再直接发送(Cmd/Ctrl+Enter 才发);API 设置改为 BaseURL/密钥/模型(逗号)/格式 表单 + desktop.json 原始 JSON 编辑器(编辑/确认/校验);config 加 models[]/format + GET /config;前置 `1638a75` 已思考 0s 修复)
+- **最后更新**:2026-06-20 · `main`(**工作区标签栏 Phase A**:标题下标签栏 + 自研左右分屏；会话/文件/预览标签，DetailPanel 统一进标签系统；bridge `/fs`·`/file`·`/raw` + `/info` 暴露 workspace；终端/计划占位。前置:新 app 图标、统一步骤头(脑/扳手/技能图标+内联箭头)、IN/OUT 截断、文件名点击预览、隐藏输入框滚动条、已思考 N秒)
 - **门禁**:kurt-agent **150** · kurt-tui **70** · kurt-bridge **27** · kurt-app build+**Vitest 69**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
@@ -34,6 +34,7 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
 
 | 子阶段 | 内容 | 状态 |
 |---|---|---|
+| 工作区标签-A | **会话标签栏 + 分屏框架(阶段 A)**:标题下新增标签栏——默认「会话」标签(不可关)+ `+` 下拉(终端/文件/计划/预览)+ 标签右键菜单(分屏/取消分屏/关闭);自研左右双屏(`Workspace`，可拖拽分隔条 20–80%)。**统一**:标签系统取代 `DetailPanel`，点文件名/工具输出→开「预览」标签并分屏到会话右侧。文件标签=workspace 文件树(新桥接端点）；预览支持 md/代码/工具输出/html(沙箱 iframe)/pdf(原生)。bridge 新增 `GET /fs`、`/file`、`/raw`（限定 workspace 子树、防越界）+ `/info` 暴露 `workspace`。纯 reducer `tabsReducer`（tabs.test 13）+ WorkspaceTabs.test 5 + bridge fs.test 4/server.test workspace 断言。终端/计划暂为「即将推出」占位（留待阶段 C/B）。 | ✅ 完成（app build + 89 测 · bridge typecheck + 33 测） |
 | 6.0 | 脚手架:Tauri v2 + React + Vite 起架;改名 kurt-app/Kurt;`kurt-app/{CLAUDE,PROJECT_INDEX,MANUAL_TESTS}.md`;Phase 6 进度机制 | ✅ 完成(GUI 开窗人工确认 PASS) |
 | 6.1 | 静态 UI 对齐(mock 数据):复用原型 CSS、侧栏/线程5种步骤渲染器/输入区+菜单/设置/详情面板/主题/中英文/假流式;macOS 真原生交通灯叠加(无双框) | ✅ 完成(`bun run build` ✓ · Vitest 11 ✓ · `cargo check` ✓ · 视觉对齐人工核对 `MANUAL_TESTS §6.1`) |
 | 6.2 | `packages/kurt-bridge`(Bun):`Event`→`Step` over HTTP/SSE、会话 CRUD、集成测试 | ✅ 完成(`StepAccumulator` + Bun.serve `POST /run`(SSE)/sessions;`SessionStore` 上提到 kurt-agent 共享;13 测试,含真实 HTTP/SSE+MockModel 往返) |

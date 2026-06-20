@@ -2,7 +2,7 @@
 
 > Cached architecture map. **Read this first**; scan the tree only for files this map
 > points to. Keep it fresh on every structural change (project-module-workflow Step 6).
-> Last synced: 2026-06-16, after Phase 6.4a/b (live sessions list/reload + approval modal).
+> Last synced: 2026-06-20, after Workspace-tabs Phase A (tab bar + split + Files/Preview; DetailPanel unified into tabs).
 
 ## 1. Overview
 Tauri v2 macOS desktop front-end for kurt (Phase 6). It renders the agent's event
@@ -35,9 +35,11 @@ kurt-app (Tauri+React, this pkg)         kurt-bridge (Bun, packages/kurt-bridge 
 | `src/App.tsx` | Root: UI state, theme/lang (persisted), thread→segment grouping; **real runs via the bridge** (`startRun` streams steps, remaps bridge step ids, stop aborts, queue → multi-turn). Sidebar recents still mock demos | 6.3 ✓ |
 | `src/lib/bridge.ts` | kurt-bridge HTTP/SSE client: `runStream` (parses RunFrames → handlers), `listSessions`/`deleteSession`/`health`. Wire types mirror `kurt-bridge/src/types.ts` | 6.3 ✓ |
 | `src/lib/bridgeUrl.ts` | `resolveBridgeUrl` — polls Tauri `bridge_url` command (auto-spawned port), falls back to `VITE_BRIDGE_URL`/`127.0.0.1:8765` | 6.3 ✓ |
-| `src/components/` | `Icon`, `Markdown`, `Sidebar`, `Composer` (+ menus, queue, run/stop), `Settings`, `DetailPanel`, `thread/steps` (+ `renderStep`), **`Approval`** (sensitive-command modal → `approve()`) | 6.1/6.4b ✓ |
+| `src/components/` | `Icon`, `Markdown`, `Sidebar`, `Composer` (+ menus, queue, run/stop), `Settings`, `thread/steps` (+ `renderStep`), **`Approval`** (sensitive-command modal → `approve()`) | 6.1/6.4b ✓ |
+| `src/components/workspace/` | **Tab framework (Phase A)**: `WorkspaceTabs` (tab bar + `+` dropdown + right-click split/close), `Workspace` (left/right split host w/ draggable divider), `PreviewTab` (md/code/html/pdf/tool-output; replaces DetailPanel), `FilesTab` (workspace tree via bridge `/fs`), `PlaceholderTab` (terminal/plan stubs) | Phase A ✓ |
+| `src/lib/tabs.ts` | Pure `tabsReducer` (add/close/activate/split/unsplit/update) + `initTabs`; left/right two-pane layout (`primaryId`/`secondaryId`) | Phase A ✓ |
 | `src/i18n/strings.ts` | `T` dict + `tr(entry,lang,params)` (ported from i18n.js) | 6.1 ✓ |
-| `src/types.ts` | `Step` discriminated union, `RawStep` (distributive Omit), `Session`/`Panel`/`QueuedMsg` | 6.1 ✓ |
+| `src/types.ts` | `Step` discriminated union, `RawStep` (distributive Omit), `Session`/`Panel`/`QueuedMsg`; **`Tab`/`TabKind`/`TabsState`/`PreviewKind`** | 6.1 / Phase A ✓ |
 | `src/mocks/agent.ts` | `sessions`/`recents`/`liveRun`/`FILE_CONTENT` fixtures (from data.js) | 6.1 (replaced by bridge in 6.3) |
 | `src/styles/` | `tokens.css` (verbatim) + `app.css` (prototype CSS, window shell adapted for Tauri) | 6.1 ✓ |
 | `src/test/setup.ts` | Vitest + jest-dom setup (jsdom env in `vite.config.ts`) | 6.1 ✓ |

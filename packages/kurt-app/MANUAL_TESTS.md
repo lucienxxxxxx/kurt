@@ -449,3 +449,34 @@ Result: ____ (date / pass-fail / notes).
 
 Result: ____ (date / pass-fail / notes).
 
+
+---
+
+## Phase A — Workspace tabs + split (Session / Files / Preview)
+
+Visual/interactive — verify in `bun run tauri dev`.
+
+1. **Tab bar + default tab.** Open a conversation → under the title there's a tab bar with a
+   single **会话/Session** tab (active), and a **+** button. The conversation (thread + composer)
+   renders inside that tab as before. The Session tab has **no close button**.
+2. **+ dropdown.** Click **+** → a menu lists **终端 / 文件 / 计划 / 预览** (Terminal / Files /
+   Plan / Preview). Choosing one adds a tab and focuses it. Clicking outside / Esc closes the menu.
+3. **Files tab.** Add **文件/Files** → a file tree of the workspace appears. Expanding a folder
+   lazy-loads its children. Clicking a file opens a **Preview** tab **split** to the right of the
+   conversation (thread left, preview right).
+4. **Preview content.** A clicked `.md` renders as markdown; a code file (`.ts/.json/…`) shows as
+   monospace text; both show real file content (served by the bridge). An `.html` renders in a
+   sandboxed iframe; a `.pdf` renders in an embedded viewer.
+5. **Tool output → preview.** In a run with a truncated tool output, click the clipped OUT (or a
+   file-tool's filename) → it opens a Preview tab split beside the thread (same as the old detail
+   panel, now a tab).
+6. **Split via right-click.** Right-click any tab → **分屏/Split** puts it in the right pane next
+   to the current one. Right-click the split tab → **取消分屏/Unsplit** collapses back. Drag the
+   divider between panes to resize (20%–80%).
+7. **Switch / close.** Click a tab to bring it to the main (left) pane (collapsing any split onto
+   it). Close a non-session tab via its ✕; closing the split tab clears the split. The Session tab
+   can't be closed.
+8. **Terminal / Plan placeholders.** Adding 终端 or 计划 shows a "即将推出 / Coming soon" panel
+   (real features land in Phases C and B).
+
+Result: ____ (date / pass-fail / notes).
