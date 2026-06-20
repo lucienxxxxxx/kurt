@@ -2,7 +2,7 @@
 
 > Cached architecture map. **Read this first**; scan the tree only for files this map
 > points to. Keep it fresh on every structural change (project-module-workflow Step 6).
-> Last synced: 2026-06-20, after Workspace-tabs Phase A+B (tab bar + split + Files/Preview/Plan; DetailPanel unified into tabs; plan + auto-preview triggers). Terminal (Phase C) still a placeholder.
+> Last synced: 2026-06-20, after Workspace-tabs Phase A+B+C (tab bar + split + Files/Preview/Plan/Terminal; DetailPanel unified into tabs; plan + auto-preview triggers; Rust portable-pty terminal).
 
 ## 1. Overview
 Tauri v2 macOS desktop front-end for kurt (Phase 6). It renders the agent's event
@@ -36,7 +36,8 @@ kurt-app (Tauri+React, this pkg)         kurt-bridge (Bun, packages/kurt-bridge 
 | `src/lib/bridge.ts` | kurt-bridge HTTP/SSE client: `runStream` (parses RunFrames → handlers), `listSessions`/`deleteSession`/`health`. Wire types mirror `kurt-bridge/src/types.ts` | 6.3 ✓ |
 | `src/lib/bridgeUrl.ts` | `resolveBridgeUrl` — polls Tauri `bridge_url` command (auto-spawned port), falls back to `VITE_BRIDGE_URL`/`127.0.0.1:8765` | 6.3 ✓ |
 | `src/components/` | `Icon`, `Markdown`, `Sidebar`, `Composer` (+ menus, queue, run/stop), `Settings`, `thread/steps` (+ `renderStep`), **`Approval`** (sensitive-command modal → `approve()`) | 6.1/6.4b ✓ |
-| `src/components/workspace/` | **Tab framework**: `WorkspaceTabs` (tab bar + `+` dropdown + right-click split/close), `Workspace` (left/right split host w/ draggable divider), `PreviewTab` (md/code/html/pdf/tool-output; replaces DetailPanel), `FilesTab` (workspace tree via bridge `/fs`), `PlanTab` (agent plan checklist from the `plan` frame), `PlaceholderTab` (terminal stub) | Phase A/B ✓ |
+| `src/components/workspace/` | **Tab framework**: `WorkspaceTabs` (tab bar + `+` dropdown + right-click split/close), `Workspace` (left/right split host w/ draggable divider), `PreviewTab` (md/code/html/pdf/tool-output; replaces DetailPanel), `FilesTab` (workspace tree via bridge `/fs`), `PlanTab` (agent plan checklist from the `plan` frame), `TerminalTab` (xterm.js ↔ Rust PTY, lazy-loaded) | Phase A/B/C ✓ |
+| `src-tauri/src/pty.rs` | Terminal backend: portable-pty PTY per tab; commands `pty_spawn`/`pty_write`/`pty_resize`/`pty_kill`; output → `pty:data:<id>` / `pty:exit:<id>` events | Phase C ✓ |
 | `src/lib/tabs.ts` | Pure `tabsReducer` (add/close/activate/split/unsplit/update) + `initTabs`; left/right two-pane layout (`primaryId`/`secondaryId`) | Phase A ✓ |
 | `src/i18n/strings.ts` | `T` dict + `tr(entry,lang,params)` (ported from i18n.js) | 6.1 ✓ |
 | `src/types.ts` | `Step` discriminated union, `RawStep` (distributive Omit), `Session`/`Panel`/`QueuedMsg`; **`Tab`/`TabKind`/`TabsState`/`PreviewKind`** | 6.1 / Phase A ✓ |

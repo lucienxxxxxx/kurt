@@ -503,3 +503,24 @@ Visual/interactive — `bun run tauri dev`. Best in **Plan/Agent mode** (so `upd
    watching.
 
 Result: ____ (date / pass-fail / notes).
+
+---
+
+## Phase C — Terminal (Rust portable-pty + xterm.js)
+
+Visual/interactive — must run in `bun run tauri dev` (the PTY is native; plain `vite` dev shows
+"Terminal unavailable").
+
+1. **Open a terminal.** `+` → **终端/Terminal** → a shell prompt appears, **rooted at the
+   workspace** (run `pwd` to confirm). Multiple `+`→Terminal opens independent shells (Terminal 1,
+   Terminal 2, …).
+2. **Interactive.** Type commands (`ls`, `echo hi`, `vim`/`top` and quit) — full interactivity,
+   colors, cursor. Ctrl-C interrupts a running command.
+3. **Resize.** Resize the window, or split the terminal beside another tab and drag the divider —
+   the shell reflows (run `tput cols` before/after; `top` redraws to the new width).
+4. **Split with the conversation.** Right-click the Terminal tab → 分屏 → use the shell on the
+   right while watching the thread on the left.
+5. **Close kills the shell.** Close the Terminal tab (✕) → the underlying shell process is killed
+   (no orphan). Quitting the app kills all shells.
+
+Result: ____ (date / pass-fail / notes).
