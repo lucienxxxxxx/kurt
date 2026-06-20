@@ -171,6 +171,8 @@ export interface BridgeInfo {
   hasKey: boolean;
   model: string;
   models: string[];
+  /** The bridge's workspace root (Files tab + terminal cwd). */
+  workspace: string;
 }
 
 export async function getInfo(baseUrl: string): Promise<BridgeInfo | null> {

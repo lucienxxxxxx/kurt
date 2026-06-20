@@ -59,6 +59,7 @@ export default function App() {
   const [input, setInput] = useState("");
   const [model, setModel] = useState("");
   const [models, setModels] = useState<string[]>([]);
+  const [workspace, setWorkspace] = useState<string>("");
   const [effort, setEffort] = useState<Effort>("med");
   const [mode, setMode] = useState<Mode>(() => persisted<Mode>("kurt-mode", "agent"));
   const [thinking, setThinking] = useState<boolean>(() => { try { return localStorage.getItem("kurt-thinking") === "1"; } catch { return false; } });
@@ -182,7 +183,7 @@ export default function App() {
     void (async () => {
       try {
         const info = await getInfo(await resolveBridgeUrl());
-        if (info) { setModels(info.models); setModel((m) => m || info.model); }
+        if (info) { setModels(info.models); setModel((m) => m || info.model); setWorkspace(info.workspace || ""); }
       } catch { /* bridge not ready */ }
     })();
   }, []);

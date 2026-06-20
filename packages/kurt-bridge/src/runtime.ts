@@ -92,6 +92,9 @@ export interface RuntimeInfo {
   model: string;
   /** Selectable model ids for the composer's model menu. */
   models: string[];
+  /** This bridge's workspace root — the desktop uses it for the Files tab and the
+   *  terminal's cwd. */
+  workspace: string;
 }
 
 /** Model ids the desktop can pick from (DeepSeek; matches kurt-agent capabilities). */
@@ -376,7 +379,7 @@ export function productionRuntime(workspace = process.cwd()): Runtime {
   ];
 
   const rt = createRuntime({ workspace, model, makeTools, store: new SessionStore(sessionsDir()) });
-  rt.info = () => ({ hasKey: cfg.apiKey.length > 0, model: cfg.models[0] ?? "", models: cfg.models });
+  rt.info = () => ({ hasKey: cfg.apiKey.length > 0, model: cfg.models[0] ?? "", models: cfg.models, workspace: rt.workspace });
   rt.fullConfig = () => ({ apiKey: cfg.apiKey, baseURL: cfg.baseURL, models: cfg.models, format: cfg.format });
   rt.reconfigure = (patch) => {
     if (patch.apiKey !== undefined) cfg.apiKey = patch.apiKey;
