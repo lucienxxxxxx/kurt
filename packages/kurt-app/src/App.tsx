@@ -12,6 +12,7 @@ import { externalLinkFromClick, openExternal } from "./lib/external.ts";
 import { fmtElapsed, fmtTokens } from "./lib/format.ts";
 import { initTabs, tabsReducer, type TabsAction } from "./lib/tabs.ts";
 import { isNearBottom } from "./lib/scroll.ts";
+import { playSend, runComplete } from "./lib/notify.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
 import { Settings } from "./components/Settings.tsx";
@@ -329,6 +330,12 @@ export default function App() {
         if (!run.ctrl.signal.aborted && run.previewables.length > 0 && isViewing(run)) {
           openFile(run.previewables[run.previewables.length - 1]!);
         }
+        // Completion chime + (when unfocused) a desktop notification.
+        if (!run.ctrl.signal.aborted) {
+          const meta = run.sessionId ? sessionList.find((s) => s.id === run.sessionId) : null;
+          const title = meta && meta.title ? tr(meta.title, lang) : tr(T.convNew, lang);
+          runComplete(`${title} · ${tr(T.notifyDone, lang)}`);
+        }
         void refreshSessions();
       }
     }
@@ -349,6 +356,7 @@ export default function App() {
     const text = input.trim();
     if (!text) return;
     setInput("");
+    playSend(); // audible send cue
     // Sending is an explicit "show me the latest" action → resume bottom-follow.
     followRef.current = true; setShowJump(false);
     const run = viewedRun();
