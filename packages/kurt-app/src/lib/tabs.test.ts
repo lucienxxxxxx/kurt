@@ -1,102 +1,118 @@
 import { describe, expect, test } from "vitest";
-import { initTabs, tabsReducer, isVisible, SESSION_TAB_ID } from "./tabs.ts";
-import type { Tab } from "../types.ts";
+import { initTabs, tabsReducer, activeTab, isVisible, SESSION_TAB_ID } from "./tabs.ts";
+import type { Tab, TabsState } from "../types.ts";
 
 const tab = (id: string, kind: Tab["kind"] = "files"): Tab => ({ id, kind, title: id, closable: true });
+const ids = (s: TabsState, g: number) => s.groups[g]!.tabs.map((t) => t.id);
 
-describe("tabsReducer", () => {
-  test("init has one non-closable session tab, primary=session, no split", () => {
+describe("tabsReducer (editor groups)", () => {
+  test("init: one group with the non-closable session tab", () => {
     const s = initTabs("会话");
-    expect(s.tabs).toHaveLength(1);
-    expect(s.tabs[0]).toMatchObject({ id: SESSION_TAB_ID, kind: "session", closable: false });
-    expect(s.primaryId).toBe(SESSION_TAB_ID);
-    expect(s.secondaryId).toBeNull();
+    expect(s.groups).toHaveLength(1);
+    expect(ids(s, 0)).toEqual([SESSION_TAB_ID]);
+    expect(s.groups[0]!.activeId).toBe(SESSION_TAB_ID);
+    expect(s.focused).toBe(0);
   });
 
-  test("add appends and focuses the new tab in the primary pane", () => {
+  test("add appends to the focused group and activates it", () => {
     const s = tabsReducer(initTabs("会话"), { type: "add", tab: tab("t1") });
-    expect(s.tabs.map((t) => t.id)).toEqual([SESSION_TAB_ID, "t1"]);
-    expect(s.primaryId).toBe("t1");
+    expect(ids(s, 0)).toEqual([SESSION_TAB_ID, "t1"]);
+    expect(s.groups[0]!.activeId).toBe("t1");
   });
 
-  test("add is idempotent on id — re-focuses instead of duplicating", () => {
+  test("add is idempotent on id — refocuses where it already lives", () => {
     let s = tabsReducer(initTabs("会话"), { type: "add", tab: tab("files") });
     s = tabsReducer(s, { type: "activate", id: SESSION_TAB_ID });
     s = tabsReducer(s, { type: "add", tab: tab("files") });
-    expect(s.tabs.filter((t) => t.id === "files")).toHaveLength(1);
-    expect(s.primaryId).toBe("files");
+    expect(s.groups[0]!.tabs.filter((t) => t.id === "files")).toHaveLength(1);
+    expect(s.groups[0]!.activeId).toBe("files");
   });
 
-  test("activate changes the primary pane", () => {
-    let s = tabsReducer(initTabs("会话"), { type: "add", tab: tab("t1") });
-    s = tabsReducer(s, { type: "activate", id: SESSION_TAB_ID });
-    expect(s.primaryId).toBe(SESSION_TAB_ID);
-  });
-
-  test("split shows a second tab in the right pane (two distinct panes)", () => {
-    let s = tabsReducer(initTabs("会话"), { type: "add", tab: tab("t1") }); // primary=t1
-    s = tabsReducer(s, { type: "split", id: SESSION_TAB_ID });
-    expect(s.primaryId).toBe("t1");
-    expect(s.secondaryId).toBe(SESSION_TAB_ID);
-    expect(isVisible(s, "t1")).toBe(true);
+  test("split moves a tab into a new second group (its own strip)", () => {
+    let s = tabsReducer(initTabs("会话"), { type: "add", tab: tab("t1") }); // group0: [session, t1]
+    s = tabsReducer(s, { type: "split", id: "t1" });
+    expect(s.groups).toHaveLength(2);
+    expect(ids(s, 0)).toEqual([SESSION_TAB_ID]); // t1 left group 0
+    expect(ids(s, 1)).toEqual(["t1"]);
+    expect(s.focused).toBe(1);
     expect(isVisible(s, SESSION_TAB_ID)).toBe(true);
+    expect(isVisible(s, "t1")).toBe(true);
   });
 
-  test("split cannot split a single tab against itself", () => {
+  test("split is refused for a lone tab (nothing to leave behind)", () => {
     const s = tabsReducer(initTabs("会话"), { type: "split", id: SESSION_TAB_ID });
-    expect(s.secondaryId).toBeNull();
+    expect(s.groups).toHaveLength(1);
   });
 
-  test("splitting the current primary moves primary to a neighbour", () => {
-    let s = tabsReducer(initTabs("会话"), { type: "add", tab: tab("t1") }); // primary=t1
-    s = tabsReducer(s, { type: "split", id: "t1" }); // split the primary itself
-    expect(s.secondaryId).toBe("t1");
-    expect(s.primaryId).not.toBe("t1");
-  });
-
-  test("activating the split tab collapses the split", () => {
+  test("split on an already-split tab moves it to the other pane", () => {
     let s = tabsReducer(initTabs("会话"), { type: "add", tab: tab("t1") });
-    s = tabsReducer(s, { type: "split", id: SESSION_TAB_ID }); // secondary=session
+    s = tabsReducer(s, { type: "add", tab: tab("t2") });   // group0: [session, t1, t2]
+    s = tabsReducer(s, { type: "split", id: "t2" });        // group1: [t2]
+    s = tabsReducer(s, { type: "split", id: "t1" });        // move t1 → group1
+    expect(ids(s, 0)).toEqual([SESSION_TAB_ID]);
+    expect(ids(s, 1)).toEqual(["t2", "t1"]);
+  });
+
+  test("addSplit opens a tab beside (second group), creating it", () => {
+    const s = tabsReducer(initTabs("会话"), { type: "addSplit", tab: tab("prev", "preview") });
+    expect(s.groups).toHaveLength(2);
+    expect(ids(s, 1)).toEqual(["prev"]);
+    expect(s.focused).toBe(1);
+  });
+
+  test("addSplit into an existing second group appends there", () => {
+    let s = tabsReducer(initTabs("会话"), { type: "addSplit", tab: tab("a", "preview") });
+    s = tabsReducer(s, { type: "addSplit", tab: tab("b", "preview") });
+    expect(ids(s, 1)).toEqual(["a", "b"]);
+  });
+
+  test("activate focuses the group that holds the tab", () => {
+    let s = tabsReducer(initTabs("会话"), { type: "add", tab: tab("t1") });
+    s = tabsReducer(s, { type: "split", id: "t1" }); // group1 focused
     s = tabsReducer(s, { type: "activate", id: SESSION_TAB_ID });
-    expect(s.primaryId).toBe(SESSION_TAB_ID);
-    expect(s.secondaryId).toBeNull();
+    expect(s.focused).toBe(0);
+    expect(s.groups[0]!.activeId).toBe(SESSION_TAB_ID);
   });
 
-  test("unsplit collapses to a single pane", () => {
+  test("closing the last tab of a group collapses the split", () => {
     let s = tabsReducer(initTabs("会话"), { type: "add", tab: tab("t1") });
-    s = tabsReducer(s, { type: "split", id: SESSION_TAB_ID });
-    s = tabsReducer(s, { type: "unsplit" });
-    expect(s.secondaryId).toBeNull();
-  });
-
-  test("close removes a tab and falls back to the left neighbour", () => {
-    let s = tabsReducer(initTabs("会话"), { type: "add", tab: tab("t1") });
-    s = tabsReducer(s, { type: "add", tab: tab("t2") }); // [session, t1, t2], primary=t2
-    s = tabsReducer(s, { type: "close", id: "t2" });
-    expect(s.tabs.map((t) => t.id)).toEqual([SESSION_TAB_ID, "t1"]);
-    expect(s.primaryId).toBe("t1");
-  });
-
-  test("closing the split tab clears the split", () => {
-    let s = tabsReducer(initTabs("会话"), { type: "add", tab: tab("t1") });
-    s = tabsReducer(s, { type: "split", id: SESSION_TAB_ID }); // secondary=session... can't close session
-    s = tabsReducer(s, { type: "activate", id: SESSION_TAB_ID }); // reset
-    s = tabsReducer(s, { type: "add", tab: tab("t2") });
-    s = tabsReducer(s, { type: "split", id: "t1" }); // secondary=t1
+    s = tabsReducer(s, { type: "split", id: "t1" });  // group1: [t1]
     s = tabsReducer(s, { type: "close", id: "t1" });
-    expect(s.secondaryId).toBeNull();
+    expect(s.groups).toHaveLength(1);
+    expect(ids(s, 0)).toEqual([SESSION_TAB_ID]);
+  });
+
+  test("close falls back to the left neighbour within a group", () => {
+    let s = tabsReducer(initTabs("会话"), { type: "add", tab: tab("t1") });
+    s = tabsReducer(s, { type: "add", tab: tab("t2") }); // active t2
+    s = tabsReducer(s, { type: "close", id: "t2" });
+    expect(ids(s, 0)).toEqual([SESSION_TAB_ID, "t1"]);
+    expect(s.groups[0]!.activeId).toBe("t1");
   });
 
   test("the session tab cannot be closed", () => {
     const s = tabsReducer(initTabs("会话"), { type: "close", id: SESSION_TAB_ID });
-    expect(s.tabs.some((t) => t.id === SESSION_TAB_ID)).toBe(true);
+    expect(ids(s, 0)).toContain(SESSION_TAB_ID);
   });
 
-  test("update patches title and merges meta", () => {
-    let s = tabsReducer(initTabs("会话"), { type: "add", tab: { id: "p", kind: "preview", title: "a", closable: true, meta: { file: "x" } } });
+  test("unsplit merges the second group back into the first", () => {
+    let s = tabsReducer(initTabs("会话"), { type: "add", tab: tab("t1") });
+    s = tabsReducer(s, { type: "split", id: "t1" });
+    s = tabsReducer(s, { type: "unsplit" });
+    expect(s.groups).toHaveLength(1);
+    expect(ids(s, 0)).toEqual([SESSION_TAB_ID, "t1"]);
+  });
+
+  test("update patches a tab wherever it lives and merges meta", () => {
+    let s = tabsReducer(initTabs("会话"), { type: "addSplit", tab: { id: "p", kind: "preview", title: "a", closable: true, meta: { file: "x" } } });
     s = tabsReducer(s, { type: "update", id: "p", patch: { title: "b", meta: { previewKind: "markdown" } } });
-    const p = s.tabs.find((t) => t.id === "p")!;
+    const p = s.groups[1]!.tabs.find((t) => t.id === "p")!;
     expect(p.title).toBe("b");
     expect(p.meta).toEqual({ file: "x", previewKind: "markdown" });
+  });
+
+  test("activeTab returns the group's active tab", () => {
+    const s = tabsReducer(initTabs("会话"), { type: "add", tab: tab("t1") });
+    expect(activeTab(s.groups[0]!)!.id).toBe("t1");
   });
 });

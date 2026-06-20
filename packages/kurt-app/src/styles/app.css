@@ -409,15 +409,19 @@ code.inl {
 .read-file-link:hover { text-decoration-color: var(--accent); }
 .read-meta { color: var(--text-muted); font-size: 13.5px; }
 
-/* ── Workspace tab bar (under the title) ───────────────────────────────────── */
+/* ── Workspace tab strip (one per editor group, under the title) ───────────── */
 .ws-tabs {
   flex: 0 0 auto;
   display: flex; align-items: center; gap: 2px;
   padding: 0 12px;
   border-bottom: 1px solid var(--border);
   position: relative;
+  overflow-x: auto;
   user-select: none;
 }
+.ws-tabs::-webkit-scrollbar { height: 0; }
+/* the focused group's strip gets a subtle accent underline */
+.ws-tabs.focused { box-shadow: inset 0 -2px 0 var(--accent-soft); }
 .ws-tab {
   display: flex; align-items: center; gap: 6px;
   max-width: 200px;
@@ -475,9 +479,11 @@ code.inl {
 .ws-menu-item:disabled { opacity: .4; cursor: default; }
 .ws-menu-item svg { width: 15px; height: 15px; flex: 0 0 15px; color: var(--text-faint); }
 
-/* ── Split layout ──────────────────────────────────────────────────────────── */
+/* ── Split layout (editor groups) ──────────────────────────────────────────── */
 .workspace-split { flex: 1 1 auto; display: flex; min-height: 0; overflow: hidden; }
-/* fills the row by default (single pane); split mode sets explicit flex inline */
+/* one pane = its own tab strip on top + the active tab's content below */
+.ws-group { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.ws-group + .ws-group { border-left: 1px solid var(--border); }
 .ws-pane { flex: 1 1 0; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 .ws-divider {
   flex: 0 0 5px; cursor: col-resize;

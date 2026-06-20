@@ -80,12 +80,17 @@ export interface Tab {
   };
 }
 
-/** Workspace tab layout: `primaryId` is the left/main pane; `secondaryId` is the
- *  right pane when split (null = no split). */
-export interface TabsState {
+/** One pane's tab strip: its tabs + the active one. */
+export interface TabGroup {
   tabs: Tab[];
-  primaryId: string;
-  secondaryId: string | null;
+  activeId: string;
+}
+
+/** Workspace tab layout: one or two editor groups (panes), each with its own tab
+ *  strip; `focused` is the group new tabs land in. Two groups = a left/right split. */
+export interface TabsState {
+  groups: TabGroup[];
+  focused: number;
 }
 
 /** A queued message (sent after the current run finishes). */

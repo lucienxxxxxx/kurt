@@ -16,7 +16,6 @@ import { Composer } from "./components/Composer.tsx";
 import { Settings } from "./components/Settings.tsx";
 import { Approval } from "./components/Approval.tsx";
 import { Ask } from "./components/Ask.tsx";
-import { WorkspaceTabs } from "./components/workspace/WorkspaceTabs.tsx";
 import { Workspace } from "./components/workspace/Workspace.tsx";
 import { PreviewTab, previewKindFor } from "./components/workspace/PreviewTab.tsx";
 import { FilesTab } from "./components/workspace/FilesTab.tsx";
@@ -254,8 +253,7 @@ export default function App() {
               setViewPlan(steps);
               if (!autoPlanRef.current.has(sid)) { // auto split-open the Plan tab the first time
                 autoPlanRef.current.add(sid);
-                dispatchTabs({ type: "add", tab: { id: "plan", kind: "plan", title: tr(T.tabPlan, lang), closable: true } });
-                dispatchTabs({ type: "split", id: "plan" });
+                dispatchTabs({ type: "addSplit", tab: { id: "plan", kind: "plan", title: tr(T.tabPlan, lang), closable: true } });
               }
             }
           },
@@ -383,17 +381,17 @@ export default function App() {
   };
 
   // ── Workspace tabs ──────────────────────────────────────────────────────────
-  /** Create/focus a tab from the `+` menu (files/plan/preview singletons; each
-   *  terminal is its own tab). */
-  const addTab = (kind: TabKind): void => {
+  /** Create/focus a tab from a group's `+` menu (files/plan/preview singletons;
+   *  each terminal is its own tab). Lands in the group whose `+` was clicked. */
+  const addTab = (kind: TabKind, group: number): void => {
     if (kind === "terminal") {
       const n = ++tabCounter.current;
-      dispatchTabs({ type: "add", tab: { id: `terminal:${n}`, kind, title: `${tr(T.tabTerminal, lang)} ${n}`, closable: true } });
+      dispatchTabs({ type: "add", group, tab: { id: `terminal:${n}`, kind, title: `${tr(T.tabTerminal, lang)} ${n}`, closable: true } });
       return;
     }
     const id = kind; // files / plan / preview are singletons
     const title = kind === "files" ? tr(T.tabFiles, lang) : kind === "plan" ? tr(T.tabPlan, lang) : tr(T.tabPreview, lang);
-    dispatchTabs({ type: "add", tab: { id, kind, title, closable: true } });
+    dispatchTabs({ type: "add", group, tab: { id, kind, title, closable: true } });
   };
 
   /** Open a workspace file in a preview tab, split beside the conversation, then
@@ -402,8 +400,7 @@ export default function App() {
     const id = "file:" + path;
     const kind = previewKindFor(path);
     const title = path.split("/").pop() || path;
-    dispatchTabs({ type: "add", tab: { id, kind: "preview", title, closable: true, meta: { file: path, previewKind: kind, subtitle: path } } });
-    dispatchTabs({ type: "split", id });
+    dispatchTabs({ type: "addSplit", tab: { id, kind: "preview", title, closable: true, meta: { file: path, previewKind: kind, subtitle: path } } });
     void (async () => {
       const base = await resolveBridgeUrl();
       if (kind === "pdf") {
@@ -418,8 +415,7 @@ export default function App() {
   /** Open a tool's full output in a preview tab, split beside the conversation. */
   const openToolOutput = (info: OpenOutput): void => {
     const id = "output:" + info.stepId;
-    dispatchTabs({ type: "add", tab: { id, kind: "preview", title: info.name, closable: true, meta: { previewKind: "output", content: info.content, subtitle: info.title } } });
-    dispatchTabs({ type: "split", id });
+    dispatchTabs({ type: "addSplit", tab: { id, kind: "preview", title: info.name, closable: true, meta: { previewKind: "output", content: info.content, subtitle: info.title } } });
   };
 
   const renderPane = (tab: Tab): React.ReactNode => {
@@ -607,14 +603,12 @@ export default function App() {
               </div>
             </div>
 
-            <WorkspaceTabs state={tabs} lang={lang}
+            <Workspace state={tabs} renderPane={renderPane} lang={lang}
               onActivate={(id) => dispatchTabs({ type: "activate", id })}
               onClose={(id) => dispatchTabs({ type: "close", id })}
               onSplit={(id) => dispatchTabs({ type: "split", id })}
               onUnsplit={() => dispatchTabs({ type: "unsplit" })}
               onAdd={addTab} />
-
-            <Workspace state={tabs} renderPane={renderPane} />
           </div>
         )}
       </div>

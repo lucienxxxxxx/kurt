@@ -31,6 +31,7 @@ export const T = {
   tabPreview: { zh: "预览", en: "Preview" },
   tabAdd: { zh: "新建标签", en: "New tab" },
   tabSplit: { zh: "分屏", en: "Split" },
+  tabMoveOther: { zh: "移到另一侧", en: "Move to other pane" },
   tabUnsplit: { zh: "取消分屏", en: "Unsplit" },
   tabComingSoon: { zh: "即将推出", en: "Coming soon" },
   filesEmpty: { zh: "此目录为空", en: "This folder is empty" },

@@ -1,17 +1,27 @@
-/** Split layout host: renders the primary pane full-width, or primary | secondary
- *  side-by-side with a draggable divider when split. Pane content is supplied by
- *  the caller via `renderPane` (so the session pane can stay inline in App with
- *  all its state). */
+/** Split layout host: renders each editor group as [its own tab strip] + [the
+ *  active tab's pane]. One group = full width; two groups = side-by-side with a
+ *  draggable divider. Pane content is supplied by the caller via `renderPane` (so
+ *  the session pane can stay inline in App with all its state). */
 
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { Tab, TabsState } from "../../types.ts";
+import type { Lang, Tab, TabKind, TabsState } from "../../types.ts";
+import { activeTab } from "../../lib/tabs.ts";
+import { WorkspaceTabsBar } from "./WorkspaceTabs.tsx";
 
-export function Workspace({ state, renderPane }: { state: TabsState; renderPane: (tab: Tab) => ReactNode }) {
-  const primary = state.tabs.find((t) => t.id === state.primaryId) ?? state.tabs[0]!;
-  const secondary = state.secondaryId ? state.tabs.find((t) => t.id === state.secondaryId) ?? null : null;
+export function Workspace({ state, renderPane, lang, onActivate, onClose, onSplit, onUnsplit, onAdd }: {
+  state: TabsState;
+  renderPane: (tab: Tab) => ReactNode;
+  lang: Lang;
+  onActivate: (id: string) => void;
+  onClose: (id: string) => void;
+  onSplit: (id: string) => void;
+  onUnsplit: () => void;
+  onAdd: (kind: TabKind, group: number) => void;
+}) {
   const [ratio, setRatio] = useState(0.5);
   const hostRef = useRef<HTMLDivElement>(null);
+  const split = state.groups.length > 1;
 
   const startDrag = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -19,8 +29,7 @@ export function Workspace({ state, renderPane }: { state: TabsState; renderPane:
     if (!host) return;
     const onMove = (ev: MouseEvent) => {
       const rect = host.getBoundingClientRect();
-      const r = (ev.clientX - rect.left) / rect.width;
-      setRatio(Math.min(0.8, Math.max(0.2, r)));
+      setRatio(Math.min(0.8, Math.max(0.2, (ev.clientX - rect.left) / rect.width)));
     };
     const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); document.body.classList.remove("dragging-col"); };
     window.addEventListener("mousemove", onMove);
@@ -28,14 +37,31 @@ export function Workspace({ state, renderPane }: { state: TabsState; renderPane:
     document.body.classList.add("dragging-col");
   };
 
-  if (!secondary) {
-    return <div className="workspace-split" ref={hostRef}><div className="ws-pane">{renderPane(primary)}</div></div>;
-  }
   return (
     <div className="workspace-split" ref={hostRef}>
-      <div className="ws-pane" style={{ flex: `0 0 ${ratio * 100}%` }}>{renderPane(primary)}</div>
-      <div className="ws-divider" onMouseDown={startDrag} />
-      <div className="ws-pane" style={{ flex: "1 1 0" }}>{renderPane(secondary)}</div>
+      {state.groups.map((group, gi) => {
+        const tab = activeTab(group);
+        const flex = split ? (gi === 0 ? `0 0 ${ratio * 100}%` : "1 1 0") : "1 1 0";
+        return (
+          <Fragment key={gi}>
+            {split && gi === 1 && <div className="ws-divider" onMouseDown={startDrag} />}
+            <div className="ws-group" style={{ flex }}>
+              <WorkspaceTabsBar
+                group={group}
+                groupCount={state.groups.length}
+                focused={state.focused === gi}
+                lang={lang}
+                onActivate={onActivate}
+                onClose={onClose}
+                onSplit={onSplit}
+                onUnsplit={onUnsplit}
+                onAdd={(kind) => onAdd(kind, gi)}
+              />
+              <div className="ws-pane">{tab ? renderPane(tab) : null}</div>
+            </div>
+          </Fragment>
+        );
+      })}
     </div>
   );
 }
