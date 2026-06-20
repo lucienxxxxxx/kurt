@@ -44,7 +44,7 @@ import {
 } from "kurt-agent";
 import { kurtHome } from "kurt-agent";
 import { join, dirname } from "node:path";
-import { homedir } from "node:os";
+import { homedir, hostname, platform, release, arch, userInfo } from "node:os";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { StepAccumulator, planFromInput } from "./events.ts";
 import type { RunFrame } from "./types.ts";
@@ -257,7 +257,9 @@ export async function runTurn(rt: Runtime, opts: RunOptions): Promise<void> {
 
   const mode: Mode = opts.mode ?? "agent";
   const tools = toolsForMode(rt.makeTools(permission, ask), mode);
-  const system = rt.system + modeGuidance(mode);
+  // Append a fresh environment block each run so the model knows the current time
+  // and the user's system (kept out of rt.system, which is built once per session).
+  const system = rt.system + environmentContext() + modeGuidance(mode);
   // Per-run model override from the composer menus (falls back to the configured model).
   const override = opts.model || opts.effort || opts.thinking !== undefined;
   const model = override && rt.modelFor ? rt.modelFor(opts.model, opts.effort, opts.thinking) : rt.model;
@@ -289,6 +291,27 @@ export async function runTurn(rt: Runtime, opts: RunOptions): Promise<void> {
   } catch (err) {
     opts.onFrame({ kind: "error", message: err instanceof Error ? err.message : String(err) });
   }
+}
+
+/** A fresh "# Environment" block (current time + the user's machine) appended to
+ *  the system prompt every run, so the model is grounded in the here-and-now.
+ *  Lives in the orchestration layer (this is I/O — never in the engine). */
+function environmentContext(): string {
+  const now = new Date();
+  const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return ""; } })();
+  const osName = ({ darwin: "macOS", win32: "Windows", linux: "Linux" } as Record<string, string>)[platform()] ?? platform();
+  let user = "";
+  try { user = userInfo().username; } catch { /* sandboxed — skip */ }
+  const lines = [
+    "",
+    "# Environment",
+    `Current time: ${now.toString()}${tz ? ` (${tz})` : ""}`,
+    `Operating system: ${osName} ${release()} (${arch()})`,
+    user ? `User: ${user}` : "",
+    `Host: ${hostname()}`,
+    "Use this for time-relative reasoning and to tailor commands/paths to the user's OS.",
+  ];
+  return lines.filter(Boolean).join("\n") + "\n";
 }
 
 function defaultSystem(workspace: string): string {

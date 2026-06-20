@@ -324,6 +324,18 @@ describe("plan frame", () => {
   }, 20_000);
 });
 
+describe("environment context", () => {
+  test("each run's system prompt carries the current time + OS", async () => {
+    const model = new MockModel([{ text: "hi" }]);
+    const rt = createRuntime({ workspace: ws, model, makeTools: () => [], store: new SessionStore(sessions) });
+    await runTurn(rt, { text: "hi", mode: "agent", signal: new AbortController().signal, onFrame: () => {} });
+    const sys = model.requests[0]!.system;
+    expect(sys).toContain("# Environment");
+    expect(sys).toContain("Current time:");
+    expect(sys).toMatch(/Operating system:/);
+  });
+});
+
 describe("modes (tool gating)", () => {
   const named = (name: string): Tool => ({ spec: { name, description: "", inputSchema: { type: "object", properties: {} } }, execute: async () => ({ content: "ok" }) });
   const allNames = ["read_file", "ls", "grep", "web_search", "memory", "write_file", "shell", "update_plan", "request_write_access", "ask_user"];
