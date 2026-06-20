@@ -3,7 +3,7 @@
  *  over SSE independently (runs continue in the background when you switch away);
  *  the sidebar lists the bridge's sessions and loading one reconstructs its steps. */
 
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { Effort, Lang, Loc, Mode, QueuedMsg, SessionMeta, Step, Tab, TabKind, Theme } from "./types.ts";
 import { T, tr } from "./i18n/strings.ts";
 import { runStream, listSessions, getSession, getInfo, approve, answer, truncateSession, deleteSession, readFile, rawFileUrl, type ApprovalRequest, type AskRequest, type PlanStep } from "./lib/bridge.ts";
@@ -20,7 +20,7 @@ import { WorkspaceTabs } from "./components/workspace/WorkspaceTabs.tsx";
 import { Workspace } from "./components/workspace/Workspace.tsx";
 import { PreviewTab, previewKindFor } from "./components/workspace/PreviewTab.tsx";
 import { FilesTab } from "./components/workspace/FilesTab.tsx";
-import { PlaceholderTab } from "./components/workspace/PlaceholderTab.tsx";
+const TerminalTab = lazy(() => import("./components/workspace/TerminalTab.tsx").then((m) => ({ default: m.TerminalTab })));
 import { PlanTab } from "./components/workspace/PlanTab.tsx";
 import { renderStep, type OpenOutput } from "./components/thread/steps.tsx";
 import { MdBlock } from "./components/Markdown.tsx";
@@ -66,6 +66,7 @@ export default function App() {
   const [input, setInput] = useState("");
   const [model, setModel] = useState("");
   const [models, setModels] = useState<string[]>([]);
+  const [workspace, setWorkspace] = useState<string>(""); // bridge workspace root → terminal cwd
   const [effort, setEffort] = useState<Effort>("med");
   const [mode, setMode] = useState<Mode>(() => persisted<Mode>("kurt-mode", "agent"));
   const [thinking, setThinking] = useState<boolean>(() => { try { return localStorage.getItem("kurt-thinking") === "1"; } catch { return false; } });
@@ -192,7 +193,7 @@ export default function App() {
     void (async () => {
       try {
         const info = await getInfo(await resolveBridgeUrl());
-        if (info) { setModels(info.models); setModel((m) => m || info.model); }
+        if (info) { setModels(info.models); setModel((m) => m || info.model); setWorkspace(info.workspace || ""); }
       } catch { /* bridge not ready */ }
     })();
   }, []);
@@ -427,7 +428,7 @@ export default function App() {
       case "files": return <FilesTab lang={lang} onOpenFile={openFile} />;
       case "preview": return <PreviewTab tab={tab} lang={lang} />;
       case "plan": return <PlanTab steps={viewPlan} lang={lang} />;
-      case "terminal": return <PlaceholderTab icon="terminal" label={tr(T.tabTerminal, lang)} lang={lang} />;
+      case "terminal": return <Suspense fallback={<div className="ws-empty" />}><TerminalTab key={tab.id} cwd={tab.meta?.cwd || workspace} /></Suspense>;
       default: return null;
     }
   };

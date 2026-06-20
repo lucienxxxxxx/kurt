@@ -4,6 +4,8 @@
 // (it watches its piped stdin for EOF — see kurt-bridge/src/index.ts), and we
 // also kill it on Exit, so no orphaned bridge is left behind.
 
+mod pty;
+
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -89,7 +91,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(Bridge { child: Mutex::new(None), port: Arc::new(Mutex::new(None)) })
-        .invoke_handler(tauri::generate_handler![bridge_url])
+        .manage(pty::Ptys::default())
+        .invoke_handler(tauri::generate_handler![bridge_url, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill])
         .setup(|app| {
             spawn_bridge(&app.state::<Bridge>());
             Ok(())
