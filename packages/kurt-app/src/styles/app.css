@@ -222,7 +222,7 @@ html[data-theme="dark"] .brand-logo { filter: invert(1); }
 /* relative host for the thread + the floating "jump to latest" pill */
 .thread-area { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative; }
 /* scroll position is driven in JS (instant pin while following, smooth on jump) */
-.thread-scroll { flex: 1 1 auto; overflow-y: auto; padding-right: 6px; }
+.thread-scroll { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; padding-right: 6px; }
 .thread-scroll::-webkit-scrollbar { width: 6px; }
 .thread-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; }
 .thread-scroll::-webkit-scrollbar-track { margin-right: 4px; }
@@ -421,8 +421,11 @@ code.inl {
   border-bottom: 1px solid var(--border);
   position: relative;
   overflow: hidden;           /* no horizontal scrollbar — tabs keep a min width */
+  scrollbar-width: none;      /* belt-and-suspenders: never render a scrollbar here */
+  flex-wrap: nowrap;
   user-select: none;
 }
+.ws-tabs::-webkit-scrollbar { width: 0; height: 0; display: none; }
 /* the focused group's strip gets a subtle accent underline */
 .ws-tabs.focused { box-shadow: inset 0 -2px 0 var(--accent-soft); }
 .ws-tab {
