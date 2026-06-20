@@ -470,12 +470,13 @@ Visual/interactive — verify in `bun run tauri dev`.
 5. **Tool output → preview.** In a run with a truncated tool output, click the clipped OUT (or a
    file-tool's filename) → it opens a Preview tab split beside the thread (same as the old detail
    panel, now a tab).
-6. **Split via right-click.** Right-click any tab → **分屏/Split** puts it in the right pane next
-   to the current one. Right-click the split tab → **取消分屏/Unsplit** collapses back. Drag the
-   divider between panes to resize (20%–80%).
-7. **Switch / close.** Click a tab to bring it to the main (left) pane (collapsing any split onto
-   it). Close a non-session tab via its ✕; closing the split tab clears the split. The Session tab
-   can't be closed.
+6. **Split into two tab groups.** Right-click a tab → **分屏/Split** moves it into a **new right
+   pane that has its own tab strip** (each pane keeps its own tabs + `+`). Right-click a tab in a
+   split pane → **移到另一侧/Move to other pane** moves it across; **取消分屏/Unsplit** merges both
+   strips back into one. Drag the divider between panes to resize (20%–80%).
+7. **Per-group tabs.** Each pane's `+` adds to *that* pane; clicking a tab activates it within its
+   own strip (the other pane is unaffected). Closing a pane's **last** tab collapses the split. The
+   Session tab can't be closed.
 8. **Terminal / Plan placeholders.** Adding 终端 or 计划 shows a "即将推出 / Coming soon" panel
    (real features land in Phases C and B).
 
