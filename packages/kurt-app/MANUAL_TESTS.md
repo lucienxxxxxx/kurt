@@ -569,3 +569,24 @@ require one prior user interaction due to autoplay policy).
    let it finish → a macOS notification "Kurt — <conversation> · 已完成回复" appears
    (first time may prompt for notification permission). When the window IS focused, no
    banner (just the chime).
+
+---
+
+## Per-conversation workspace + folder picker
+
+Visual/interactive — `bun run tauri dev`.
+
+1. **Workspace button.** The composer footer (bottom row) shows a folder button with the current
+   workspace's name. Click it → native macOS folder picker opens (at the current workspace).
+2. **Pick applies to this conversation.** Choose a folder → the button updates. Ask the agent
+   "what's my current directory / list files here" → it operates in the chosen folder. The Files
+   tab and a new Terminal tab are rooted there too; a `pwd` in the terminal confirms.
+3. **Per conversation.** Pick folder A in conversation 1; switch to conversation 2 → it shows its
+   own workspace (the last-picked default for a fresh chat, or its saved one). Switch back to 1 →
+   folder A is restored (persisted with the session).
+4. **New-chat default = last pick.** Pick a folder, then New chat → the new conversation defaults
+   to that last-picked folder (not HOME). Restarting the app keeps the last pick as default.
+5. **Independent of launch dir.** The workspace no longer follows where the app/bridge launched —
+   it follows each conversation's pick.
+
+Result: ____ (date / pass-fail / notes).
