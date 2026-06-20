@@ -477,8 +477,13 @@ Visual/interactive — verify in `bun run tauri dev`.
 7. **Per-group tabs.** Each pane's `+` adds to *that* pane; clicking a tab activates it within its
    own strip (the other pane is unaffected). Closing a pane's **last** tab collapses the split. The
    Session tab can't be closed.
-8. **Terminal / Plan placeholders.** Adding 终端 or 计划 shows a "即将推出 / Coming soon" panel
-   (real features land in Phases C and B).
+8. **Per-conversation tabs.** Open Files/Preview/split in conversation A, switch to B → B starts
+   with just its own Session tab (A's tabs don't leak in). Switch back to A → A's tabs + split are
+   restored. Each conversation keeps its own workspace layout; deleting a conversation drops its
+   tabs. (Tabs are per-launch; reloading the app starts each session with just its Session tab.)
+9. **Dropdowns aren't clipped.** With the workspace split, open the composer's mode/model/effort
+   menus and a tab's `+` menu — they render **above** the panes (not cut off by the split), even
+   near the divider/edge.
 
 Result: ____ (date / pass-fail / notes).
 
