@@ -46,7 +46,7 @@ import { kurtHome } from "kurt-agent";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { StepAccumulator } from "./events.ts";
+import { StepAccumulator, planFromInput } from "./events.ts";
 import type { RunFrame } from "./types.ts";
 
 /** The desktop's answer to an approval request. */
@@ -267,6 +267,10 @@ export async function runTurn(rt: Runtime, opts: RunOptions): Promise<void> {
     for await (const ev of runLoop({ system, messages: rec.messages, tools, model, signal: opts.signal })) {
       captured.push(ev);
       for (const step of acc.apply(ev)) opts.onFrame({ kind: "step", step });
+      if (ev.type === "tool_call" && ev.name === "update_plan") {
+        const steps = planFromInput(ev.input);
+        if (steps.length) opts.onFrame({ kind: "plan", steps });
+      }
       if (ev.type === "usage") opts.onFrame({ kind: "usage", inputTokens: ev.inputTokens, outputTokens: ev.outputTokens, totalTokens: ev.totalTokens });
       else if (ev.type === "aborted") opts.onFrame({ kind: "aborted", reason: ev.reason });
       else if (ev.type === "error") opts.onFrame({ kind: "error", message: ev.message });

@@ -15,10 +15,17 @@ export type Step =
   | { _id: number; type: "read"; file: string; lines: string }
   | { _id: number; type: "skill"; name: string; title: string; input?: string; output?: string; isError?: boolean };
 
+/** One step of the agent's plan (from the update_plan tool). */
+export interface PlanStep {
+  title: string;
+  status: "pending" | "in_progress" | "done";
+}
+
 /** SSE frames the bridge streams during a run (one JSON object per `data:` line). */
 export type RunFrame =
   | { kind: "session"; id: string; title: string } // the resolved/created session for this run
   | { kind: "step"; step: Step } // a step was created or changed — upsert by _id
+  | { kind: "plan"; steps: PlanStep[] } // the agent (re)recorded its plan via update_plan
   | { kind: "approval"; id: string; key: string; title: string; command: string; explanation: string; risk: string } // a sensitive op awaits POST /approve
   | { kind: "ask"; id: string; question: string; options?: string[] } // ask_user awaits POST /answer
   | { kind: "usage"; inputTokens: number; outputTokens: number; totalTokens: number }

@@ -160,6 +160,22 @@ export function messagesToSteps(messages: Message[]): Step[] {
   return steps;
 }
 
+/** Parse the update_plan tool input into structured plan steps (for the `plan`
+ *  frame → desktop Plan tab). Mirrors UpdatePlanTool's own validation. */
+export function planFromInput(input: unknown): import("./types.ts").PlanStep[] {
+  const steps = (input as { steps?: unknown })?.steps;
+  if (!Array.isArray(steps)) return [];
+  const out: import("./types.ts").PlanStep[] = [];
+  for (const raw of steps) {
+    const s = (raw ?? {}) as { title?: unknown; status?: unknown };
+    const title = typeof s.title === "string" ? s.title.trim() : "";
+    if (!title) continue;
+    const status = s.status === "in_progress" || s.status === "done" ? s.status : "pending";
+    out.push({ title, status });
+  }
+  return out;
+}
+
 /** Map a tool_call to the right step subtype (read_file → read, skill → skill, else tool). */
 function newToolStep(id: number, name: string, input: unknown): Step {
   const obj = isRecord(input) ? input : {};

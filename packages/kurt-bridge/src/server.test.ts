@@ -308,6 +308,22 @@ describe("ask_user round-trip", () => {
   }, 20_000);
 });
 
+describe("plan frame", () => {
+  const named = (name: string): Tool => ({ spec: { name, description: "", inputSchema: { type: "object", properties: {} } }, execute: async () => ({ content: "ok" }) });
+
+  test("an update_plan tool call emits a `plan` frame with parsed steps", async () => {
+    const model = new MockModel([
+      { toolCalls: [{ name: "update_plan", input: { steps: [{ title: "A", status: "done" }, { title: "B" }] } }] },
+      { text: "ok" },
+    ]);
+    const rt = createRuntime({ workspace: ws, model, makeTools: () => [named("update_plan")], store: new SessionStore(sessions) });
+    const frames: RunFrame[] = [];
+    await runTurn(rt, { text: "go", mode: "plan", signal: new AbortController().signal, onFrame: (f) => frames.push(f) });
+    const plan = frames.find((f) => f.kind === "plan");
+    expect(plan).toMatchObject({ kind: "plan", steps: [{ title: "A", status: "done" }, { title: "B", status: "pending" }] });
+  }, 20_000);
+});
+
 describe("modes (tool gating)", () => {
   const named = (name: string): Tool => ({ spec: { name, description: "", inputSchema: { type: "object", properties: {} } }, execute: async () => ({ content: "ok" }) });
   const allNames = ["read_file", "ls", "grep", "web_search", "memory", "write_file", "shell", "update_plan", "request_write_access", "ask_user"];

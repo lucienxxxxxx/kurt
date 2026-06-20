@@ -1,6 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import type { Message } from "kurt-agent";
-import { StepAccumulator, messagesToSteps } from "./events.ts";
+import { StepAccumulator, messagesToSteps, planFromInput } from "./events.ts";
+
+describe("planFromInput", () => {
+  test("parses titles + defaults missing status to pending; drops empties", () => {
+    expect(planFromInput({ steps: [{ title: "A", status: "done" }, { title: " " }, { title: "B" }] }))
+      .toEqual([{ title: "A", status: "done" }, { title: "B", status: "pending" }]);
+  });
+  test("non-array / missing steps → empty", () => {
+    expect(planFromInput({})).toEqual([]);
+    expect(planFromInput(null)).toEqual([]);
+  });
+});
 
 describe("StepAccumulator", () => {
   test("thinking deltas accumulate into one step; closed with elapsed sec AND re-emitted", () => {
