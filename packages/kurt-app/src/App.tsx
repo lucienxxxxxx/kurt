@@ -63,10 +63,10 @@ export default function App() {
 
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const [input, setInput] = useState("");
-  const [model, setModel] = useState("");
+  const [model, setModel] = useState<string>(() => persisted<string>("kurt-model", ""));
   const [models, setModels] = useState<string[]>([]);
   const [workspace, setWorkspace] = useState<string>(""); // bridge workspace root → terminal cwd
-  const [effort, setEffort] = useState<Effort>("med");
+  const [effort, setEffort] = useState<Effort>(() => persisted<Effort>("kurt-effort", "med"));
   const [mode, setMode] = useState<Mode>(() => persisted<Mode>("kurt-mode", "agent"));
   const [thinking, setThinking] = useState<boolean>(() => { try { return localStorage.getItem("kurt-thinking") === "1"; } catch { return false; } });
   // When on, thinking/tool/skill detail cards start collapsed (only the main text shows).
@@ -148,6 +148,8 @@ export default function App() {
   }, [theme]);
   useEffect(() => { document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en"); try { localStorage.setItem("kurt-lang", lang); } catch { /* ignore */ } }, [lang]);
   useEffect(() => { try { localStorage.setItem("kurt-mode", mode); } catch { /* ignore */ } }, [mode]);
+  useEffect(() => { try { localStorage.setItem("kurt-effort", effort); } catch { /* ignore */ } }, [effort]);
+  useEffect(() => { if (model) try { localStorage.setItem("kurt-model", model); } catch { /* ignore */ } }, [model]);
   useEffect(() => { try { localStorage.setItem("kurt-thinking", thinking ? "1" : "0"); } catch { /* ignore */ } }, [thinking]);
   useEffect(() => { try { localStorage.setItem("kurt-collapse-details", collapseDetails ? "1" : "0"); } catch { /* ignore */ } }, [collapseDetails]);
 
