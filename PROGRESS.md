@@ -4,7 +4,7 @@
 > (阶段状态 / 功能清单 / 未完成项 / 已知债务 / "最后更新")。开工前先读它对齐现状。
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
-- **最后更新**:2026-06-20 · `main`(**发送/完成音效 + 后台完成系统通知**;**system prompt 注入当前时间+系统信息(每轮)**;**对话条件式底部跟随 + 回到最新 + 流式淡入**;**工作区标签栏 Phase A+B+C + 分屏标签组 + 按会话独立 + 下拉层级**:分屏=两个编辑器组(每屏自带标签条);标签/分屏按会话各存一份;模式/模型/强度持久化;下拉菜单改 fixed 不被分屏裁切 + z-index 规范;单屏铺满宽度修复。**工作区标签栏 Phase A+B+C 全部完成**:标题下标签栏 + 自研左右分屏；会话/文件/预览/计划/**终端**标签，DetailPanel 统一进标签系统；bridge `/fs`·`/file`·`/raw` + `/info` 暴露 workspace + `plan` 帧；**自动触发**:计划→自动开计划标签、run 产出文档→自动开预览；**终端** = Rust portable-pty + xterm.js(懒加载)。前置:新 app 图标、统一步骤头、IN/OUT 截断、文件名点击预览、隐藏输入框滚动条、已思考 N秒)
+- **最后更新**:2026-06-20 · `main`(**引擎并行工具调用(同一轮多个独立调用并发执行)**;**发送/完成音效 + 后台完成系统通知**;**system prompt 注入当前时间+系统信息(每轮)**;**对话条件式底部跟随 + 回到最新 + 流式淡入**;**工作区标签栏 Phase A+B+C + 分屏标签组 + 按会话独立 + 下拉层级**:分屏=两个编辑器组(每屏自带标签条);标签/分屏按会话各存一份;模式/模型/强度持久化;下拉菜单改 fixed 不被分屏裁切 + z-index 规范;单屏铺满宽度修复。**工作区标签栏 Phase A+B+C 全部完成**:标题下标签栏 + 自研左右分屏；会话/文件/预览/计划/**终端**标签，DetailPanel 统一进标签系统；bridge `/fs`·`/file`·`/raw` + `/info` 暴露 workspace + `plan` 帧；**自动触发**:计划→自动开计划标签、run 产出文档→自动开预览；**终端** = Rust portable-pty + xterm.js(懒加载)。前置:新 app 图标、统一步骤头、IN/OUT 截断、文件名点击预览、隐藏输入框滚动条、已思考 N秒)
 - **门禁**:kurt-agent **150** · kurt-tui **70** · kurt-bridge **27** · kurt-app build+**Vitest 69**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
@@ -34,6 +34,7 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
 
 | 子阶段 | 内容 | 状态 |
 |---|---|---|
+| 引擎-并行工具 | **并行工具调用**:模型在同一轮发出多个工具调用即视为彼此独立,`runLoop` 改为**并发执行**(`mapPool`,`maxParallel` 默认 8),取代原顺序执行;单个调用=池容量 1,行为不变。铁律不变量全保:tool_call 仍先全量公布、每个调用恰好配对一个 tool_result(报错/中断也是)、工具 `ctx.emit` 仍先于自身结果;result **事件**按完成先后实时冒泡,history 里的 result **块**保持原调用顺序。下游(bridge StepAccumulator 按 id 映射、TUI)无需改动且全绿。loop.test +3、bridge events.test +1。 | ✅ 完成（agent 153 · bridge 38 · tui 70） |
 | 音效+通知 | **发送音效 + 完成提示音/通知**:发送消息播放 `send.mp3` 短提示;agent 完成回复播放 `done.mp3`;窗口未聚焦时额外弹系统通知(`tauri-plugin-notification`,新增 `notification:default` 能力 + lib.rs 注册)。全部 best-effort(自动播放被拦/非 Tauri/未授权 静默忽略)。`lib/notify.ts` 封装音频+通知,两段 mp3 入 `assets/sounds`。cargo check 绿。 | ✅ 完成（app build + cargo check + 98 测） |
 | 系统提示-环境 | **system prompt 注入环境信息**:每轮运行在系统提示后追加「# Environment」块——当前时间+时区、操作系统/版本/架构、用户名、主机名,让模型对"此时此地"有感知、能按用户 OS 调整命令/路径。在编排层(`runtime.ts` `runTurn` 每轮重建 system)实现,获取系统信息属 I/O,**引擎零 I/O 不动**。server.test +1。 | ✅ 完成（bridge 37 测） |
 | 对话滚动-跟随 | **条件式底部跟随 + 回到最新 + 流式淡入**:thread 不再无条件置底——仅当用户在底部阈值(72px)内时跟随流式最新内容;上滑即退出跟随、保留位置不被抢占;上滑且有新内容时显示浮动「回到最新」胶囊(点按平滑滚底/滚回阈值内/发送 → 恢复跟随);切会话恢复各自位置(首开置底)。流式回复用底部渐隐遮罩(纯 mask、无逐字 JS、不破坏 md/代码/表格布局)让新 token 自然浮现 + 一次性淡入衔接 thinking→正文。抽出 `lib/scroll.ts`(isNearBottom/distanceFromBottom)+ scroll.test 5。 | ✅ 完成（app build + 98 测） |

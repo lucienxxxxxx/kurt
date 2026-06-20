@@ -3,8 +3,9 @@
 > Cached architecture map. **Read this first**; scan the tree only for the files
 > this map points you to. Keep it fresh: update on every structural change.
 > Maintained via the `project-module-workflow` skill (see CLAUDE.md §3).
-> Last synced: 2026-06-15, after Phase 6.2 moved `SessionStore` + `kurtHome`/
-> `sessionsDir` into `src/session/` (shared by TUI + bridge + desktop). Earlier:
+> Last synced: 2026-06-20, after parallel tool calls (runLoop runs same-turn calls
+> concurrently, `maxParallel`). Earlier: Phase 6.2 moved `SessionStore` + `kurtHome`/
+> `sessionsDir` into `src/session/` (shared by TUI + bridge + desktop);
 > B1–B5 bug sweep (atomicWrite, MCP HTTP test); Phase 5 (MCP + Skills).
 
 ## 1. Overview
@@ -40,13 +41,15 @@ abnormal end = `aborted`/`error`. Also `thinking` (display + accumulated into a
 `ThinkingBlock` on the assistant message for capability-gated replay) + `usage` events, and `tool_output` (live tool
 output streamed via `ctx.emit`, tagged with `ToolContext.toolCallId`). Invariant: every `tool_call` is paired with
 exactly one `tool_result` (even on abort/throw); a throwing tool → `tool_result(isError)`
-and the loop continues.
+and the loop continues. **Parallel tool calls:** multiple tool calls in ONE turn run
+concurrently (bounded by `RunLoopOptions.maxParallel`, default 8); result EVENTS surface
+as each finishes, result BLOCKS in history keep the call order. Single call = pool of one.
 
 ## 4. Module map
 | Path | Responsibility | Key exports / entry points | Depends on |
 |------|----------------|----------------------------|------------|
 | `src/engine/` | The core loop + contracts. **Zero I/O.** | `runLoop` (`loop.ts`); types `Event`/`Message`; ifaces `Tool`/`ModelProvider`/`CompactionPolicy`; `AsyncEventQueue` | — (pure) |
-| `src/engine/loop.ts` | Agentic loop; pairs tool_call/result; abort handling | `runLoop`, `RunLoopOptions` | types, tool, model, compaction, async-queue |
+| `src/engine/loop.ts` | Agentic loop; pairs tool_call/result; abort handling; **runs same-turn tool calls concurrently** (`mapPool`, bounded by `maxParallel`) | `runLoop`, `RunLoopOptions` | types, tool, model, compaction, async-queue |
 | `src/engine/async-queue.ts` | Single-consumer channel powering `ToolContext.emit` | `AsyncEventQueue` | — |
 | `src/providers/` | `ModelProvider` impls + model metadata | `MockModel` (scripted, no deps); `OpenAICompatModel` (DeepSeek/OpenAI Chat Completions over SSE, key injected; `implements CapableModel`, shapes the request body from its `capabilities` — thinking on/off, mapped `reasoning_effort`, omits sampling params in thinking mode, and replays `reasoning_content` on tool-calling turns when `thinking.replayReasoning`); `capabilities.ts` (`ModelCapabilities`/`CapableModel`, `capabilitiesFor`, `mapEffort`, `replayReasoning`, DeepSeek V4 table) | engine types |
 | `src/tools/` | `Tool` impls — **all side effects live here** | `ReadFileTool` (confined + truncate + offset/limit), `LsTool`, `GrepTool` (pure-fs, workspace-confined), `WriteFileTool` (serialized FIFO queue, no size cap), `ShellTool`, `CodeTool`, `BrewTool` (unsandboxed Direct runner, mutating subcommands gated), `MemoryTool` (agent-writable memory at fixed global/project files; view/append/replace), `AskUserTool` (`ask_user` — agent asks the user via an injected `AskProvider`), `UpdatePlanTool` (`update_plan` — stateless checklist for plan mode), `SkillTool` (`skill` — loads a named skill's body on demand from an injected `SkillProvider`; read-only, no approval), `WebSearchTool`, `RequestWriteAccessTool`. `fs-access.ts` = shared `isInside`/`resolveWithin`; read/ls/grep/write share the live `writable` roots array (request_write_access grants apply immediately) | engine, sandbox, session, search, permission, `../truncate` |
