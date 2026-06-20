@@ -11,6 +11,7 @@ import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
 import { externalLinkFromClick, openExternal } from "./lib/external.ts";
 import { fmtElapsed, fmtTokens } from "./lib/format.ts";
 import { initTabs, tabsReducer, type TabsAction } from "./lib/tabs.ts";
+import { isNearBottom } from "./lib/scroll.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
 import { Settings } from "./components/Settings.tsx";
@@ -164,21 +165,50 @@ export default function App() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollPos = useRef<Map<string, number>>(new Map()); // sessionId ("" = new chat) → last scrollTop
   const wantScroll = useRef(false); // a switch happened → restore/jump once the thread is on screen
+  // Conditional bottom-follow: while the user is at (or near) the bottom we keep
+  // pinning to the latest content as it streams; the moment they scroll up we stop
+  // hijacking their position and surface a "jump to latest" affordance instead.
+  const followRef = useRef(true);
+  const [showJump, setShowJump] = useState(false);
+  const nearBottom = (el: HTMLElement): boolean => isNearBottom(el);
   const onThreadScroll = (): void => {
     const el = scrollRef.current;
-    if (el) scrollPos.current.set(activeIdRef.current ?? "", el.scrollTop);
+    if (!el) return;
+    scrollPos.current.set(activeIdRef.current ?? "", el.scrollTop);
+    const near = nearBottom(el);
+    followRef.current = near;            // scrolled up → stop following; back near bottom → resume
+    if (near) setShowJump((v) => (v ? false : v));
   };
-  useEffect(() => { const el = scrollRef.current; if (el && viewRunning) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [thread, liveId, viewRunning]);
-  // After a switch, once the conversation's content is actually on screen, restore
-  // where you left it — or jump to the bottom the first time it's opened. Runs on
-  // thread changes so it fires AFTER the (async-loaded) content commits, not before.
+  const jumpToLatest = (): void => {
+    followRef.current = true;
+    setShowJump(false);
+    const el = scrollRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  };
+  // Content changed (new step / streaming delta): if we're following, stay pinned to
+  // the bottom; if the user has scrolled away, don't move them — just flag new content.
+  useEffect(() => {
+    if (wantScroll.current) return; // a session switch is handling the position itself
+    const el = scrollRef.current;
+    if (!el) return;
+    if (followRef.current) requestAnimationFrame(() => { const e = scrollRef.current; if (e) e.scrollTop = e.scrollHeight; });
+    else setShowJump(true);
+  }, [thread, liveId]);
+  // After a switch, once the conversation's content is on screen, restore where you
+  // left it — or jump to the bottom the first time. Sets follow-state from the
+  // restored position so streaming behaves correctly afterward.
   useEffect(() => {
     if (!wantScroll.current) return;
     const el = scrollRef.current;
     if (!el) return; // thread-scroll not mounted yet (loading/empty) → wait for content
     wantScroll.current = false;
     const saved = scrollPos.current.get(activeIdRef.current ?? "");
-    requestAnimationFrame(() => { el.scrollTop = saved ?? el.scrollHeight; });
+    requestAnimationFrame(() => {
+      const e = scrollRef.current; if (!e) return;
+      e.scrollTop = saved ?? e.scrollHeight;
+      followRef.current = nearBottom(e);
+      setShowJump(false);
+    });
   }, [thread]);
   // Tick once a second while a run readout is showing, so elapsed time advances.
   const runStatusOn = viewStats !== null;
@@ -319,6 +349,8 @@ export default function App() {
     const text = input.trim();
     if (!text) return;
     setInput("");
+    // Sending is an explicit "show me the latest" action → resume bottom-follow.
+    followRef.current = true; setShowJump(false);
     const run = viewedRun();
     if (run && !run.ctrl.signal.aborted) {
       // the conversation in view is already running → queue onto its run
@@ -537,6 +569,7 @@ export default function App() {
   function renderSessionPane(): React.ReactNode {
     return (
       <div className="main-col">
+        <div className="thread-area">
         {loadingSession ? (
           <div className="thread-loading" />
         ) : thread.length === 0 ? (
@@ -582,6 +615,12 @@ export default function App() {
             </div>
           </div>
         )}
+        {showJump && thread.length > 0 && (
+          <button className="jump-latest" onClick={jumpToLatest} title={tr(T.jumpLatest, lang)}>
+            <Icon name="chevD" /><span>{tr(T.jumpLatest, lang)}</span>
+          </button>
+        )}
+        </div>
 
         <Composer value={input} onChange={setInput} onSend={send} onStop={stopRun}
           running={viewRunning} queuedMsgs={queuedMsgs} onCancelQueued={cancelQueued} lang={lang}

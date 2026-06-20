@@ -69,7 +69,7 @@ export function TextStepView({ step, typing, lang, showActions }: { step: TextSt
   const txt = tr(step.text, lang);
   return (
     <div className="step">
-      <div className={"step-text" + (typing ? " typing-cursor" : "")}>
+      <div className={"step-text" + (typing ? " typing-cursor streaming" : "")}>
         <MdBlock text={txt} lang={lang} />
       </div>
       {/* Only the run's FINAL reply carries the copy/time footer — intermediate

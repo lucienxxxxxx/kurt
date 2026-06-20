@@ -38,6 +38,7 @@ export const T = {
   filesError: { zh: "无法读取目录", en: "Cannot read folder" },
   previewNoFile: { zh: "没有可预览的内容", en: "Nothing to preview" },
   previewUnavailable: { zh: "暂无法预览此文件", en: "Preview unavailable for this file" },
+  jumpLatest: { zh: "回到最新", en: "Jump to latest" },
   planEmpty: { zh: "还没有计划。当 Kurt 制定计划时会显示在这里。", en: "No plan yet. It appears here when Kurt makes one." },
   planProgress: { zh: "已完成 {done}/{total}", en: "{done}/{total} done" },
   // composer
