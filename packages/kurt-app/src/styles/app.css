@@ -27,7 +27,7 @@ body {
 }
 
 /* Text selection is allowed only for actual message/preview CONTENT. */
-.step-text, .query-box, .think-body, .tool-content, .skill-section-body,
+.step-text, .query-box, .think-body, .tool-content,
 .fp-md, .fp-code, .md-pre, input, textarea { user-select: text; }
 
 /* ===== Sidebar ===== */
@@ -306,16 +306,42 @@ code.inl {
   color: var(--text);
 }
 
-/* thinking */
-.think-head {
-  display: inline-flex; align-items: center; gap: 7px;
+/* Unified expand/collapse header — shared by thinking / tool / skill steps.
+   [icon] label … [chevron]; de-emphasized (muted, no serif). */
+.step-head {
+  display: inline-flex; align-items: center; gap: 8px;
   color: var(--text-muted);
   font-size: 14.5px; cursor: pointer;
-  padding: 2px 0;
+  padding: 2px 0; margin-bottom: 9px;
   user-select: none;
 }
-.think-head .chev { transition: transform .2s; width: 14px; height: 14px; }
-.think-head.open .chev { transform: rotate(90deg); }
+.step-head:last-child { margin-bottom: 0; }
+.step-head-icon { width: 15px; height: 15px; flex: 0 0 15px; color: var(--text-faint); }
+.step-head-label { font-weight: 600; }
+.step-head-sub {
+  display: inline-flex; min-width: 0;
+  font-weight: 400;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 360px;
+}
+/* clickable filename → opens the side preview */
+.step-head-file {
+  font-family: var(--font-mono); font-size: 12.5px;
+  color: var(--accent); background: none; border: none;
+  cursor: pointer; padding: 0; max-width: 360px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-decoration: underline; text-underline-offset: 3px;
+  text-decoration-color: var(--accent-soft);
+  transition: text-decoration-color .14s;
+}
+.step-head-file:hover { text-decoration-color: var(--accent); }
+.step-head-chev {
+  width: 14px; height: 14px; margin-left: 2px;
+  color: var(--text-faint);
+  transition: transform .2s;
+}
+.step-head.open .step-head-chev { transform: rotate(90deg); }
+
 .think-body {
   margin-top: 8px;
   color: var(--text-muted);
@@ -326,13 +352,8 @@ code.inl {
 .think-body p { margin-bottom: 8px; }
 .think-body p:last-child { margin-bottom: 0; }
 
-/* tool block */
-/* the whole header row toggles expand/collapse (not just the chevron) */
-.tool-line { display: flex; align-items: baseline; gap: 9px; margin-bottom: 9px; flex-wrap: wrap; cursor: pointer; user-select: none; }
 /* tool/skill calls are de-emphasized like the thinking step (muted, no serif) */
 .tool-name { font-weight: 600; font-size: 14.5px; color: var(--text-muted); }
-.tool-title { color: var(--text-faint); font-size: 14.5px; }
-.tool-toggle { margin-left: auto; }
 
 .tool-card {
   background: var(--tool-bg);
@@ -342,6 +363,13 @@ code.inl {
   font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.5;
+}
+.tool-card-title {
+  padding: 9px 14px;
+  font-family: var(--font-sans);
+  font-size: 13px; color: var(--text-faint);
+  border-bottom: 1px solid var(--border);
+  word-break: break-word;
 }
 .tool-row { display: flex; padding: 11px 14px; gap: 14px; }
 .tool-row + .tool-row { border-top: 1px solid var(--border); }
@@ -354,8 +382,10 @@ code.inl {
 .tool-row.out .tool-tag { color: var(--accent); opacity: .8; }
 .tool-content { flex: 1 1 auto; color: var(--tool-text); white-space: pre-wrap; word-break: break-word; overflow-x: auto; }
 .tool-content .muted { color: var(--text-faint); }
-.tool-row.out.clickable { cursor: pointer; transition: background .14s; }
-.tool-row.out.clickable:hover { background: var(--bg-hover); }
+/* skill OUTPUT is rendered markdown, not mono code — let it use the prose font */
+.skill-out .tool-content { font-family: var(--font-sans); white-space: normal; }
+.tool-row.clickable { cursor: pointer; transition: background .14s; }
+.tool-row.clickable:hover { background: var(--bg-hover); }
 .tool-ellipsis {
   display: block;
   color: var(--text-faint);
@@ -365,7 +395,7 @@ code.inl {
   user-select: none;
   transition: color .14s;
 }
-.tool-row.out.clickable:hover .tool-ellipsis { color: var(--accent); }
+.tool-row.clickable:hover .tool-ellipsis { color: var(--accent); }
 
 .read-line { display: flex; align-items: center; gap: 9px; font-size: 15px; }
 .read-line .tool-name { font-weight: 700; }
@@ -442,41 +472,6 @@ code.inl {
 .fp-md ul, .fp-md ol { padding-left: 20px; margin: 5px 0 8px; }
 .fp-md li { margin-bottom: 3px; }
 .fp-md hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
-
-/* skill step */
-.skill-line { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; flex-wrap: wrap; cursor: pointer; user-select: none; }
-.skill-badge {
-  width: 22px; height: 22px;
-  display: grid; place-items: center;
-  border-radius: 6px;
-  background: var(--bg-active);
-  color: var(--text-muted);
-  flex: 0 0 22px;
-}
-.skill-badge svg { width: 14px; height: 14px; }
-.skill-name { font-weight: 600; font-size: 14.5px; color: var(--text-muted); }
-.skill-title { color: var(--text-faint); font-size: 14px; }
-.skill-line .tool-toggle { margin-left: auto; }
-.skill-card {
-  background: var(--tool-bg);
-  border: 1px solid var(--border);
-  border-radius: 11px;
-  overflow: hidden;
-  font-size: 14px;
-  line-height: 1.55;
-}
-.skill-section { padding: 12px 16px; }
-.skill-section + .skill-section { border-top: 1px solid var(--border); }
-.skill-section-label {
-  font-family: var(--font-mono);
-  font-size: 11px; font-weight: 600; letter-spacing: .06em;
-  color: var(--text-faint);
-  margin-bottom: 6px;
-}
-.skill-section.out .skill-section-label { color: var(--accent); opacity: .8; }
-.skill-section-body { color: var(--tool-text); font-size: 14px; line-height: 1.55; }
-.skill-section-body p { margin-bottom: 6px; }
-.skill-section-body p:last-child { margin-bottom: 0; }
 
 /* markdown */
 .md-h1 { font-family: var(--font-serif); font-size: 20px; font-weight: 700; color: var(--text); margin: 14px 0 8px; }
@@ -655,7 +650,10 @@ html[data-theme="dark"] img.empty-logo { filter: invert(1); }
   background: transparent; color: var(--text);
   font-family: var(--font-sans); font-size: 15.5px; line-height: 1.5;
   max-height: 160px; min-height: 24px;
+  scrollbar-width: none;            /* Firefox */
+  -ms-overflow-style: none;         /* legacy Edge */
 }
+.composer textarea::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .composer textarea::placeholder { color: var(--text-faint); }
 .composer-bar { display: flex; align-items: center; gap: 6px; margin-top: 8px; position: relative; z-index: 50; }
 

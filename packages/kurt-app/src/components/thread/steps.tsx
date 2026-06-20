@@ -2,6 +2,7 @@
  *  dispatched by `renderStep`. Each reads `lang` and renders the prototype's
  *  exact class structure. */
 
+import type { ReactNode } from "react";
 import type { Lang, Step } from "../../types.ts";
 import { T, tr } from "../../i18n/strings.ts";
 import { Icon } from "../Icon.tsx";
@@ -21,15 +22,44 @@ export interface OpenOutput {
   content: string;
 }
 
+/** Max lines shown inline for a tool/skill IN or OUT block before it clips to "…". */
+const MAX_LINES = 5;
+function clip(text: string): { display: string; truncated: boolean } {
+  const lines = text.split("\n");
+  if (lines.length <= MAX_LINES) return { display: text, truncated: false };
+  return { display: lines.slice(0, MAX_LINES).join("\n"), truncated: true };
+}
+
+/** The last path segment — what we show after a file tool's name. */
+function basename(path: string): string {
+  const clean = path.replace(/[/\\]+$/, "");
+  const i = Math.max(clean.lastIndexOf("/"), clean.lastIndexOf("\\"));
+  return i >= 0 ? clean.slice(i + 1) : clean;
+}
+
+/** Unified expand/collapse header shared by thinking / tool / skill steps:
+ *  [icon] label  sub  [chevron]. `sub` carries e.g. the file a tool writes
+ *  (a clickable link). The whole row toggles. */
+function StepHead({ icon, label, sub, open, onToggle, lang }: {
+  icon: string; label: string; sub?: ReactNode; open: boolean; onToggle: () => void; lang: Lang;
+}) {
+  return (
+    <div className={"step-head" + (open ? " open" : "")} onClick={onToggle} title={tr(open ? T.collapse : T.expand, lang)}>
+      <Icon name={icon} className="step-head-icon" />
+      <span className="step-head-label">{label}</span>
+      {sub && <span className="step-head-sub">{sub}</span>}
+      <Icon name="chevR" className="step-head-chev" />
+    </div>
+  );
+}
+
 export function ThinkingStepView({ step, open, onToggle, typing, lang }: {
   step: ThinkingStep; open: boolean; onToggle: () => void; typing: boolean; lang: Lang;
 }) {
+  const label = typing ? tr(T.thinking, lang) : step.sec != null ? tr(T.thoughtFor, lang, { n: step.sec }) : tr(T.thoughtDone, lang);
   return (
     <div className="step thinking-step">
-      <div className={"think-head" + (open ? " open" : "")} onClick={onToggle}>
-        <Icon name="chevR" className="chev" />
-        <span>{typing ? tr(T.thinking, lang) : step.sec ? tr(T.thoughtFor, lang, { n: step.sec }) : tr(T.thoughtDone, lang)}</span>
-      </div>
+      <StepHead icon="brain" label={label} open={open} onToggle={onToggle} lang={lang} />
       {open && <div className="think-body"><MdBlock text={tr(step.text, lang)} lang={lang} /></div>}
     </div>
   );
@@ -54,41 +84,43 @@ export function TextStepView({ step, typing, lang, showActions }: { step: TextSt
   );
 }
 
-export function ToolStepView({ step, open, onToggle, lang, onOpenOutput }: {
-  step: ToolStep; open: boolean; onToggle: () => void; lang: Lang; onOpenOutput?: (o: OpenOutput) => void;
+export function ToolStepView({ step, open, onToggle, lang, onOpenOutput, onOpenFile }: {
+  step: ToolStep; open: boolean; onToggle: () => void; lang: Lang; onOpenOutput?: (o: OpenOutput) => void; onOpenFile?: (file: string) => void;
 }) {
+  const title = tr(step.title, lang);
+  const inText = step.cmd;
   const outText = tr(step.out, lang);
-  const outLines = outText.split("\n");
-  const MAX_LINES = 5;
-  const isTruncated = outLines.length > MAX_LINES;
-  const displayOut = isTruncated ? outLines.slice(0, MAX_LINES).join("\n") : outText;
+  const inClip = clip(inText);
+  const outClip = clip(outText);
 
-  const handleClickOut = () => {
-    if (isTruncated && onOpenOutput) {
-      onOpenOutput({ stepId: step._id, name: step.name, title: tr(step.title, lang), content: outText });
-    }
-  };
+  const openFull = (tag: string, content: string) =>
+    onOpenOutput?.({ stepId: step._id, name: step.name, title: title ? `${title} · ${tag}` : tag, content });
+
+  // File tools (write_file, …) carry the path in `title`; show just the filename
+  // as a link that opens the side preview.
+  const fileLink = title && onOpenFile ? (
+    <button className="step-head-file" title={title} onClick={(e) => { e.stopPropagation(); onOpenFile(title); }}>
+      {basename(title)}
+    </button>
+  ) : undefined;
 
   return (
     <div className="step act">
-      <div className="tool-line" onClick={onToggle} title={tr(open ? T.collapse : T.expand, lang)}>
-        <span className="tool-name">{step.name}</span>
-        <span className="tool-title">{tr(step.title, lang)}</span>
-        <button className="icon-btn tool-toggle" tabIndex={-1} aria-hidden="true">
-          <Icon name={open ? "chevD" : "chevR"} />
-        </button>
-      </div>
+      <StepHead icon="wrench" label={step.name} sub={fileLink} open={open} onToggle={onToggle} lang={lang} />
       {open && (
         <div className="tool-card">
-          <div className="tool-row">
+          <div className={"tool-row" + (inClip.truncated ? " clickable" : "")} onClick={() => inClip.truncated && openFull("IN", inText)}>
             <span className="tool-tag">IN</span>
-            <div className="tool-content">{step.cmd}</div>
+            <div className="tool-content">
+              {inClip.display}
+              {inClip.truncated && <span className="tool-ellipsis">…</span>}
+            </div>
           </div>
-          <div className={"tool-row out" + (isTruncated ? " clickable" : "")} onClick={handleClickOut}>
+          <div className={"tool-row out" + (outClip.truncated ? " clickable" : "")} onClick={() => outClip.truncated && openFull("OUT", outText)}>
             <span className="tool-tag">OUT</span>
             <div className="tool-content">
-              {displayOut}
-              {isTruncated && <span className="tool-ellipsis">…</span>}
+              {outClip.display}
+              {outClip.truncated && <span className="tool-ellipsis">…</span>}
             </div>
           </div>
         </div>
@@ -109,31 +141,31 @@ export function ReadStepView({ step, lang, onOpen }: { step: ReadStep; lang: Lan
   );
 }
 
-export function SkillStepView({ step, open, onToggle, lang }: {
-  step: SkillStep; open: boolean; onToggle: () => void; lang: Lang;
+export function SkillStepView({ step, open, onToggle, lang, onOpenOutput }: {
+  step: SkillStep; open: boolean; onToggle: () => void; lang: Lang; onOpenOutput?: (o: OpenOutput) => void;
 }) {
+  const title = tr(step.title, lang);
+  const inText = step.input ? tr(step.input, lang) : "";
+  const inClip = clip(inText);
   return (
-    <div className="step skill-step">
-      <div className="skill-line" onClick={onToggle} title={tr(open ? T.collapse : T.expand, lang)}>
-        <span className="skill-badge"><Icon name="skills" /></span>
-        <span className="skill-name">{step.name}</span>
-        <span className="skill-title">{tr(step.title, lang)}</span>
-        <button className="icon-btn tool-toggle" tabIndex={-1} aria-hidden="true">
-          <Icon name={open ? "chevD" : "chevR"} />
-        </button>
-      </div>
+    <div className="step act skill-step">
+      <StepHead icon="skills" label={step.name} open={open} onToggle={onToggle} lang={lang} />
       {open && (
-        <div className="skill-card">
+        <div className="tool-card">
+          {title && <div className="tool-card-title">{title}</div>}
           {step.input && (
-            <div className="skill-section">
-              <div className="skill-section-label">INPUT</div>
-              <div className="skill-section-body">{tr(step.input, lang)}</div>
+            <div className={"tool-row" + (inClip.truncated ? " clickable" : "")} onClick={() => inClip.truncated && onOpenOutput?.({ stepId: step._id, name: step.name, title: title ? `${title} · IN` : "IN", content: inText })}>
+              <span className="tool-tag">IN</span>
+              <div className="tool-content">
+                {inClip.display}
+                {inClip.truncated && <span className="tool-ellipsis">…</span>}
+              </div>
             </div>
           )}
           {step.output && (
-            <div className="skill-section out">
-              <div className="skill-section-label">OUTPUT</div>
-              <div className="skill-section-body"><MdBlock text={tr(step.output, lang)} lang={lang} /></div>
+            <div className="tool-row out skill-out">
+              <span className="tool-tag">OUT</span>
+              <div className="tool-content"><MdBlock text={tr(step.output, lang)} lang={lang} /></div>
             </div>
           )}
         </div>
@@ -154,11 +186,11 @@ export function renderStep(
     case "thinking":
       return <ThinkingStepView key={step._id} step={step} open={open} typing={typing} onToggle={() => ctx.onToggle(step._id)} lang={ctx.lang} />;
     case "tool":
-      return <ToolStepView key={step._id} step={step} open={open} onToggle={() => ctx.onToggle(step._id)} lang={ctx.lang} onOpenOutput={ctx.onOpenOutput} />;
+      return <ToolStepView key={step._id} step={step} open={open} onToggle={() => ctx.onToggle(step._id)} lang={ctx.lang} onOpenOutput={ctx.onOpenOutput} onOpenFile={ctx.onOpenFile} />;
     case "read":
       return <ReadStepView key={step._id} step={step} lang={ctx.lang} onOpen={ctx.onOpenFile} />;
     case "skill":
-      return <SkillStepView key={step._id} step={step} open={open} onToggle={() => ctx.onToggle(step._id)} lang={ctx.lang} />;
+      return <SkillStepView key={step._id} step={step} open={open} onToggle={() => ctx.onToggle(step._id)} lang={ctx.lang} onOpenOutput={ctx.onOpenOutput} />;
     default:
       return <TextStepView key={step._id} step={step} typing={typing} lang={ctx.lang} showActions={step._id === ctx.lastTextId} />;
   }

@@ -37,6 +37,12 @@ describe("StepAccumulator", () => {
     expect(tool).toMatchObject({ type: "tool", name: "shell", cmd: "ls -la", out: "total 0\nfile.txt", isError: false });
   });
 
+  test("write_file → tool step carries the target path as title", () => {
+    const acc = new StepAccumulator();
+    acc.apply({ type: "tool_call", id: "w1", name: "write_file", input: { path: "src/foo.ts", content: "x" } });
+    expect(acc.steps()[0]).toMatchObject({ type: "tool", name: "write_file", title: "src/foo.ts" });
+  });
+
   test("tool error result sets isError", () => {
     const acc = new StepAccumulator();
     acc.apply({ type: "tool_call", id: "c1", name: "shell", input: { command: "boom" } });

@@ -170,11 +170,17 @@ function newToolStep(id: number, name: string, input: unknown): Step {
     const skillName = str(obj.name) || "skill";
     return { _id: id, type: "skill", name: skillName, title: "", input: skillName };
   }
-  return { _id: id, type: "tool", name, title: "", cmd: toolCmd(obj), out: "", isError: false };
+  return { _id: id, type: "tool", name, title: toolTarget(obj), cmd: toolCmd(obj), out: "", isError: false };
 }
 
 function toolCmd(obj: Record<string, unknown>): string {
   return str(obj.command) || str(obj.code) || str(obj.cmd) || str(obj.query) || safeJson(obj);
+}
+
+/** The file/target a tool operates on (write_file, edit, MCP fs tools, …), shown
+ * after the tool name in the UI header. Empty when the tool has no path-like arg. */
+function toolTarget(obj: Record<string, unknown>): string {
+  return str(obj.path) || str(obj.file) || str(obj.filename) || "";
 }
 
 function readRange(obj: Record<string, unknown>): string {
