@@ -4,6 +4,9 @@
  *   POST   /run            { sessionId?, text }  → text/event-stream of RunFrames
  *   POST   /approve        { id, decision }      → resolve a sensitive-op approval
  *   POST   /answer         { id, answer }        → resolve an ask_user question
+ *   GET    /fs?path=               → { path, entries[] }  (workspace dir listing)
+ *   GET    /file?path=             → { path, content, truncated }  (text preview)
+ *   GET    /raw?path=              → raw bytes (pdf/html/img for an <iframe>)
  *   GET    /sessions?workspace=                  → SessionInfo[]
  *   POST   /sessions                             → SessionInfo (new)
  *   GET    /sessions/:id                          → full SessionRecord
@@ -16,6 +19,7 @@
 
 import { runTurn, resolveApproval, resolveAsk, type Runtime, type ApprovalDecision, type ModelConfig, type Mode } from "./runtime.ts";
 import { messagesToSteps } from "./events.ts";
+import { listDir, readTextFile, resolveInWorkspace, contentType } from "./fs.ts";
 import type { RunFrame, SessionInfo } from "./types.ts";
 
 export interface ServerHandle {
@@ -58,6 +62,25 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
         const patch = (await req.json().catch(() => ({}))) as ModelConfig;
         rt.reconfigure?.(patch);
         return json(rt.info ? rt.info() : { hasKey: false, model: rt.model.name, models: [], workspace: rt.workspace });
+      }
+
+      // Workspace file access (Files tab + preview), confined to rt.workspace.
+      if (pathname === "/fs" && req.method === "GET") {
+        const listing = await listDir(rt.workspace, url.searchParams.get("path") ?? "");
+        return listing ? json(listing) : json({ error: "not found" }, 404);
+      }
+      if (pathname === "/file" && req.method === "GET") {
+        const file = await readTextFile(rt.workspace, url.searchParams.get("path") ?? "");
+        return file ? json(file) : json({ error: "not found" }, 404);
+      }
+      // Raw bytes (pdf/html/images) for an <iframe>/<embed> src.
+      if (pathname === "/raw" && req.method === "GET") {
+        const reqPath = url.searchParams.get("path") ?? "";
+        const full = reqPath ? resolveInWorkspace(rt.workspace, reqPath) : null;
+        if (!full) return new Response("not found", { status: 404, headers: CORS });
+        const f = Bun.file(full);
+        if (!(await f.exists())) return new Response("not found", { status: 404, headers: CORS });
+        return new Response(f, { headers: { ...CORS, "Content-Type": contentType(reqPath), "Cache-Control": "no-cache" } });
       }
 
       if (pathname === "/run" && req.method === "POST") {

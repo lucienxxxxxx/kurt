@@ -204,6 +204,29 @@ export async function setConfig(baseUrl: string, patch: Partial<DesktopConfig>):
   return res.ok ? ((await res.json()) as BridgeInfo) : null;
 }
 
+// ── Workspace files (Files tab + preview) ────────────────────────────────────
+
+export interface DirEntry { name: string; path: string; dir: boolean }
+export interface DirListing { path: string; entries: DirEntry[] }
+export interface FileContent { path: string; content: string; truncated: boolean }
+
+/** List a workspace directory ("" = root). */
+export async function listDir(baseUrl: string, path = ""): Promise<DirListing | null> {
+  const res = await fetch(`${baseUrl}/fs?path=${encodeURIComponent(path)}`);
+  return res.ok ? ((await res.json()) as DirListing) : null;
+}
+
+/** Read a workspace text file for preview. */
+export async function readFile(baseUrl: string, path: string): Promise<FileContent | null> {
+  const res = await fetch(`${baseUrl}/file?path=${encodeURIComponent(path)}`);
+  return res.ok ? ((await res.json()) as FileContent) : null;
+}
+
+/** URL serving a workspace file's raw bytes (pdf/html/img <iframe> src). */
+export function rawFileUrl(baseUrl: string, path: string): string {
+  return `${baseUrl}/raw?path=${encodeURIComponent(path)}`;
+}
+
 export async function health(baseUrl: string): Promise<boolean> {
   try {
     const res = await fetch(`${baseUrl}/health`);

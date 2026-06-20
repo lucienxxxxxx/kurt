@@ -3,19 +3,24 @@
  *  over SSE independently (runs continue in the background when you switch away);
  *  the sidebar lists the bridge's sessions and loading one reconstructs its steps. */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { Effort, Lang, Loc, Mode, Panel, QueuedMsg, SessionMeta, Step, Theme } from "./types.ts";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import type { Effort, Lang, Loc, Mode, QueuedMsg, SessionMeta, Step, Tab, TabKind, Theme } from "./types.ts";
 import { T, tr } from "./i18n/strings.ts";
-import { runStream, listSessions, getSession, getInfo, approve, answer, truncateSession, deleteSession, type ApprovalRequest, type AskRequest } from "./lib/bridge.ts";
+import { runStream, listSessions, getSession, getInfo, approve, answer, truncateSession, deleteSession, readFile, rawFileUrl, type ApprovalRequest, type AskRequest } from "./lib/bridge.ts";
 import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
 import { externalLinkFromClick, openExternal } from "./lib/external.ts";
 import { fmtElapsed, fmtTokens } from "./lib/format.ts";
+import { initTabs, tabsReducer } from "./lib/tabs.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
 import { Settings } from "./components/Settings.tsx";
 import { Approval } from "./components/Approval.tsx";
 import { Ask } from "./components/Ask.tsx";
-import { DetailPanel } from "./components/DetailPanel.tsx";
+import { WorkspaceTabs } from "./components/workspace/WorkspaceTabs.tsx";
+import { Workspace } from "./components/workspace/Workspace.tsx";
+import { PreviewTab, previewKindFor } from "./components/workspace/PreviewTab.tsx";
+import { FilesTab } from "./components/workspace/FilesTab.tsx";
+import { PlaceholderTab } from "./components/workspace/PlaceholderTab.tsx";
 import { renderStep, type OpenOutput } from "./components/thread/steps.tsx";
 import { MdBlock } from "./components/Markdown.tsx";
 import { CopyButton, MessageTime } from "./components/MessageActions.tsx";
@@ -59,7 +64,6 @@ export default function App() {
   const [input, setInput] = useState("");
   const [model, setModel] = useState("");
   const [models, setModels] = useState<string[]>([]);
-  const [workspace, setWorkspace] = useState<string>("");
   const [effort, setEffort] = useState<Effort>("med");
   const [mode, setMode] = useState<Mode>(() => persisted<Mode>("kurt-mode", "agent"));
   const [thinking, setThinking] = useState<boolean>(() => { try { return localStorage.getItem("kurt-thinking") === "1"; } catch { return false; } });
@@ -76,8 +80,8 @@ export default function App() {
   const [viewStats, setViewStats] = useState<{ startedAt: number; tokens: number } | null>(null);
   const [loadingSession, setLoadingSession] = useState(false); // fetching a session's steps (no cache yet)
   const [, forceTick] = useState(0);
-  const [panels, setPanels] = useState<Panel[]>([]);
-  const [activePanelId, setActivePanelId] = useState<string | null>(null);
+  const [tabs, dispatchTabs] = useReducer(tabsReducer, undefined, () => initTabs(tr(T.tabSession, lang)));
+  const tabCounter = useRef(0);
   // Approvals are keyed by the session their run belongs to, so switching
   // sessions doesn't lose a pending prompt — it re-appears when you switch back.
   const [pendingApprovals, setPendingApprovals] = useState<Record<string, ApprovalRequest>>({});
@@ -183,7 +187,7 @@ export default function App() {
     void (async () => {
       try {
         const info = await getInfo(await resolveBridgeUrl());
-        if (info) { setModels(info.models); setModel((m) => m || info.model); setWorkspace(info.workspace || ""); }
+        if (info) { setModels(info.models); setModel((m) => m || info.model); }
       } catch { /* bridge not ready */ }
     })();
   }, []);
@@ -349,23 +353,55 @@ export default function App() {
     setQueuedMsgs(run.queue.slice());
   };
 
-  const openPanel = (panel: Panel): void => {
-    setPanels((prev) => { if (prev.find((p) => p.id === panel.id)) { setActivePanelId(panel.id); return prev; } setActivePanelId(panel.id); return [...prev, panel]; });
+  // ── Workspace tabs ──────────────────────────────────────────────────────────
+  /** Create/focus a tab from the `+` menu (files/plan/preview singletons; each
+   *  terminal is its own tab). */
+  const addTab = (kind: TabKind): void => {
+    if (kind === "terminal") {
+      const n = ++tabCounter.current;
+      dispatchTabs({ type: "add", tab: { id: `terminal:${n}`, kind, title: `${tr(T.tabTerminal, lang)} ${n}`, closable: true } });
+      return;
+    }
+    const id = kind; // files / plan / preview are singletons
+    const title = kind === "files" ? tr(T.tabFiles, lang) : kind === "plan" ? tr(T.tabPlan, lang) : tr(T.tabPreview, lang);
+    dispatchTabs({ type: "add", tab: { id, kind, title, closable: true } });
   };
-  const closePanel = (id: string): void => {
-    setPanels((prev) => {
-      const next = prev.filter((p) => p.id !== id);
-      setActivePanelId((cur) => (cur === id ? (next.length ? next[next.length - 1]!.id : null) : cur));
-      return next;
-    });
+
+  /** Open a workspace file in a preview tab, split beside the conversation, then
+   *  load its real content from the bridge. */
+  const openFile = (path: string): void => {
+    const id = "file:" + path;
+    const kind = previewKindFor(path);
+    const title = path.split("/").pop() || path;
+    dispatchTabs({ type: "add", tab: { id, kind: "preview", title, closable: true, meta: { file: path, previewKind: kind, subtitle: path } } });
+    dispatchTabs({ type: "split", id });
+    void (async () => {
+      const base = await resolveBridgeUrl();
+      if (kind === "pdf") {
+        dispatchTabs({ type: "update", id, patch: { meta: { content: rawFileUrl(base, path) } } });
+      } else {
+        const f = await readFile(base, path);
+        if (f) dispatchTabs({ type: "update", id, patch: { meta: { content: f.content + (f.truncated ? "\n\n… (truncated)" : "") } } });
+      }
+    })();
   };
-  const openFile = (file: string): void => {
-    // Real file preview (serving content from the bridge) is a later touch.
-    const isCode = /\.(js|ts|json|py|rs|css)$/.test(file);
-    openPanel({ id: "file:" + file, type: "file", title: file.split("/").pop()!, subtitle: file, content: `# ${file}\n\n(No preview available yet)`, forceCode: isCode });
-  };
+
+  /** Open a tool's full output in a preview tab, split beside the conversation. */
   const openToolOutput = (info: OpenOutput): void => {
-    openPanel({ id: "output:" + info.stepId, type: "output", title: info.name, subtitle: info.title, content: info.content, forceCode: true });
+    const id = "output:" + info.stepId;
+    dispatchTabs({ type: "add", tab: { id, kind: "preview", title: info.name, closable: true, meta: { previewKind: "output", content: info.content, subtitle: info.title } } });
+    dispatchTabs({ type: "split", id });
+  };
+
+  const renderPane = (tab: Tab): React.ReactNode => {
+    switch (tab.kind) {
+      case "session": return renderSessionPane();
+      case "files": return <FilesTab lang={lang} onOpenFile={openFile} />;
+      case "preview": return <PreviewTab tab={tab} lang={lang} />;
+      case "terminal": return <PlaceholderTab icon="terminal" label={tr(T.tabTerminal, lang)} lang={lang} />;
+      case "plan": return <PlaceholderTab icon="list" label={tr(T.tabPlan, lang)} lang={lang} />;
+      default: return null;
+    }
   };
 
   const toggleStep = (id: number): void => setCollapsed((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -377,7 +413,7 @@ export default function App() {
     setView("chat");
     setActive(id);
     setUnread((u) => { if (!u.has(id)) return u; const n = new Set(u); n.delete(id); return n; }); // clicking clears the unread dot
-    setCollapsed(new Set()); setPanels([]); setActivePanelId(null);
+    setCollapsed(new Set());
     wantScroll.current = true;
     const meta = sessionList.find((s) => s.id === id);
     const title = meta && meta.title ? meta.title : T.convNew;
@@ -420,7 +456,7 @@ export default function App() {
     setNewChatRun(null);
     setLoadingSession(false); wantScroll.current = true;
     setThread([]); setLiveId(null); setQueuedMsgs([]); setViewStats(null);
-    setTitleEntry(T.convNew); setCollapsed(new Set()); setPanels([]); setActivePanelId(null);
+    setTitleEntry(T.convNew); setCollapsed(new Set());
   };
 
   /** Delete a session: stop its run if any, drop it from the bridge, clear its
@@ -457,6 +493,72 @@ export default function App() {
     return null;
   };
 
+  // The conversation pane (thread + composer) — rendered as the `session` tab.
+  function renderSessionPane(): React.ReactNode {
+    return (
+      <div className="main-col">
+        {loadingSession ? (
+          <div className="thread-loading" />
+        ) : thread.length === 0 ? (
+          <div className="empty-state">
+            <img className="empty-logo" src={logo} alt="Kurt" />
+            <h2>{tr(T.emptyTitle, lang)}</h2>
+            <p>{tr(T.emptyDesc, lang)}</p>
+            <div className="suggest-row">
+              {[T.suggest1, T.suggest2, T.suggest3].map((s, i) => (
+                <div key={i} className="suggest" onClick={() => setInput(tr(s, lang))}>{tr(s, lang)}</div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="thread-scroll" ref={scrollRef} onScroll={onThreadScroll}>
+            <div className="thread-inner">
+              {segments.map((seg, i) => (
+                <div key={i}>
+                  {seg.user && (
+                    <div className="query-row">
+                      <div className="query-box"><MdBlock text={tr(seg.user.text, lang)} lang={lang} /></div>
+                      <div className="msg-actions user">
+                        <CopyButton text={tr(seg.user.text, lang)} lang={lang} />
+                        <button className="msg-btn" onClick={() => rollbackTo(seg.user)} title={tr(T.rollback, lang)} aria-label={tr(T.rollback, lang)}>
+                          <Icon name="rollback" /><span className="msg-btn-label">{tr(T.rollback, lang)}</span>
+                        </button>
+                        <MessageTime ts={seg.user.ts} />
+                      </div>
+                    </div>
+                  )}
+                  {seg.steps.length > 0 && <div className="timeline">{seg.steps.map((s) => renderStep(s, { ...stepCtx, lastTextId: lastTextId(seg.steps) }))}</div>}
+                </div>
+              ))}
+              {viewStats && (
+                <div className="run-status">
+                  <span className="spin" />
+                  <span className="run-status-text">
+                    {fmtElapsed(Date.now() - viewStats.startedAt)}
+                    {viewStats.tokens > 0 ? ` · ${fmtTokens(viewStats.tokens)} tokens` : ""}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <Composer value={input} onChange={setInput} onSend={send} onStop={stopRun}
+          running={viewRunning} queuedMsgs={queuedMsgs} onCancelQueued={cancelQueued} lang={lang}
+          model={model} models={models} onModelChange={setModel} effort={effort} onEffortChange={setEffort}
+          mode={mode} onModeChange={setMode} thinking={thinking} onThinkingToggle={() => setThinking((v) => !v)}
+          approval={
+            pendingApprovals[approvalKey(activeId)]
+              ? <Approval req={pendingApprovals[approvalKey(activeId)]!} lang={lang} onDecide={decideApproval} />
+              : pendingAsks[approvalKey(activeId)]
+                ? <Ask req={pendingAsks[approvalKey(activeId)]!} lang={lang} onAnswer={answerAsk} />
+                : null
+          }
+          meter={thread.length > 0 ? <ContextMeter steps={thread} model={model} lang={lang} apiTokens={viewStats?.tokens} /> : null} />
+      </div>
+    );
+  }
+
   return (
     <div className="window">
       <Sidebar recents={sessionList} activeId={activeId} runningIds={runningIds} unread={unread} onPick={loadSession} onDelete={removeSession} onNewChat={newChat}
@@ -468,79 +570,21 @@ export default function App() {
             collapseDetails={collapseDetails} setCollapseDetails={setCollapseDetails} onClose={() => setView("chat")} />
         ) : (
           <div className="main-chat">
-            <div className="main-content">
-              <div className="main-top" data-tauri-drag-region>
-                <div className="conv-title-wrap" data-value={tr(titleEntry, lang)}>
-                  <input className="conv-title-input" value={tr(titleEntry, lang)} spellCheck={false}
-                    onChange={(e) => setTitleEntry((prev) => (typeof prev === "string" ? e.target.value : { ...prev, [lang]: e.target.value }))} />
-                </div>
-              </div>
-
-              <div className="main-lower">
-                <div className="main-col">
-                  {loadingSession ? (
-                    <div className="thread-loading" />
-                  ) : thread.length === 0 ? (
-                    <div className="empty-state">
-                      <img className="empty-logo" src={logo} alt="Kurt" />
-                      <h2>{tr(T.emptyTitle, lang)}</h2>
-                      <p>{tr(T.emptyDesc, lang)}</p>
-                      <div className="suggest-row">
-                        {[T.suggest1, T.suggest2, T.suggest3].map((s, i) => (
-                          <div key={i} className="suggest" onClick={() => setInput(tr(s, lang))}>{tr(s, lang)}</div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="thread-scroll" ref={scrollRef} onScroll={onThreadScroll}>
-                      <div className="thread-inner">
-                        {segments.map((seg, i) => (
-                          <div key={i}>
-                            {seg.user && (
-                              <div className="query-row">
-                                <div className="query-box"><MdBlock text={tr(seg.user.text, lang)} lang={lang} /></div>
-                                <div className="msg-actions user">
-                                  <CopyButton text={tr(seg.user.text, lang)} lang={lang} />
-                                  <button className="msg-btn" onClick={() => rollbackTo(seg.user)} title={tr(T.rollback, lang)} aria-label={tr(T.rollback, lang)}>
-                                    <Icon name="rollback" /><span className="msg-btn-label">{tr(T.rollback, lang)}</span>
-                                  </button>
-                                  <MessageTime ts={seg.user.ts} />
-                                </div>
-                              </div>
-                            )}
-                            {seg.steps.length > 0 && <div className="timeline">{seg.steps.map((s) => renderStep(s, { ...stepCtx, lastTextId: lastTextId(seg.steps) }))}</div>}
-                          </div>
-                        ))}
-                        {viewStats && (
-                          <div className="run-status">
-                            <span className="spin" />
-                            <span className="run-status-text">
-                              {fmtElapsed(Date.now() - viewStats.startedAt)}
-                              {viewStats.tokens > 0 ? ` · ${fmtTokens(viewStats.tokens)} tokens` : ""}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <Composer value={input} onChange={setInput} onSend={send} onStop={stopRun}
-                    running={viewRunning} queuedMsgs={queuedMsgs} onCancelQueued={cancelQueued} lang={lang}
-                    model={model} models={models} onModelChange={setModel} effort={effort} onEffortChange={setEffort}
-                    mode={mode} onModeChange={setMode} thinking={thinking} onThinkingToggle={() => setThinking((v) => !v)}
-                    approval={
-                      pendingApprovals[approvalKey(activeId)]
-                        ? <Approval req={pendingApprovals[approvalKey(activeId)]!} lang={lang} onDecide={decideApproval} />
-                        : pendingAsks[approvalKey(activeId)]
-                          ? <Ask req={pendingAsks[approvalKey(activeId)]!} lang={lang} onAnswer={answerAsk} />
-                          : null
-                    }
-                    meter={thread.length > 0 ? <ContextMeter steps={thread} model={model} lang={lang} apiTokens={viewStats?.tokens} /> : null} />
-                </div>
+            <div className="main-top" data-tauri-drag-region>
+              <div className="conv-title-wrap" data-value={tr(titleEntry, lang)}>
+                <input className="conv-title-input" value={tr(titleEntry, lang)} spellCheck={false}
+                  onChange={(e) => setTitleEntry((prev) => (typeof prev === "string" ? e.target.value : { ...prev, [lang]: e.target.value }))} />
               </div>
             </div>
 
-            <DetailPanel panels={panels} activePanelId={activePanelId} onSetActive={setActivePanelId} onClose={closePanel} lang={lang} />
+            <WorkspaceTabs state={tabs} lang={lang}
+              onActivate={(id) => dispatchTabs({ type: "activate", id })}
+              onClose={(id) => dispatchTabs({ type: "close", id })}
+              onSplit={(id) => dispatchTabs({ type: "split", id })}
+              onUnsplit={() => dispatchTabs({ type: "unsplit" })}
+              onAdd={addTab} />
+
+            <Workspace state={tabs} renderPane={renderPane} />
           </div>
         )}
       </div>
