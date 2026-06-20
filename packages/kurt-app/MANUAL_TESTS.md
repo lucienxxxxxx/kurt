@@ -480,3 +480,26 @@ Visual/interactive — verify in `bun run tauri dev`.
    (real features land in Phases C and B).
 
 Result: ____ (date / pass-fail / notes).
+
+---
+
+## Phase B — Plan tab + auto-triggers
+
+Visual/interactive — `bun run tauri dev`. Best in **Plan/Agent mode** (so `update_plan` / `write_file` run).
+
+1. **Plan auto-opens.** Ask Kurt (plan or agent mode) to plan a multi-step task. When it calls
+   `update_plan`, a **计划/Plan** tab **auto-splits** open beside the conversation, showing the
+   ordered checklist with a progress count.
+2. **Plan updates live.** As Kurt re-records the plan (steps move to in_progress/done), the Plan
+   tab updates — done items are struck through, the active step highlighted, progress increments.
+3. **Plan is per session.** Switch to another conversation → the Plan tab reflects that session's
+   plan (or the empty state). Switch back → the first plan returns. (Live only; a freshly reloaded
+   session shows the empty state until a new plan arrives.)
+4. **Auto-preview on delivery.** Ask Kurt (agent mode) to write a document, e.g. a Markdown/HTML
+   file. When the **run finishes**, a **Preview** tab auto-splits open showing that file's content
+   (the last previewable doc written this run). It does **not** pop open mid-write — only at the end.
+5. **No hijack while away.** Start a doc-producing run, switch to another conversation before it
+   finishes → the preview does **not** steal your view; it only auto-opens for the run you're
+   watching.
+
+Result: ____ (date / pass-fail / notes).
