@@ -116,10 +116,13 @@ export interface Runtime {
   store: SessionStore;
   /** Mutable so `reconfigure` can swap the model when the key/model changes. */
   model: ModelProvider;
-  /** Build the tool set for a run: `permission` gates sensitive ops, `ask` lets the
-   *  agent put a question to the user (the ask_user tool). */
-  makeTools: (permission: PermissionProvider, ask: AskProvider) => Tool[];
+  /** Build the tool set for a run rooted at `workspace`: `permission` gates
+   *  sensitive ops, `ask` lets the agent put a question to the user (ask_user). */
+  makeTools: (permission: PermissionProvider, ask: AskProvider, workspace: string) => Tool[];
   system: string;
+  /** Build the base system prompt for a given workspace (per-conversation). When
+   *  absent, runTurn uses the fixed `system`. */
+  systemFor?: (workspace: string) => string;
   /** In-flight approvals awaiting POST /approve, keyed by approval id. */
   pendingApprovals: Map<string, PendingApproval>;
   /** In-flight ask_user questions awaiting POST /answer, keyed by ask id. */
@@ -148,6 +151,9 @@ export interface RunOptions {
   effort?: string;
   thinking?: boolean;
   mode?: Mode;
+  /** The conversation's chosen workspace (folder picker). Falls back to the
+   *  session's stored workspace, then the bridge default. */
+  workspace?: string;
   signal: AbortSignal;
   onFrame: (frame: RunFrame) => void;
 }
@@ -155,7 +161,7 @@ export interface RunOptions {
 export function createRuntime(opts: {
   workspace: string;
   model: ModelProvider;
-  makeTools: (permission: PermissionProvider, ask: AskProvider) => Tool[];
+  makeTools: (permission: PermissionProvider, ask: AskProvider, workspace: string) => Tool[];
   system?: string;
   store?: SessionStore;
   makeTitle?: (messages: Message[]) => Promise<string>;
@@ -198,7 +204,12 @@ export function resolveApproval(rt: Runtime, id: string, decision: ApprovalDecis
  * Never throws — failures surface as an `error` frame.
  */
 export async function runTurn(rt: Runtime, opts: RunOptions): Promise<void> {
-  const rec = (opts.sessionId ? await rt.store.load(opts.sessionId) : null) ?? rt.store.create(rt.workspace, rt.model.name);
+  const rec = (opts.sessionId ? await rt.store.load(opts.sessionId) : null) ?? rt.store.create(opts.workspace || rt.workspace, rt.model.name);
+  // The conversation owns its workspace: a picked one (opts) wins, else the session's
+  // stored one, else the bridge default. Keep the record in sync so the picker can
+  // change an existing conversation's workspace and it persists with the session.
+  const ws = opts.workspace || rec.workspace || rt.workspace;
+  rec.workspace = ws;
   const isNewSession = !rec.title; // brand-new conversation → title is auto-summarized after this turn
   rec.messages.push({ role: "user", content: [{ type: "text", text: opts.text }] });
   if (isNewSession) {
@@ -256,10 +267,11 @@ export async function runTurn(rt: Runtime, opts: RunOptions): Promise<void> {
   };
 
   const mode: Mode = opts.mode ?? "agent";
-  const tools = toolsForMode(rt.makeTools(permission, ask), mode);
-  // Append a fresh environment block each run so the model knows the current time
-  // and the user's system (kept out of rt.system, which is built once per session).
-  const system = rt.system + environmentContext() + modeGuidance(mode);
+  const tools = toolsForMode(rt.makeTools(permission, ask, ws), mode);
+  // Base prompt is rooted at THIS conversation's workspace; then a fresh environment
+  // block (current time + the user's system) appended every run.
+  const base = rt.systemFor ? rt.systemFor(ws) : rt.system;
+  const system = base + environmentContext() + modeGuidance(mode);
   // Per-run model override from the composer menus (falls back to the configured model).
   const override = opts.model || opts.effort || opts.thinking !== undefined;
   const model = override && rt.modelFor ? rt.modelFor(opts.model, opts.effort, opts.thinking) : rt.model;
@@ -383,29 +395,33 @@ export function productionRuntime(workspace = process.cwd()): Runtime {
   const model = buildModel();
   const sandbox = process.platform === "darwin" ? new SeatbeltSandbox() : new DirectSandbox();
   const codeTemp = new SessionWorkspace({ sessionId: "bridge" });
-  const writable = [workspace];
-  const env = { WORKSPACE_DIR: workspace };
 
-  // Tools are rebuilt per run so the sensitive-command gate (ShellTool's permission)
-  // is bound to that run's SSE stream → approval prompts reach the right desktop run.
-  const makeTools = (permission: PermissionProvider, ask: AskProvider): Tool[] => [
-    new ReadFileTool({ roots: writable }),
-    new LsTool({ roots: writable }),
-    new GrepTool({ roots: writable }),
-    new WriteFileTool({ roots: writable }),
-    new ShellTool(sandbox, { cwd: workspace, writablePaths: writable, env, permission }),
-    new CodeTool(sandbox, codeTemp, { writablePaths: writable, env, cwd: workspace }),
-    new WebSearchTool(new DuckDuckGoSearch()),
-    new MemoryTool({ globalPath: join(homedir(), ".kurt", "memory.md"), projectPath: join(workspace, ".kurt", "memory.md") }),
-    new UpdatePlanTool(),
-    // Lets the agent request access to a dir OUTSIDE the workspace (e.g. ~/Downloads);
-    // routes through the approval modal, then the dir joins `writable` (read + write).
-    new RequestWriteAccessTool(writable, permission),
-    // Lets the agent put a clarifying question to the user (answered via a popup).
-    new AskUserTool(ask),
-  ];
+  // Tools are rebuilt per run rooted at THAT conversation's workspace (`ws`), so
+  // file ops / shell / code / memory all operate where the conversation points.
+  // (Also per-run so the sensitive-command gate binds to the run's SSE stream.)
+  const makeTools = (permission: PermissionProvider, ask: AskProvider, ws: string): Tool[] => {
+    const writable = [ws];
+    const env = { WORKSPACE_DIR: ws };
+    return [
+      new ReadFileTool({ roots: writable }),
+      new LsTool({ roots: writable }),
+      new GrepTool({ roots: writable }),
+      new WriteFileTool({ roots: writable }),
+      new ShellTool(sandbox, { cwd: ws, writablePaths: writable, env, permission }),
+      new CodeTool(sandbox, codeTemp, { writablePaths: writable, env, cwd: ws }),
+      new WebSearchTool(new DuckDuckGoSearch()),
+      new MemoryTool({ globalPath: join(homedir(), ".kurt", "memory.md"), projectPath: join(ws, ".kurt", "memory.md") }),
+      new UpdatePlanTool(),
+      // Lets the agent request access to a dir OUTSIDE the workspace (e.g. ~/Downloads);
+      // routes through the approval modal, then the dir joins `writable` (read + write).
+      new RequestWriteAccessTool(writable, permission),
+      // Lets the agent put a clarifying question to the user (answered via a popup).
+      new AskUserTool(ask),
+    ];
+  };
 
   const rt = createRuntime({ workspace, model, makeTools, store: new SessionStore(sessionsDir()) });
+  rt.systemFor = (ws) => defaultSystem(ws); // prompt rooted at the conversation's workspace
   rt.info = () => ({ hasKey: cfg.apiKey.length > 0, model: cfg.models[0] ?? "", models: cfg.models, workspace: rt.workspace });
   rt.fullConfig = () => ({ apiKey: cfg.apiKey, baseURL: cfg.baseURL, models: cfg.models, format: cfg.format });
   rt.reconfigure = (patch) => {

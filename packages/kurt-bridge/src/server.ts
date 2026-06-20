@@ -4,9 +4,9 @@
  *   POST   /run            { sessionId?, text }  → text/event-stream of RunFrames
  *   POST   /approve        { id, decision }      → resolve a sensitive-op approval
  *   POST   /answer         { id, answer }        → resolve an ask_user question
- *   GET    /fs?path=               → { path, entries[] }  (workspace dir listing)
- *   GET    /file?path=             → { path, content, truncated }  (text preview)
- *   GET    /raw?path=              → raw bytes (pdf/html/img for an <iframe>)
+ *   GET    /fs?path=&workspace=    → { path, entries[] }  (dir listing, ws-confined)
+ *   GET    /file?path=&workspace=  → { path, content, truncated }  (text preview)
+ *   GET    /raw?path=&workspace=   → raw bytes (pdf/html/img for an <iframe>)
  *   GET    /sessions?workspace=                  → SessionInfo[]
  *   POST   /sessions                             → SessionInfo (new)
  *   GET    /sessions/:id                          → full SessionRecord
@@ -64,19 +64,23 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
         return json(rt.info ? rt.info() : { hasKey: false, model: rt.model.name, models: [], workspace: rt.workspace });
       }
 
-      // Workspace file access (Files tab + preview), confined to rt.workspace.
+      // Workspace file access (Files tab + preview), confined to the conversation's
+      // workspace (?workspace=, falls back to the bridge default).
       if (pathname === "/fs" && req.method === "GET") {
-        const listing = await listDir(rt.workspace, url.searchParams.get("path") ?? "");
+        const root = url.searchParams.get("workspace") || rt.workspace;
+        const listing = await listDir(root, url.searchParams.get("path") ?? "");
         return listing ? json(listing) : json({ error: "not found" }, 404);
       }
       if (pathname === "/file" && req.method === "GET") {
-        const file = await readTextFile(rt.workspace, url.searchParams.get("path") ?? "");
+        const root = url.searchParams.get("workspace") || rt.workspace;
+        const file = await readTextFile(root, url.searchParams.get("path") ?? "");
         return file ? json(file) : json({ error: "not found" }, 404);
       }
       // Raw bytes (pdf/html/images) for an <iframe>/<embed> src.
       if (pathname === "/raw" && req.method === "GET") {
+        const root = url.searchParams.get("workspace") || rt.workspace;
         const reqPath = url.searchParams.get("path") ?? "";
-        const full = reqPath ? resolveInWorkspace(rt.workspace, reqPath) : null;
+        const full = reqPath ? resolveInWorkspace(root, reqPath) : null;
         if (!full) return new Response("not found", { status: 404, headers: CORS });
         const f = Bun.file(full);
         if (!(await f.exists())) return new Response("not found", { status: 404, headers: CORS });
@@ -133,7 +137,7 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
           const rec = await rt.store.load(id);
           if (!rec) return json({ error: "not found" }, 404);
           // Reconstruct the stored messages into renderable steps for the desktop.
-          return json({ id: rec.id, title: rec.title, updatedAt: rec.updatedAt, steps: messagesToSteps(rec.messages) });
+          return json({ id: rec.id, title: rec.title, updatedAt: rec.updatedAt, workspace: rec.workspace, steps: messagesToSteps(rec.messages) });
         }
         if (req.method === "DELETE") {
           await rt.store.remove(id);
@@ -160,6 +164,8 @@ interface RunBody {
   effort?: string;
   thinking?: boolean;
   mode?: Mode;
+  /** The conversation's chosen workspace (folder picker). */
+  workspace?: string;
 }
 
 /** Run one turn and stream its frames as Server-Sent Events. */
@@ -175,7 +181,7 @@ function runSSE(rt: Runtime, body: RunBody): Response {
           /* stream already closed */
         }
       };
-      void runTurn(rt, { sessionId: body.sessionId, text: body.text!, model: body.model, effort: body.effort, thinking: body.thinking, mode: body.mode, signal: ctrl.signal, onFrame: send }).finally(() => {
+      void runTurn(rt, { sessionId: body.sessionId, text: body.text!, model: body.model, effort: body.effort, thinking: body.thinking, mode: body.mode, workspace: body.workspace, signal: ctrl.signal, onFrame: send }).finally(() => {
         try {
           controller.close();
         } catch {

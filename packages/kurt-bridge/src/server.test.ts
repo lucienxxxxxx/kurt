@@ -324,6 +324,27 @@ describe("plan frame", () => {
   }, 20_000);
 });
 
+describe("per-conversation workspace", () => {
+  test("opts.workspace roots the tools + system prompt (else falls back to default)", async () => {
+    let toolsWs = "";
+    const model = new MockModel([{ text: "hi" }, { text: "hi" }]);
+    const rt = createRuntime({
+      workspace: "/default-ws",
+      model,
+      makeTools: (_p, _a, ws) => { toolsWs = ws; return []; },
+      store: new SessionStore(sessions),
+    });
+    rt.systemFor = (ws) => `WORKSPACE_DIR = ${ws}`;
+
+    await runTurn(rt, { text: "hi", mode: "agent", workspace: "/picked/ws", signal: new AbortController().signal, onFrame: () => {} });
+    expect(toolsWs).toBe("/picked/ws");
+    expect(model.requests[0]!.system).toContain("WORKSPACE_DIR = /picked/ws");
+
+    await runTurn(rt, { text: "hi", mode: "agent", signal: new AbortController().signal, onFrame: () => {} });
+    expect(toolsWs).toBe("/default-ws"); // no pick → bridge default
+  });
+});
+
 describe("environment context", () => {
   test("each run's system prompt carries the current time + OS", async () => {
     const model = new MockModel([{ text: "hi" }]);
