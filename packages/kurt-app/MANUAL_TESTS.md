@@ -590,3 +590,26 @@ Visual/interactive — `bun run tauri dev`.
    it follows each conversation's pick.
 
 Result: ____ (date / pass-fail / notes).
+
+---
+
+## Multi-provider models (Phase 1: openai/deepseek/custom; claude is Phase 2)
+
+Visual/interactive — `bun run tauri dev`. (Bridge changed → fully restart.)
+
+1. **Provider cards.** Settings → Model / API shows 4 cards: OpenAI, Claude, DeepSeek, Custom.
+   Each has an enable toggle + API key; Custom also has Base URL + models + OpenAI/Claude format.
+   Built-ins ship default model lists (editable). Claude shows a "native coming next" note.
+2. **Enable + key + save.** Enable OpenAI, paste a key, Save → no error. Enable DeepSeek too, Save.
+3. **Grouped dropdown.** Back in chat, open the model dropdown → models are grouped under provider
+   headers (OPENAI / DEEPSEEK), listing each enabled provider's models. Disabled providers don't appear.
+4. **Switch + run.** Pick a GPT model → send → it runs via OpenAI (real key required). Pick a DeepSeek
+   model → runs via DeepSeek. The selection persists across restarts (kurt-model).
+5. **Custom.** Enable Custom, set Base URL to an OpenAI-compatible gateway + models, Save → its models
+   appear under CUSTOM and run.
+6. **Claude (Phase 1).** Enabling Claude + picking a claude model → sending shows a "native Anthropic
+   coming next" notice instead of a real reply (the native provider lands in Phase 2).
+7. **Raw JSON.** The desktop.json editor shows the multi-provider `{ providers: {...} }`; Edit → Confirm
+   validates + saves and the dropdown updates.
+
+Result: ____ (date / pass-fail / notes).
