@@ -61,4 +61,26 @@ describe("MdBlock — used for both user messages and agent replies", () => {
     expect(container.querySelector("tbody td strong")?.textContent).toBe("hi");
     expect(container.querySelector("tbody td code.inl")?.textContent).toBe("x");
   });
+
+  // Previously-unsupported syntax (the point of moving to a real library):
+  test("renders a blockquote (>)", () => {
+    const { container } = render(<MdBlock text={"> a quote"} />);
+    expect(container.querySelector("blockquote.md-quote")?.textContent).toContain("a quote");
+  });
+
+  test("renders *single-asterisk* emphasis as <em>", () => {
+    const { container } = render(<MdBlock text={"an *italic* word"} />);
+    expect(container.querySelector("em")?.textContent).toBe("italic");
+    expect(container.textContent).not.toContain("*");
+  });
+
+  test("renders ~~strikethrough~~ (GFM) as <del>", () => {
+    const { container } = render(<MdBlock text={"~~gone~~"} />);
+    expect(container.querySelector("del")?.textContent).toBe("gone");
+  });
+
+  test("renders a nested list", () => {
+    const { container } = render(<MdBlock text={"- a\n  - a1\n- b"} />);
+    expect(container.querySelector("ul.md-ul ul.md-ul")).toBeInTheDocument();
+  });
 });

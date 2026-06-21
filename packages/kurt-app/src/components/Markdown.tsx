@@ -1,124 +1,63 @@
-/** Tiny markdown renderer (ported from prototype/ui.jsx): inline code/bold/links
- *  + block headers/lists/code-fences/hr. Faithful to the prototype's subset. */
+/** Markdown renderer for messages, thinking, tool output and file preview.
+ *  Backed by react-markdown + remark-gfm (CommonMark + GFM: blockquotes, *italic*,
+ *  ~~strike~~, tables, task lists, nested lists, autolinks, …) — no hand-rolled
+ *  parser, and safe by construction (react-markdown builds React nodes, never
+ *  dangerouslySetInnerHTML). Element → className mapping keeps the existing visual
+ *  style, and fenced code keeps its language label + copy button. */
 
-import type { ReactNode } from "react";
+import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { Lang } from "../types.ts";
 import { CopyButton } from "./MessageActions.tsx";
 
-export function renderInline(text: string): ReactNode[] {
-  const parts: ReactNode[] = [];
-  const re = /(`[^`]+`|\*\*[^*]+\*\*|\[([^\]]+)\]\(([^)]+)\))/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  let k = 0;
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) parts.push(text.slice(last, m.index));
-    const tok = m[0];
-    if (tok.startsWith("`")) parts.push(<code key={k++} className="inl">{tok.slice(1, -1)}</code>);
-    else if (tok.startsWith("**")) parts.push(<strong key={k++}>{tok.slice(2, -2)}</strong>);
-    else if (tok.startsWith("[")) parts.push(<a key={k++} className="md-link" href={m[3]}>{m[2]}</a>);
-    last = m.index + tok.length;
+/** Flatten a code element's children to a raw string (for the copy button). */
+function codeText(node: ReactNode): string {
+  if (typeof node === "string") return node;
+  if (Array.isArray(node)) return node.map(codeText).join("");
+  if (node && typeof node === "object" && "props" in node) {
+    return codeText((node as ReactElement<{ children?: ReactNode }>).props.children);
   }
-  if (last < text.length) parts.push(text.slice(last));
-  return parts;
+  return "";
 }
 
 export function MdBlock({ text, lang = "en" }: { text: string; lang?: Lang }) {
-  const lines = text.split("\n");
-  const elements: ReactNode[] = [];
-  let i = 0;
-  let k = 0;
-
-  while (i < lines.length) {
-    const line = lines[i]!;
-
-    if (line.trim() === "") { elements.push(<div key={k++} style={{ height: 6 }} />); i++; continue; }
-
-    if (line.trim().startsWith("```")) {
-      const fence = line.trim().slice(3).trim(); // the code fence's language label
-      const codeLines: string[] = [];
-      i++;
-      while (i < lines.length && !lines[i]!.trim().startsWith("```")) { codeLines.push(lines[i]!); i++; }
-      i++;
-      const code = codeLines.join("\n");
-      elements.push(
-        <pre key={k++} className="md-pre">
-          {fence && <div className="md-pre-lang">{fence}</div>}
-          <CopyButton text={code} lang={lang} compact className="md-pre-copy" />
-          <code>{code}</code>
-        </pre>,
-      );
-      continue;
-    }
-
-    // GitHub-style table: a header row followed by a |---|---| separator row.
-    if (line.includes("|") && i + 1 < lines.length && isTableSep(lines[i + 1]!)) {
-      const header = splitRow(line);
-      const aligns = splitRow(lines[i + 1]!).map(cellAlign);
-      i += 2;
-      const rows: string[][] = [];
-      while (i < lines.length && lines[i]!.trim() !== "" && lines[i]!.includes("|")) { rows.push(splitRow(lines[i]!)); i++; }
-      elements.push(
-        <table key={k++} className="md-table">
-          <thead>
-            <tr>{header.map((c, ci) => <th key={ci} style={{ textAlign: aligns[ci] ?? "left" }}>{renderInline(c)}</th>)}</tr>
-          </thead>
-          <tbody>
-            {rows.map((r, ri) => (
-              <tr key={ri}>{header.map((_, ci) => <td key={ci} style={{ textAlign: aligns[ci] ?? "left" }}>{renderInline(r[ci] ?? "")}</td>)}</tr>
-            ))}
-          </tbody>
-        </table>,
-      );
-      continue;
-    }
-
-    if (line.startsWith("### ")) { elements.push(<h4 key={k++} className="md-h3">{renderInline(line.slice(4))}</h4>); i++; continue; }
-    if (line.startsWith("## ")) { elements.push(<h3 key={k++} className="md-h2">{renderInline(line.slice(3))}</h3>); i++; continue; }
-    if (line.startsWith("# ")) { elements.push(<h2 key={k++} className="md-h1">{renderInline(line.slice(2))}</h2>); i++; continue; }
-
-    if (/^---+$/.test(line.trim())) { elements.push(<hr key={k++} className="md-hr" />); i++; continue; }
-
-    if (/^[-*] /.test(line.trim())) {
-      const items: string[] = [];
-      while (i < lines.length && /^[-*] /.test(lines[i]!.trim())) { items.push(lines[i]!.trim().replace(/^[-*] /, "")); i++; }
-      elements.push(<ul key={k++} className="md-ul">{items.map((tt, j) => <li key={j}>{renderInline(tt)}</li>)}</ul>);
-      continue;
-    }
-
-    if (/^\d+[.)]\s/.test(line.trim())) {
-      const items: string[] = [];
-      while (i < lines.length && /^\d+[.)]\s/.test(lines[i]!.trim())) { items.push(lines[i]!.trim().replace(/^\d+[.)]\s/, "")); i++; }
-      elements.push(<ol key={k++} className="md-ol">{items.map((tt, j) => <li key={j}>{renderInline(tt)}</li>)}</ol>);
-      continue;
-    }
-
-    elements.push(<p key={k++}>{renderInline(line)}</p>);
-    i++;
-  }
-  return <>{elements}</>;
-}
-
-/** A markdown table separator row: only `| - : space`, with at least one `-` and `|`. */
-function isTableSep(line: string): boolean {
-  const s = line.trim();
-  return /^[:\-\s|]+$/.test(s) && s.includes("-") && s.includes("|");
-}
-
-/** Split a `| a | b |` row into trimmed cells (tolerating missing edge pipes). */
-function splitRow(line: string): string[] {
-  let s = line.trim();
-  if (s.startsWith("|")) s = s.slice(1);
-  if (s.endsWith("|")) s = s.slice(0, -1);
-  return s.split("|").map((c) => c.trim());
-}
-
-/** Column alignment from a separator cell (`:--` left, `--:` right, `:-:` center). */
-function cellAlign(cell: string): "left" | "center" | "right" {
-  const c = cell.trim();
-  const l = c.startsWith(":");
-  const r = c.endsWith(":");
-  if (l && r) return "center";
-  if (r) return "right";
-  return "left";
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        h1: ({ children }) => <h2 className="md-h1">{children}</h2>,
+        h2: ({ children }) => <h3 className="md-h2">{children}</h3>,
+        h3: ({ children }) => <h4 className="md-h3">{children}</h4>,
+        h4: ({ children }) => <h4 className="md-h3">{children}</h4>,
+        a: ({ children, href }) => <a className="md-link" href={href}>{children}</a>,
+        ul: ({ children }) => <ul className="md-ul">{children}</ul>,
+        ol: ({ children }) => <ol className="md-ol">{children}</ol>,
+        hr: () => <hr className="md-hr" />,
+        blockquote: ({ children }) => <blockquote className="md-quote">{children}</blockquote>,
+        table: ({ children }) => <table className="md-table">{children}</table>,
+        // Inline code: fenced blocks are handled by `pre` below (which owns the chrome).
+        code: ({ className, children }: ComponentPropsWithoutRef<"code">) =>
+          className && className.startsWith("language-")
+            ? <code className={className}>{children}</code>
+            : <code className="inl">{children}</code>,
+        // Fenced code block: language label + copy button + the code.
+        pre: ({ children }) => {
+          const el = children as ReactElement<{ className?: string; children?: ReactNode }>;
+          const cls = el?.props?.className ?? "";
+          const fence = /language-(\w+)/.exec(cls)?.[1] ?? "";
+          const code = codeText(el?.props?.children).replace(/\n$/, "");
+          return (
+            <pre className="md-pre">
+              {fence && <div className="md-pre-lang">{fence}</div>}
+              <CopyButton text={code} lang={lang} compact className="md-pre-copy" />
+              <code>{code}</code>
+            </pre>
+          );
+        },
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  );
 }
