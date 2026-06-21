@@ -8,9 +8,14 @@ export function fmtElapsed(ms: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-/** Token count, abbreviated: 999 → "999", 1500 → "1.5k", 12000 → "12k". */
+/** Token count, abbreviated: 999 → "999", 1500 → "1.5k", 12000 → "12k",
+ *  5_986_000 → "6.0M". Sub-1000 stays a raw number (no "k"). */
 export function fmtTokens(n: number): string {
   if (n < 1000) return `${n}`;
-  const k = n / 1000;
-  return `${k % 1 === 0 || k >= 100 ? Math.round(k) : k.toFixed(1)}k`;
+  if (n < 1_000_000) {
+    const k = n / 1000;
+    return `${k % 1 === 0 || k >= 100 ? Math.round(k) : k.toFixed(1)}k`;
+  }
+  const m = n / 1_000_000;
+  return `${m % 1 === 0 || m >= 100 ? Math.round(m) : m.toFixed(1)}M`;
 }

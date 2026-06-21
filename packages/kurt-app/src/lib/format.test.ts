@@ -26,5 +26,12 @@ describe("fmtTokens", () => {
     expect(fmtTokens(1500)).toBe("1.5k");
     expect(fmtTokens(12_000)).toBe("12k");
     expect(fmtTokens(120_000)).toBe("120k");
+    expect(fmtTokens(999_999)).toBe("1000k"); // just under 1M
+  });
+  test("millions use M, not a huge k", () => {
+    expect(fmtTokens(1_000_000)).toBe("1M");
+    expect(fmtTokens(1_500_000)).toBe("1.5M");
+    expect(fmtTokens(5_986_000)).toBe("6.0M");
+    expect(fmtTokens(12_000_000)).toBe("12M");
   });
 });
