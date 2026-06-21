@@ -6,7 +6,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { Effort, Lang, Loc, Mode, QueuedMsg, SessionMeta, Step, Tab, TabKind, TabsState, Theme } from "./types.ts";
 import { T, tr } from "./i18n/strings.ts";
-import { runStream, listSessions, getSession, getInfo, approve, answer, truncateSession, deleteSession, readFile, rawFileUrl, type ApprovalRequest, type AskRequest, type PlanStep } from "./lib/bridge.ts";
+import { runStream, listSessions, getSession, getInfo, approve, answer, truncateSession, deleteSession, readFile, rawFileUrl, type ApprovalRequest, type AskRequest, type PlanStep, type ProviderGroup } from "./lib/bridge.ts";
 import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
 import { externalLinkFromClick, openExternal } from "./lib/external.ts";
 import { fmtElapsed, fmtTokens } from "./lib/format.ts";
@@ -69,6 +69,7 @@ export default function App() {
   const [input, setInput] = useState("");
   const [model, setModel] = useState<string>(() => persisted<string>("kurt-model", ""));
   const [models, setModels] = useState<string[]>([]);
+  const [modelGroups, setModelGroups] = useState<ProviderGroup[]>([]);
   const [workspace, setWorkspace] = useState<string>(""); // bridge default workspace (fallback)
   // The viewed conversation's workspace (folder picker). New chats default to the
   // last-picked dir (persisted), then the bridge default.
@@ -233,15 +234,21 @@ export default function App() {
     } catch { /* bridge not ready — leave the list as-is */ }
   }, []);
   useEffect(() => { void refreshSessions(); }, [refreshSessions]);
-  // Available models + current default for the composer's model menu.
-  useEffect(() => {
-    void (async () => {
-      try {
-        const info = await getInfo(await resolveBridgeUrl());
-        if (info) { setModels(info.models); setModel((m) => m || info.model); setWorkspace(info.workspace || ""); setConvWorkspace((w) => w || info.workspace || ""); }
-      } catch { /* bridge not ready */ }
-    })();
+  // Available models + grouping for the composer's model menu. Re-run after the
+  // Settings provider config changes so enabling a provider updates the dropdown.
+  const refreshInfo = useCallback(async (): Promise<void> => {
+    try {
+      const info = await getInfo(await resolveBridgeUrl());
+      if (info) {
+        setModels(info.models);
+        setModelGroups(info.providers ?? []);
+        setModel((m) => (m && info.models.includes(m) ? m : info.model));
+        setWorkspace(info.workspace || "");
+        setConvWorkspace((w) => w || info.workspace || "");
+      }
+    } catch { /* bridge not ready */ }
   }, []);
+  useEffect(() => { void refreshInfo(); }, [refreshInfo]);
 
   /** Upsert a step into a run's buffer; mirror to the visible thread + cursor only
    *  while that run is the conversation on screen (a backgrounded run doesn't leak
@@ -646,7 +653,7 @@ export default function App() {
 
         <Composer value={input} onChange={setInput} onSend={send} onStop={stopRun}
           running={viewRunning} queuedMsgs={queuedMsgs} onCancelQueued={cancelQueued} lang={lang}
-          model={model} models={models} onModelChange={setModel} effort={effort} onEffortChange={setEffort}
+          model={model} models={models} modelGroups={modelGroups} onModelChange={setModel} effort={effort} onEffortChange={setEffort}
           mode={mode} onModeChange={setMode} thinking={thinking} onThinkingToggle={() => setThinking((v) => !v)}
           workspace={convWorkspace} onPickWorkspace={() => void pickWorkspace()}
           approval={
@@ -669,7 +676,8 @@ export default function App() {
       <div className="main">
         {view === "settings" ? (
           <Settings theme={theme} setTheme={setTheme} lang={lang} setLang={setLang}
-            collapseDetails={collapseDetails} setCollapseDetails={setCollapseDetails} onClose={() => setView("chat")} />
+            collapseDetails={collapseDetails} setCollapseDetails={setCollapseDetails}
+            onConfigChanged={() => void refreshInfo()} onClose={() => setView("chat")} />
         ) : (
           <div className="main-chat">
             <div className="main-top" data-tauri-drag-region>

@@ -177,11 +177,16 @@ export async function truncateSession(baseUrl: string, id: string, keepUserTurns
   return res.ok ? ((await res.json()) as SessionDetail) : null;
 }
 
+/** A model provider's models, grouped for the composer dropdown. */
+export interface ProviderGroup { id: string; label: string; models: string[] }
+
 /** Model/key status (never includes the key itself). */
 export interface BridgeInfo {
   hasKey: boolean;
   model: string;
   models: string[];
+  /** Models grouped by enabled provider (grouped model dropdown). */
+  providers: ProviderGroup[];
   /** The bridge's workspace root (Files tab + terminal cwd). */
   workspace: string;
 }
@@ -191,12 +196,17 @@ export async function getInfo(baseUrl: string): Promise<BridgeInfo | null> {
   return res.ok ? ((await res.json()) as BridgeInfo) : null;
 }
 
-/** The full desktop.json the bridge runs on (mirrors kurt-bridge ModelConfig). */
-export interface DesktopConfig {
+/** Multi-provider desktop.json (mirrors kurt-bridge providers.ts). */
+export type ProviderId = "openai" | "claude" | "deepseek" | "custom";
+export interface ProviderConfig {
+  enabled: boolean;
   apiKey: string;
-  baseURL: string;
-  models: string[];
-  format: "openai" | "claude";
+  baseURL?: string;
+  models?: string[];
+  format?: "openai" | "claude";
+}
+export interface DesktopConfig {
+  providers: Record<ProviderId, ProviderConfig>;
 }
 
 /** GET the full config (incl. the key — localhost). */

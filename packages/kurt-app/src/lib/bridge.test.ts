@@ -79,12 +79,13 @@ describe("getInfo / setConfig", () => {
     expect(await getInfo("http://x")).toEqual({ hasKey: true, model: "deepseek-v4-flash" });
   });
 
-  test("setConfig POSTs the patch and returns updated status", async () => {
-    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ hasKey: true, model: "deepseek-v4-flash" }), { status: 200 }));
+  test("setConfig POSTs the provider patch and returns updated status", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ hasKey: true, model: "gpt-4o" }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
-    const info = await setConfig("http://x", { apiKey: "sk-abc" });
+    const patch = { providers: { openai: { enabled: true, apiKey: "sk-abc" } } } as never;
+    const info = await setConfig("http://x", patch);
     expect(info?.hasKey).toBe(true);
     const init = fetchMock.mock.calls[0]![1]!;
-    expect(JSON.parse(init.body as string)).toEqual({ apiKey: "sk-abc" });
+    expect(JSON.parse(init.body as string)).toEqual({ providers: { openai: { enabled: true, apiKey: "sk-abc" } } });
   });
 });

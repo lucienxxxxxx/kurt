@@ -4,9 +4,10 @@
 import { useEffect, useState } from "react";
 import type { Lang, Theme } from "../types.ts";
 import { T, tr, type StringKey } from "../i18n/strings.ts";
-import { getConfig, setConfig, type DesktopConfig } from "../lib/bridge.ts";
+import { getConfig, setConfig, type DesktopConfig, type ProviderConfig, type ProviderId } from "../lib/bridge.ts";
 import { resolveBridgeUrl } from "../lib/bridgeUrl.ts";
 import { Icon } from "./Icon.tsx";
+import { ModelLogo } from "./ModelLogo.tsx";
 import logo from "../assets/kurt_logo.svg";
 
 function ModeCard({ active, theme, label, onClick }: { active: boolean; theme: Theme; label: string; onClick: () => void }) {
@@ -59,36 +60,38 @@ function AppearancePanel({ theme, setTheme, lang, setLang }: { theme: Theme; set
   );
 }
 
-function ApiPanel({ lang }: { lang: Lang }) {
-  const [cfg, setCfg] = useState<DesktopConfig | null>(null);
-  // structured form state
-  const [baseURL, setBaseURL] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [modelsText, setModelsText] = useState("");
-  const [format, setFormat] = useState<"openai" | "claude">("openai");
+/** UI metadata for each provider (label + default baseURL placeholder + custom?). */
+const PROVIDERS: { id: ProviderId; label: string; baseURL: string; modelsHint: string; custom: boolean }[] = [
+  { id: "openai", label: "OpenAI", baseURL: "https://api.openai.com/v1", modelsHint: "gpt-4o, gpt-4o-mini, o3-mini", custom: false },
+  { id: "claude", label: "Claude", baseURL: "https://api.anthropic.com", modelsHint: "claude-opus-4-8, claude-sonnet-4-6", custom: false },
+  { id: "deepseek", label: "DeepSeek", baseURL: "https://api.deepseek.com", modelsHint: "deepseek-v4-flash, deepseek-v4-pro", custom: false },
+  { id: "custom", label: "Custom", baseURL: "https://…/v1", modelsHint: "my-model-1, my-model-2", custom: true },
+];
+
+function ApiPanel({ lang, onConfigChanged }: { lang: Lang; onConfigChanged?: () => void }) {
+  const [draft, setDraft] = useState<DesktopConfig | null>(null);
   const [savedFlag, setSavedFlag] = useState(false);
   // raw JSON editor state
   const [jsonText, setJsonText] = useState("");
   const [editingJson, setEditingJson] = useState(false);
   const [jsonErr, setJsonErr] = useState(false);
 
-  const apply = (c: DesktopConfig): void => {
-    setCfg(c);
-    setBaseURL(c.baseURL);
-    setApiKey(c.apiKey);
-    setModelsText(c.models.join(", "));
-    setFormat(c.format);
-    if (!editingJson) setJsonText(JSON.stringify(c, null, 2));
-  };
   const refetch = async (): Promise<void> => {
-    try { const c = await getConfig(await resolveBridgeUrl()); if (c) apply(c); } catch { /* bridge not ready */ }
+    try {
+      const c = await getConfig(await resolveBridgeUrl());
+      if (c) { setDraft(c); if (!editingJson) setJsonText(JSON.stringify(c, null, 2)); }
+    } catch { /* bridge not ready */ }
   };
   useEffect(() => { void refetch(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const saveForm = async (): Promise<void> => {
-    const models = modelsText.split(",").map((s) => s.trim()).filter(Boolean);
-    await setConfig(await resolveBridgeUrl(), { baseURL: baseURL.trim(), apiKey: apiKey.trim(), models, format });
+  const setProv = (id: ProviderId, patch: Partial<ProviderConfig>): void =>
+    setDraft((d) => (d ? { providers: { ...d.providers, [id]: { ...d.providers[id], ...patch } } } : d));
+
+  const save = async (): Promise<void> => {
+    if (!draft) return;
+    await setConfig(await resolveBridgeUrl(), { providers: draft.providers });
     await refetch();
+    onConfigChanged?.();
     setSavedFlag(true);
     setTimeout(() => setSavedFlag(false), 2000);
   };
@@ -104,46 +107,51 @@ function ApiPanel({ lang }: { lang: Lang }) {
     if (typeof parsed !== "object" || parsed === null) { setJsonErr(true); return; }
     await setConfig(await resolveBridgeUrl(), parsed as Partial<DesktopConfig>);
     await refetch();
+    onConfigChanged?.();
     setEditingJson(false);
     setJsonErr(false);
   };
 
-  const hasKey = (cfg?.apiKey ?? "").length > 0;
   return (
     <div className="set-panel">
-      <div className="set-row">
-        <div className="set-row-head">
-          <div className="set-row-title">{tr(T.apiBaseUrlLabel, lang)}</div>
-          <div className="set-row-sub">{tr(T.apiBaseUrlDesc, lang)}</div>
-        </div>
-        <input className="api-input" value={baseURL} spellCheck={false} placeholder="https://api.deepseek.com" onChange={(e) => setBaseURL(e.target.value)} />
+      <div className="set-row-head" style={{ marginBottom: 4 }}>
+        <div className="set-row-title">{tr(T.apiProvidersTitle, lang)}</div>
+        <div className="set-row-sub">{tr(T.apiProvidersDesc, lang)}</div>
       </div>
-      <div className="set-row">
-        <div className="set-row-head">
-          <div className="set-row-title">
-            {tr(T.apiKeyLabel, lang)} · <span style={{ color: hasKey ? "var(--green)" : "var(--text-muted)" }}>{tr(hasKey ? T.apiKeySet : T.apiKeyNone, lang)}</span>
+
+      {PROVIDERS.map(({ id, label, baseURL, modelsHint, custom }) => {
+        const p = draft?.providers[id] ?? { enabled: false, apiKey: "" };
+        const hasKey = (p.apiKey ?? "").length > 0;
+        return (
+          <div key={id} className={"provider-card" + (p.enabled ? " on" : "")}>
+            <div className="provider-head">
+              <span className="provider-name"><ModelLogo model={id} /> {label}</span>
+              <span className="provider-key-dot" style={{ background: hasKey ? "var(--green, #3a9)" : "var(--border-strong)" }} />
+              <span className="provider-spacer" />
+              <span className="switch-row" role="switch" aria-checked={p.enabled} onClick={() => setProv(id, { enabled: !p.enabled })}>
+                <span className="set-row-sub">{tr(T.apiEnable, lang)}</span>
+                <span className={"switch" + (p.enabled ? " on" : "")}><span className="switch-knob" /></span>
+              </span>
+            </div>
+            <input className="api-input" type="password" value={p.apiKey ?? ""} spellCheck={false}
+              placeholder={tr(T.apiKeyPlaceholder, lang)} onChange={(e) => setProv(id, { apiKey: e.target.value })} />
+            {custom && (
+              <input className="api-input" value={p.baseURL ?? ""} spellCheck={false}
+                placeholder={baseURL} onChange={(e) => setProv(id, { baseURL: e.target.value })} />
+            )}
+            <input className="api-input" value={(p.models ?? []).join(", ")} spellCheck={false}
+              placeholder={modelsHint} onChange={(e) => setProv(id, { models: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} />
+            {custom && (
+              <SegRow<"openai" | "claude"> value={p.format ?? "openai"} onChange={(f) => setProv(id, { format: f })}
+                options={[{ value: "openai", label: tr(T.apiFormatOpenai, lang) }, { value: "claude", label: tr(T.apiFormatClaude, lang) }]} />
+            )}
+            {id === "claude" && <div className="provider-note">{tr(T.apiClaudeSoon, lang)}</div>}
           </div>
-          <div className="set-row-sub">{tr(T.apiKeyDesc, lang)}</div>
-        </div>
-        <input className="api-input" type="password" value={apiKey} spellCheck={false} placeholder={tr(T.apiKeyPlaceholder, lang)} onChange={(e) => setApiKey(e.target.value)} />
-      </div>
-      <div className="set-row">
-        <div className="set-row-head">
-          <div className="set-row-title">{tr(T.apiModelsLabel, lang)}</div>
-          <div className="set-row-sub">{tr(T.apiModelsDesc, lang)}</div>
-        </div>
-        <input className="api-input" value={modelsText} spellCheck={false} placeholder="deepseek-v4-flash, deepseek-v4-pro" onChange={(e) => setModelsText(e.target.value)} />
-      </div>
-      <div className="set-row inline">
-        <div className="set-row-head">
-          <div className="set-row-title">{tr(T.apiFormatLabel, lang)}</div>
-          <div className="set-row-sub">{tr(T.apiFormatDesc, lang)}</div>
-        </div>
-        <SegRow<"openai" | "claude"> value={format} onChange={setFormat}
-          options={[{ value: "openai", label: tr(T.apiFormatOpenai, lang) }, { value: "claude", label: tr(T.apiFormatClaude, lang) }]} />
-      </div>
+        );
+      })}
+
       <div className="api-row" style={{ justifyContent: "flex-end" }}>
-        <button className="pill-btn" onClick={() => void saveForm()}>{savedFlag ? tr(T.saved, lang) : tr(T.save, lang)}</button>
+        <button className="pill-btn" onClick={() => void save()}>{savedFlag ? tr(T.saved, lang) : tr(T.save, lang)}</button>
       </div>
 
       <div className="set-row">
@@ -152,7 +160,7 @@ function ApiPanel({ lang }: { lang: Lang }) {
           <div className="set-row-sub">{tr(T.apiRawDesc, lang)}</div>
         </div>
         <textarea className={"api-json" + (editingJson ? " editing" : "")} value={jsonText} readOnly={!editingJson} spellCheck={false}
-          onChange={(e) => onJsonChange(e.target.value)} rows={8} />
+          onChange={(e) => onJsonChange(e.target.value)} rows={10} />
         <div className="api-row" style={{ justifyContent: "flex-end" }}>
           <button className="pill-btn" disabled={editingJson && jsonErr} onClick={() => void toggleJson()}>
             {editingJson ? tr(T.confirm, lang) : tr(T.edit, lang)}
@@ -204,9 +212,9 @@ function AboutPanel({ lang }: { lang: Lang }) {
   );
 }
 
-export function Settings({ theme, setTheme, lang, setLang, collapseDetails, setCollapseDetails, onClose }: {
+export function Settings({ theme, setTheme, lang, setLang, collapseDetails, setCollapseDetails, onConfigChanged, onClose }: {
   theme: Theme; setTheme: (t: Theme) => void; lang: Lang; setLang: (l: Lang) => void;
-  collapseDetails: boolean; setCollapseDetails: (v: boolean) => void; onClose: () => void;
+  collapseDetails: boolean; setCollapseDetails: (v: boolean) => void; onConfigChanged?: () => void; onClose: () => void;
 }) {
   const [cat, setCat] = useState<"appearance" | "api" | "general" | "about">("appearance");
   const cats: { id: "appearance" | "api" | "general" | "about"; icon: string; label: StringKey }[] = [
@@ -231,7 +239,7 @@ export function Settings({ theme, setTheme, lang, setLang, collapseDetails, setC
         </div>
         <div className="set-detail">
           {cat === "appearance" && <AppearancePanel theme={theme} setTheme={setTheme} lang={lang} setLang={setLang} />}
-          {cat === "api" && <ApiPanel lang={lang} />}
+          {cat === "api" && <ApiPanel lang={lang} onConfigChanged={onConfigChanged} />}
           {cat === "general" && <GeneralPanel lang={lang} collapseDetails={collapseDetails} setCollapseDetails={setCollapseDetails} />}
           {cat === "about" && <AboutPanel lang={lang} />}
         </div>

@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Effort, Lang, Mode, QueuedMsg } from "../types.ts";
+import type { ProviderGroup } from "../lib/bridge.ts";
 import { T, tr } from "../i18n/strings.ts";
 import { Icon } from "./Icon.tsx";
 import { ModelLogo } from "./ModelLogo.tsx";
@@ -39,11 +40,12 @@ function PlusMenu({ lang, open, onToggle }: { lang: Lang; open: boolean; onToggl
   );
 }
 
-function ModelMenu({ value, options, onChange, open, onToggle, thinking, onThinkingToggle, lang }: {
-  value: string; options: string[]; onChange: (v: string) => void; open: boolean; onToggle: () => void;
+function ModelMenu({ value, options, groups, onChange, open, onToggle, thinking, onThinkingToggle, lang }: {
+  value: string; options: string[]; groups: ProviderGroup[]; onChange: (v: string) => void; open: boolean; onToggle: () => void;
   thinking: boolean; onThinkingToggle: () => void; lang: Lang;
 }) {
-  const opts = options.length ? options : [value];
+  // Prefer the grouped view (by provider); fall back to a flat list.
+  const view: ProviderGroup[] = groups.length ? groups : [{ id: "", label: "", models: options.length ? options : [value] }];
   const btnRef = useRef<HTMLButtonElement>(null);
   return (
     <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
@@ -51,10 +53,15 @@ function ModelMenu({ value, options, onChange, open, onToggle, thinking, onThink
         <ModelLogo model={value} />{value}<Icon name="chevD" className="chev" />
       </button>
       <MenuPopover open={open} anchorRef={btnRef} title={tr(T.menuModel, lang)}>
-        {opts.map((m) => (
-          <div key={m} className={"menu-item" + (m === value ? " sel" : "")} onClick={() => { onChange(m); onToggle(); }}>
-            <ModelLogo model={m} />{m}
-            {m === value && <span style={{ marginLeft: "auto" }}><Icon name="check" /></span>}
+        {view.map((g) => (
+          <div key={g.id || "_"}>
+            {groups.length > 0 && <div className="menu-group">{g.label}</div>}
+            {g.models.map((m) => (
+              <div key={g.id + m} className={"menu-item" + (m === value ? " sel" : "")} onClick={() => { onChange(m); onToggle(); }}>
+                <ModelLogo model={m} />{m}
+                {m === value && <span style={{ marginLeft: "auto" }}><Icon name="check" /></span>}
+              </div>
+            ))}
           </div>
         ))}
         <div className="menu-sep" />
@@ -133,7 +140,7 @@ function QueueSection({ items, onCancel, lang }: { items: QueuedMsg[]; onCancel:
   );
 }
 
-export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs, onCancelQueued, lang, model, models, onModelChange, effort, onEffortChange, mode, onModeChange, thinking, onThinkingToggle, workspace, onPickWorkspace, approval, meter }: {
+export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs, onCancelQueued, lang, model, models, modelGroups, onModelChange, effort, onEffortChange, mode, onModeChange, thinking, onThinkingToggle, workspace, onPickWorkspace, approval, meter }: {
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
@@ -144,6 +151,7 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
   lang: Lang;
   model: string;
   models: string[];
+  modelGroups: ProviderGroup[];
   onModelChange: (m: string) => void;
   effort: Effort;
   onEffortChange: (e: Effort) => void;
@@ -209,7 +217,7 @@ export function Composer({ value, onChange, onSend, onStop, running, queuedMsgs,
         {/* below the input box: borderless model/effort on the left, context ring on the right */}
         <div className="composer-footer">
           <ModeMenu value={mode} onChange={onModeChange} lang={lang} open={openMenu === "mode"} onToggle={() => toggle("mode")} />
-          <ModelMenu value={model} options={models} onChange={onModelChange} open={openMenu === "model"} onToggle={() => toggle("model")}
+          <ModelMenu value={model} options={models} groups={modelGroups} onChange={onModelChange} open={openMenu === "model"} onToggle={() => toggle("model")}
             thinking={thinking} onThinkingToggle={onThinkingToggle} lang={lang} />
           <EffortMenu value={effort} onChange={onEffortChange} lang={lang} open={openMenu === "effort"} onToggle={() => toggle("effort")} />
           <button className="pill-btn ws-btn" onClick={onPickWorkspace} title={workspace || tr(T.workspacePick, lang)}>

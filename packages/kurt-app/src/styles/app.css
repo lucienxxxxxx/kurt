@@ -837,6 +837,7 @@ html[data-theme="dark"] img.empty-logo { filter: invert(1); }
   padding: 6px; min-width: 170px;
 }
 .menu-title { font-size: 11px; font-weight: 600; letter-spacing: .03em; color: var(--text-faint); padding: 4px 9px 6px; }
+.menu-group { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); padding: 8px 9px 3px; }
 .menu-item {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 11px; border-radius: 8px;
@@ -990,6 +991,23 @@ html[data-theme="dark"] img.empty-logo { filter: invert(1); }
 }
 .api-input:focus { border-color: var(--accent); }
 .api-input::placeholder { color: var(--text-faint); }
+
+/* per-provider config card (Settings → Model / API) */
+.provider-card {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px 14px; margin-bottom: 10px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--bg-elevated);
+  opacity: .72; transition: opacity .15s, border-color .15s;
+}
+.provider-card.on { opacity: 1; border-color: var(--border-strong); }
+.provider-head { display: flex; align-items: center; gap: 8px; }
+.provider-name { display: inline-flex; align-items: center; gap: 7px; font-weight: 650; font-size: 14px; color: var(--text); }
+.provider-name svg { width: 16px; height: 16px; }
+.provider-key-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; }
+.provider-spacer { flex: 1 1 auto; }
+.provider-card .switch-row { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.provider-note { font-size: 12px; color: var(--text-faint); line-height: 1.5; }
 .api-json {
   width: 100%; resize: vertical; min-height: 120px;
   border: 1px solid var(--border-strong); border-radius: 10px;
