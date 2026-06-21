@@ -1035,6 +1035,8 @@ html[data-theme="dark"] img.empty-logo { filter: invert(1); }
   padding: 12px 13px 9px;
   animation: approvalDrop .18s cubic-bezier(.2,.7,.3,1) both;
 }
+/* "+N more pending" hint under a queued approval/ask banner */
+.prompt-queue-note { padding: 4px 14px 8px; font-size: 12px; color: var(--text-faint); text-align: center; }
 @keyframes approvalDrop {
   from { transform: translateY(-6px); opacity: 0; }
   to   { transform: none; opacity: 1; }

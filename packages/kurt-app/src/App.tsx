@@ -50,6 +50,9 @@ interface Run {
   workspace: string;          // the conversation's workspace for this run
 }
 
+/** A user prompt awaiting a decision — a sensitive-op approval or an ask_user. */
+type Prompt = { kind: "approval"; req: ApprovalRequest } | { kind: "ask"; req: AskRequest };
+
 const persisted = <V extends string>(key: string, fallback: V): V => {
   try { const v = localStorage.getItem(key); return v === null ? fallback : (v as V); } catch { return fallback; }
 };
@@ -120,10 +123,19 @@ export default function App() {
   const [viewPlan, setViewPlan] = useState<PlanStep[] | undefined>(undefined); // plan of the viewed session
   // Approvals are keyed by the session their run belongs to, so switching
   // sessions doesn't lose a pending prompt — it re-appears when you switch back.
-  const [pendingApprovals, setPendingApprovals] = useState<Record<string, ApprovalRequest>>({});
-  // ask_user questions, also keyed by session (same survive-switch behavior).
-  const [pendingAsks, setPendingAsks] = useState<Record<string, AskRequest>>({});
+  // Per-session QUEUE of prompts (approvals + ask_user). Parallel tool calls can
+  // raise several at once; we present them one at a time (FIFO) so the user handles
+  // them in order instead of later ones clobbering earlier ones.
+  const [prompts, setPrompts] = useState<Record<string, Prompt[]>>({});
   const approvalKey = (id: string | null): string => id ?? "";
+  const enqueuePrompt = (sid: string, p: Prompt): void =>
+    setPrompts((m) => {
+      const q = m[sid] ?? [];
+      if (q.some((x) => x.req.id === p.req.id)) return m; // de-dupe re-sent frames
+      return { ...m, [sid]: [...q, p] };
+    });
+  const dropPrompt = (sid: string, id: string): void =>
+    setPrompts((m) => { const q = (m[sid] ?? []).filter((x) => x.req.id !== id); return { ...m, [sid]: q }; });
 
   const runsRef = useRef<Map<number, Run>>(new Map()); // in-flight runs, by runId
   const sessionCache = useRef<Map<string, Step[]>>(new Map()); // last-known steps per session → instant, blank-free switches
@@ -327,8 +339,8 @@ export default function App() {
               }
             }
           },
-          onApproval: (req) => { if (run.sessionId) setPendingApprovals((m) => ({ ...m, [run.sessionId!]: req })); },
-          onAsk: (req) => { if (run.sessionId) setPendingAsks((m) => ({ ...m, [run.sessionId!]: req })); },
+          onApproval: (req) => { if (run.sessionId) enqueuePrompt(run.sessionId, { kind: "approval", req }); },
+          onAsk: (req) => { if (run.sessionId) enqueuePrompt(run.sessionId, { kind: "ask", req }); },
           onUsage: (u) => { run.tokens += u.totalTokens; if (u.inputTokens > 0) run.contextTokens = u.inputTokens; if (isViewing(run)) setViewStats({ startedAt: run.startedAt, tokens: run.tokens, contextTokens: run.contextTokens }); },
           onError: (message) => upsertRun(run, { _id: uid(), type: "text", text: `⚠ ${message}`, ts: Date.now() } as Step),
         },
@@ -337,8 +349,7 @@ export default function App() {
     } finally {
       if (run.sessionId) {
         const sid = run.sessionId;
-        setPendingApprovals((m) => { const n = { ...m }; delete n[sid]; return n; });
-        setPendingAsks((m) => { const n = { ...m }; delete n[sid]; return n; });
+        setPrompts((m) => { const n = { ...m }; delete n[sid]; return n; }); // run ended → drop any unresolved prompts
       }
       const next = run.ctrl.signal.aborted ? undefined : run.queue.shift();
       if (next) {
@@ -415,21 +426,21 @@ export default function App() {
 
   const decideApproval = (decision: "allow" | "always" | "deny"): void => {
     const key = approvalKey(activeId);
-    const req = pendingApprovals[key];
-    if (!req) return;
-    setPendingApprovals((m) => { const n = { ...m }; delete n[key]; return n; });
+    const head = prompts[key]?.[0];
+    if (!head || head.kind !== "approval") return; // act on the prompt currently shown
+    dropPrompt(key, head.req.id); // pop → the next queued prompt surfaces
     void (async () => {
-      try { await approve(await resolveBridgeUrl(), req.id, decision); } catch { /* ignore */ }
+      try { await approve(await resolveBridgeUrl(), head.req.id, decision); } catch { /* ignore */ }
     })();
   };
 
   const answerAsk = (text: string): void => {
     const key = approvalKey(activeId);
-    const req = pendingAsks[key];
-    if (!req) return;
-    setPendingAsks((m) => { const n = { ...m }; delete n[key]; return n; });
+    const head = prompts[key]?.[0];
+    if (!head || head.kind !== "ask") return;
+    dropPrompt(key, head.req.id);
     void (async () => {
-      try { await answer(await resolveBridgeUrl(), req.id, text); } catch { /* ignore */ }
+      try { await answer(await resolveBridgeUrl(), head.req.id, text); } catch { /* ignore */ }
     })();
   };
 
@@ -587,6 +598,7 @@ export default function App() {
       setRunningIds((s) => { const n = new Set(s); n.delete(id); return n; });
     }
     sessionCache.current.delete(id); // gone — drop its cached steps
+    setPrompts((m) => { const n = { ...m }; delete n[id]; return n; }); // drop its pending prompts
     setTabsMap((m) => { const { [id]: _drop, ...rest } = m; return rest; }); // drop its tabs/split
     if (id === activeId) newChat(); // we were viewing it → fall back to an empty chat
     setUnread((u) => { if (!u.has(id)) return u; const n = new Set(u); n.delete(id); return n; });
@@ -676,13 +688,20 @@ export default function App() {
           model={model} models={models} modelGroups={modelGroups} onModelChange={setModel} effort={effort} onEffortChange={setEffort}
           mode={mode} onModeChange={setMode} thinking={thinking} onThinkingToggle={() => setThinking((v) => !v)}
           workspace={convWorkspace} onPickWorkspace={() => void pickWorkspace()}
-          approval={
-            pendingApprovals[approvalKey(activeId)]
-              ? <Approval req={pendingApprovals[approvalKey(activeId)]!} lang={lang} onDecide={decideApproval} />
-              : pendingAsks[approvalKey(activeId)]
-                ? <Ask req={pendingAsks[approvalKey(activeId)]!} lang={lang} onAnswer={answerAsk} />
-                : null
-          }
+          approval={(() => {
+            const q = prompts[approvalKey(activeId)] ?? [];
+            const head = q[0];
+            if (!head) return null;
+            const more = q.length - 1;
+            return (
+              <>
+                {head.kind === "approval"
+                  ? <Approval req={head.req} lang={lang} onDecide={decideApproval} />
+                  : <Ask req={head.req} lang={lang} onAnswer={answerAsk} />}
+                {more > 0 && <div className="prompt-queue-note">{tr(T.promptQueue, lang, { n: more })}</div>}
+              </>
+            );
+          })()}
           meter={thread.length > 0 ? <ContextMeter steps={thread} model={model} lang={lang} apiTokens={viewStats?.tokens} contextTokens={viewStats?.contextTokens} /> : null} />
       </div>
     );

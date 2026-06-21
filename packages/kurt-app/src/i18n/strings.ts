@@ -117,6 +117,7 @@ export const T = {
   apprAllow: { zh: "允许一次", en: "Allow once" },
   apprAlways: { zh: "总是允许", en: "Always allow" },
   apprDeny: { zh: "拒绝", en: "Deny" },
+  promptQueue: { zh: "还有 {n} 个待处理…", en: "{n} more pending…" },
   // settings
   close: { zh: "关闭", en: "Close" },
   settings: { zh: "设置", en: "Settings" },
