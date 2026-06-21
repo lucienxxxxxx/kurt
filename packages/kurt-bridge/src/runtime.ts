@@ -29,7 +29,7 @@ import {
   WebSearchTool,
   MemoryTool,
   UpdatePlanTool,
-  RequestWriteAccessTool,
+  RequestAccessTool,
   AskUserTool,
   DuckDuckGoSearch,
   sessionsDir,
@@ -41,6 +41,7 @@ import {
   type PermissionProvider,
   type PermissionDecision,
   type AskProvider,
+  type AccessGrants,
 } from "kurt-agent";
 import { kurtHome } from "kurt-agent";
 import { join, dirname } from "node:path";
@@ -355,14 +356,16 @@ function defaultSystem(workspace: string): string {
     "# How you act (this desktop app)",
     "You can actually do the work through tools — show your steps as you go.",
     `WORKSPACE_DIR = ${workspace} — read inputs and write outputs here.`,
-    "Sandbox: you can READ anywhere, but WRITES (write_file, and shell/run_code that create or",
-    "modify files) are confined to WORKSPACE_DIR and the system temp dir. To write ANYWHERE else",
-    "(e.g. ~/Downloads, ~/Desktop, another project), you MUST FIRST call request_write_access with",
-    "that absolute directory (param: `directory`), wait for the user's approval, THEN retry. Do this",
-    "BEFORE attempting the write — don't wait to fail. If a shell/run_code command fails with",
-    "'Operation not permitted' / 'Read-only file system' / permission errors, it's this sandbox:",
-    "request_write_access for the target directory and retry. Never claim you lack a tool — ",
-    "request_write_access is always available, in every mode.",
+    "Sandbox: you can READ anywhere, but some capabilities are off by default. Use request_access",
+    "to ask the user (one approval, lasts the session):",
+    "- WRITE outside WORKSPACE_DIR (writes are confined to the workspace + system temp): ",
+    "  request_access({kind:'write', target:'<abs dir>'}), then retry the write.",
+    "- NETWORK for shell/run_code (npm install, curl, git, etc.): request_access({kind:'network'}).",
+    "- OPEN a file or URL in the user's default app (great for delivering results): ",
+    "  request_access({kind:'open', target:'<abs path or url>'}).",
+    "Request BEFORE attempting — don't wait to fail. If shell/run_code fails with 'Operation not",
+    "permitted' / 'Read-only file system' / a network error, that's the sandbox: request_access for",
+    "the capability and retry. Never claim you lack a tool — request_access is always available.",
   ].join("\n");
 }
 
@@ -397,6 +400,16 @@ function unavailableModel(message: string): ModelProvider {
   };
 }
 
+/** Open a file/URL in the user's default app (the `open` capability). Composition
+ *  -layer I/O injected into RequestAccessTool so the engine stays I/O-free. */
+async function openInDefaultApp(target: string): Promise<void> {
+  const cmd = process.platform === "darwin" ? ["open", target]
+    : process.platform === "win32" ? ["cmd", "/c", "start", "", target]
+    : ["xdg-open", target];
+  const proc = Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" });
+  await proc.exited;
+}
+
 /** Build the real runtime from the environment + ~/.kurt config (multi-provider). */
 export function productionRuntime(workspace = process.cwd()): Runtime {
   let cfg = loadConfig();
@@ -413,29 +426,43 @@ export function productionRuntime(workspace = process.cwd()): Runtime {
   const model = buildModel();
   const sandbox = process.platform === "darwin" ? new SeatbeltSandbox() : new DirectSandbox();
   const codeTemp = new SessionWorkspace({ sessionId: "bridge" });
+  // Session-scoped capability grants (request_access widens these; they persist for
+  // this bridge's lifetime and seed every run's sandbox policy).
+  const grants: AccessGrants = { network: false, open: false, dirs: [] };
 
   // Tools are rebuilt per run rooted at THAT conversation's workspace (`ws`), so
   // file ops / shell / code / memory all operate where the conversation points.
   // (Also per-run so the sensitive-command gate binds to the run's SSE stream.)
   const makeTools = (permission: PermissionProvider, ask: AskProvider, ws: string): Tool[] => {
-    // Writable = the conversation's workspace + the system temp dir (commands and
-    // scripts routinely need $TMPDIR; it's ephemeral, so it's a safe default).
-    // Anything else stays read-only until request_write_access grants it.
-    const writable = [ws, tmpdir()];
+    // Writable = the conversation's workspace + the system temp dir + any dirs the
+    // user has granted this session. Network/open stay off until granted. Anything
+    // else needs request_access.
+    const writable = [ws, tmpdir(), ...grants.dirs];
     const env = { WORKSPACE_DIR: ws };
+    const network = (): boolean => grants.network;
+    const access = new RequestAccessTool(writable, grants, { permission, opener: openInDefaultApp });
+    // Back-compat alias: models that call `request_write_access` still work.
+    const writeAlias: Tool = {
+      spec: {
+        name: "request_write_access",
+        description: "Alias of request_access(kind:\"write\"): request write access to a directory outside the workspace.",
+        inputSchema: { type: "object", properties: { directory: { type: "string" }, path: { type: "string" }, reason: { type: "string" } } },
+      },
+      execute: (input, ctx) => access.execute({ ...(input as object), kind: "write" }, ctx),
+    };
     return [
       new ReadFileTool({ roots: writable }),
       new LsTool({ roots: writable }),
       new GrepTool({ roots: writable }),
       new WriteFileTool({ roots: writable }),
-      new ShellTool(sandbox, { cwd: ws, writablePaths: writable, env, permission }),
-      new CodeTool(sandbox, codeTemp, { writablePaths: writable, env, cwd: ws }),
+      new ShellTool(sandbox, { cwd: ws, writablePaths: writable, env, permission, allowNetwork: network }),
+      new CodeTool(sandbox, codeTemp, { writablePaths: writable, env, cwd: ws, allowNetwork: network }),
       new WebSearchTool(new DuckDuckGoSearch()),
       new MemoryTool({ globalPath: join(homedir(), ".kurt", "memory.md"), projectPath: join(ws, ".kurt", "memory.md") }),
       new UpdatePlanTool(),
-      // Lets the agent request access to a dir OUTSIDE the workspace (e.g. ~/Downloads);
-      // routes through the approval modal, then the dir joins `writable` (read + write).
-      new RequestWriteAccessTool(writable, permission),
+      // Generalized capability request: write a dir / network / open a file or app.
+      access,
+      writeAlias,
       // Lets the agent put a clarifying question to the user (answered via a popup).
       new AskUserTool(ask),
     ];
