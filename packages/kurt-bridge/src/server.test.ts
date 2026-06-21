@@ -408,11 +408,12 @@ describe("model config (/info, /config)", () => {
 
     let info = (await (await fetch(server.url + "/info")).json()) as { hasKey: boolean; models: string[]; workspace: string };
     expect(info.hasKey).toBe(false);
-    expect(info.models).toContain("deepseek-v4-flash"); // composer model menu options
+    expect(info.models).toContain("deepseek-v4-flash"); // deepseek is the default-enabled provider
     expect(info.workspace).toBe(ws); // Files tab + terminal cwd
 
     const set = (await (await fetch(server.url + "/config", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apiKey: "sk-test-123" }),
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ providers: { deepseek: { enabled: true, apiKey: "sk-test-123" } } }),
     })).json()) as { hasKey: boolean };
     expect(set.hasKey).toBe(true);
 
@@ -421,25 +422,30 @@ describe("model config (/info, /config)", () => {
     expect(existsSync(join(home, "desktop.json"))).toBe(true); // persisted (mode 0600)
   }, 20_000);
 
-  test("GET/POST /config exposes the full desktop.json (baseURL / models / format)", async () => {
+  test("GET/POST /config exposes the multi-provider desktop.json", async () => {
     home = realpathSync(mkdtempSync(join(tmpdir(), "bridge-home-")));
     process.env.KURT_HOME = home;
     delete process.env.DEEPSEEK_API_KEY;
     server = startServer(productionRuntime(ws));
 
-    let cfg = (await (await fetch(server.url + "/config")).json()) as { apiKey: string; baseURL: string; models: string[]; format: string };
-    expect(cfg.format).toBe("openai");
-    expect(Array.isArray(cfg.models)).toBe(true);
+    let cfg = (await (await fetch(server.url + "/config")).json()) as { providers: Record<string, { enabled: boolean; apiKey: string; baseURL?: string; models?: string[]; format?: string }> };
+    expect(cfg.providers).toBeDefined();
+    expect(cfg.providers.openai).toBeDefined();
 
+    // Enable OpenAI + a custom provider with its own gateway/models.
     await fetch(server.url + "/config", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ apiKey: "sk-x", baseURL: "https://gw.example/v1", models: ["m1", "m2"], format: "claude" }),
+      body: JSON.stringify({ providers: {
+        openai: { enabled: true, apiKey: "sk-o" },
+        custom: { enabled: true, apiKey: "sk-x", baseURL: "https://gw.example/v1", models: ["m1", "m2"], format: "claude" },
+      } }),
     });
-    cfg = (await (await fetch(server.url + "/config")).json()) as { apiKey: string; baseURL: string; models: string[]; format: string };
-    expect(cfg).toMatchObject({ apiKey: "sk-x", baseURL: "https://gw.example/v1", models: ["m1", "m2"], format: "claude" });
+    cfg = (await (await fetch(server.url + "/config")).json()) as typeof cfg;
+    expect(cfg.providers.openai).toMatchObject({ enabled: true, apiKey: "sk-o" });
+    expect(cfg.providers.custom).toMatchObject({ enabled: true, baseURL: "https://gw.example/v1", models: ["m1", "m2"] });
 
-    const info = (await (await fetch(server.url + "/info")).json()) as { model: string; models: string[] };
-    expect(info.models).toEqual(["m1", "m2"]); // composer menu follows the configured list
-    expect(info.model).toBe("m1");
+    const info = (await (await fetch(server.url + "/info")).json()) as { model: string; models: string[]; providers: { id: string; models: string[] }[] };
+    expect(info.models).toEqual(expect.arrayContaining(["gpt-4o", "m1", "m2"])); // union across enabled providers
+    expect(info.providers.map((p) => p.id)).toEqual(expect.arrayContaining(["openai", "custom"])); // grouped
   }, 20_000);
 });

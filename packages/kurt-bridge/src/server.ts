@@ -17,7 +17,8 @@
  * Closing the /run response (client stop) aborts the run.
  */
 
-import { runTurn, resolveApproval, resolveAsk, type Runtime, type ApprovalDecision, type ModelConfig, type Mode } from "./runtime.ts";
+import { runTurn, resolveApproval, resolveAsk, type Runtime, type ApprovalDecision, type Mode } from "./runtime.ts";
+import type { DesktopConfig } from "./providers.ts";
 import { messagesToSteps } from "./events.ts";
 import { listDir, readTextFile, resolveInWorkspace, contentType } from "./fs.ts";
 import type { RunFrame, SessionInfo } from "./types.ts";
@@ -52,16 +53,16 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
 
       // Model status (never returns the key itself) + in-app config (sets the key).
       if (pathname === "/info" && req.method === "GET") {
-        return json(rt.info ? rt.info() : { hasKey: false, model: rt.model.name, models: [], workspace: rt.workspace });
+        return json(rt.info ? rt.info() : { hasKey: false, model: rt.model.name, models: [], providers: [], workspace: rt.workspace });
       }
       // GET → the full desktop.json (incl. the key — localhost, the user's own machine).
       if (pathname === "/config" && req.method === "GET") {
         return json(rt.fullConfig ? rt.fullConfig() : {});
       }
       if (pathname === "/config" && req.method === "POST") {
-        const patch = (await req.json().catch(() => ({}))) as ModelConfig;
+        const patch = (await req.json().catch(() => ({}))) as Partial<DesktopConfig>;
         rt.reconfigure?.(patch);
-        return json(rt.info ? rt.info() : { hasKey: false, model: rt.model.name, models: [], workspace: rt.workspace });
+        return json(rt.info ? rt.info() : { hasKey: false, model: rt.model.name, models: [], providers: [], workspace: rt.workspace });
       }
 
       // Workspace file access (Files tab + preview), confined to the conversation's

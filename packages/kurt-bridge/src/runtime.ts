@@ -47,6 +47,7 @@ import { join, dirname } from "node:path";
 import { homedir, hostname, platform, release, arch, userInfo } from "node:os";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { StepAccumulator, planFromInput } from "./events.ts";
+import { normalizeConfig, mergeConfig, resolveModel, allModels, providerGroups, defaultModel, enabledProviders, type DesktopConfig } from "./providers.ts";
 import type { RunFrame } from "./types.ts";
 
 /** The desktop's answer to an approval request. */
@@ -90,8 +91,10 @@ interface PendingApproval {
 export interface RuntimeInfo {
   hasKey: boolean;
   model: string;
-  /** Selectable model ids for the composer's model menu. */
+  /** Selectable model ids for the composer's model menu (flat union, back-compat). */
   models: string[];
+  /** Models grouped by enabled provider (for the grouped model dropdown). */
+  providers: { id: string; label: string; models: string[] }[];
   /** This bridge's workspace root — the desktop uses it for the Files tab and the
    *  terminal's cwd. */
   workspace: string;
@@ -132,10 +135,10 @@ export interface Runtime {
   /** Status for GET /info (production runtime sets this). */
   info?: () => RuntimeInfo;
   /** Apply + persist model config and rebuild the model (POST /config). */
-  reconfigure?: (patch: ModelConfig) => void;
-  /** Full current config for GET /config (the raw desktop.json, incl. the key —
+  reconfigure?: (patch: Partial<DesktopConfig>) => void;
+  /** Full current config for GET /config (the raw desktop.json, incl. keys —
    *  this is a localhost bridge for the machine's own user). */
-  fullConfig?: () => Required<ModelConfig>;
+  fullConfig?: () => DesktopConfig;
   /** Build a model for one run with the given model id / effort / thinking (current key/baseURL). */
   modelFor?: (model?: string, effort?: string, thinking?: boolean) => ModelProvider;
   /** Summarize a new conversation into a short title (production runtime sets this;
@@ -364,34 +367,44 @@ function defaultSystem(workspace: string): string {
 function configPath(): string {
   return join(kurtHome(), "desktop.json");
 }
-function loadConfig(): Required<ModelConfig> {
-  let saved: ModelConfig & { model?: string } = {};
-  try { saved = JSON.parse(readFileSync(configPath(), "utf8")) as ModelConfig & { model?: string }; } catch { /* none */ }
-  // Migrate the old single `model` field → a `models` list.
-  const models = Array.isArray(saved.models) && saved.models.length ? saved.models
-    : saved.model ? [saved.model]
-    : process.env.DEEPSEEK_MODEL ? [process.env.DEEPSEEK_MODEL]
-    : [...KNOWN_MODELS];
-  return {
-    apiKey: process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY ?? saved.apiKey ?? "",
-    baseURL: saved.baseURL ?? process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
-    models,
-    format: saved.format ?? "openai",
-  };
+function loadConfig(): DesktopConfig {
+  let raw: unknown = {};
+  try { raw = JSON.parse(readFileSync(configPath(), "utf8")); } catch { /* none */ }
+  return normalizeConfig(raw);
 }
-function saveConfig(cfg: Required<ModelConfig>): void {
+function saveConfig(cfg: DesktopConfig): void {
   const path = configPath();
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(cfg, null, 2), { mode: 0o600 });
 }
 
-/** Build the real runtime from the environment + ~/.kurt config (DeepSeek; core tools; ~/.kurt sessions). */
+/** A stand-in model that just streams a message (used when no provider is usable,
+ *  or for `claude` until the native Anthropic provider lands). Never hits network. */
+function unavailableModel(message: string): ModelProvider {
+  return {
+    name: "unavailable",
+    async countTokens() { return 0; },
+    // eslint-disable-next-line require-yield
+    async *stream() {
+      yield { type: "text_delta", text: `⚠ ${message}` };
+      yield { type: "done", stopReason: "end_turn" };
+    },
+  };
+}
+
+/** Build the real runtime from the environment + ~/.kurt config (multi-provider). */
 export function productionRuntime(workspace = process.cwd()): Runtime {
-  const cfg = loadConfig();
-  // NOTE: `format` is stored but not yet wired — only the OpenAI-compatible client
-  // exists (a real Anthropic provider is a later task). baseURL can point at a gateway.
-  const buildModel = (modelId: string = cfg.models[0] ?? "", effort?: string, thinking?: boolean): ModelProvider =>
-    withRetry(new OpenAICompatModel({ name: "deepseek", baseURL: cfg.baseURL, model: modelId, apiKey: cfg.apiKey, effort, thinking }));
+  let cfg = loadConfig();
+  // Route a model id to its provider and build the right client. OpenAI/DeepSeek/
+  // custom(openai) use the OpenAI-compatible client; `claude` (native Anthropic)
+  // lands in Phase 2 — for now it streams a clear "not yet wired" message.
+  const buildModel = (modelId: string = defaultModel(cfg), effort?: string, thinking?: boolean): ModelProvider => {
+    const p = resolveModel(cfg, modelId);
+    if (!p) return unavailableModel("No model provider is enabled. Add an API key in Settings → Model / API.");
+    const id = modelId || p.models[0] || "";
+    if (p.format === "claude") return unavailableModel(`Claude (native Anthropic) is coming in the next update. For now use OpenAI / DeepSeek, or point a Custom provider at an OpenAI-compatible gateway.`);
+    return withRetry(new OpenAICompatModel({ name: p.id, baseURL: p.baseURL, model: id, apiKey: p.apiKey, effort, thinking }));
+  };
   const model = buildModel();
   const sandbox = process.platform === "darwin" ? new SeatbeltSandbox() : new DirectSandbox();
   const codeTemp = new SessionWorkspace({ sessionId: "bridge" });
@@ -422,17 +435,20 @@ export function productionRuntime(workspace = process.cwd()): Runtime {
 
   const rt = createRuntime({ workspace, model, makeTools, store: new SessionStore(sessionsDir()) });
   rt.systemFor = (ws) => defaultSystem(ws); // prompt rooted at the conversation's workspace
-  rt.info = () => ({ hasKey: cfg.apiKey.length > 0, model: cfg.models[0] ?? "", models: cfg.models, workspace: rt.workspace });
-  rt.fullConfig = () => ({ apiKey: cfg.apiKey, baseURL: cfg.baseURL, models: cfg.models, format: cfg.format });
+  rt.info = () => ({
+    hasKey: enabledProviders(cfg).some((p) => p.apiKey.length > 0),
+    model: defaultModel(cfg),
+    models: allModels(cfg),
+    providers: providerGroups(cfg),
+    workspace: rt.workspace,
+  });
+  rt.fullConfig = () => cfg;
   rt.reconfigure = (patch) => {
-    if (patch.apiKey !== undefined) cfg.apiKey = patch.apiKey;
-    if (patch.baseURL !== undefined) cfg.baseURL = patch.baseURL;
-    if (Array.isArray(patch.models) && patch.models.length) cfg.models = patch.models;
-    if (patch.format !== undefined) cfg.format = patch.format;
+    cfg = mergeConfig(cfg, patch);
     saveConfig(cfg);
     rt.model = buildModel(); // take effect immediately (no restart)
   };
-  rt.modelFor = (modelId, effort, thinking) => buildModel(modelId || cfg.models[0], effort, thinking);
+  rt.modelFor = (modelId, effort, thinking) => buildModel(modelId || defaultModel(cfg), effort, thinking);
   // Auto-title: one cheap, tool-free model call summarizing the opening exchange.
   rt.makeTitle = async (messages) => {
     const req: ModelRequest = {
