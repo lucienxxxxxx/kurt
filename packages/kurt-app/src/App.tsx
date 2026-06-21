@@ -638,7 +638,9 @@ export default function App() {
                   <span className="spin" />
                   <span className="run-status-text">
                     {fmtElapsed(Date.now() - viewStats.startedAt)}
-                    {viewStats.tokens > 0 ? ` · ${fmtTokens(viewStats.tokens)} tokens` : ""}
+                    {/* current context size (matches the ring); cumulative run total
+                        lives in the context card to avoid two conflicting numbers */}
+                    {viewStats.contextTokens > 0 ? ` · ${fmtTokens(viewStats.contextTokens)} tokens` : ""}
                   </span>
                 </div>
               )}
