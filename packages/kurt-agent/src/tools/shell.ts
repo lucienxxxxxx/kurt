@@ -111,6 +111,19 @@ export class ShellTool implements Tool {
       notes.push(result.timeoutReason === "idle" ? "(killed: no output — idle timeout)" : "(killed: max time exceeded)");
     if (result.truncated) notes.push("(output truncated)");
 
+    // When a command fails on a sandbox WRITE denial, the raw error ("Operation not
+    // permitted" / "Read-only file system") doesn't tell the model what to do. Make
+    // it actionable so it knows to request access rather than retry blindly.
+    const writeDenied = result.exitCode !== 0 &&
+      /operation not permitted|not permitted|read-only file system|permission denied|\bEPERM\b|\bEACCES\b|sandbox/i.test(result.stderr);
+    if (writeDenied) {
+      notes.push(
+        "Note: the sandbox only allows writes inside the workspace (and the system temp dir). " +
+        "If this failed because it wrote OUTSIDE the workspace, call request_write_access with that " +
+        "directory, wait for approval, then retry.",
+      );
+    }
+
     const body = [
       `exit code: ${result.timedOut ? "timeout" : result.exitCode}`,
       result.stdout.length > 0 ? `--- stdout ---\n${result.stdout.trimEnd()}` : "--- stdout --- (empty)",

@@ -44,7 +44,7 @@ import {
 } from "kurt-agent";
 import { kurtHome } from "kurt-agent";
 import { join, dirname } from "node:path";
-import { homedir, hostname, platform, release, arch, userInfo } from "node:os";
+import { homedir, hostname, platform, release, arch, userInfo, tmpdir } from "node:os";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { StepAccumulator, planFromInput } from "./events.ts";
 import { normalizeConfig, mergeConfig, resolveModel, allModels, providerGroups, defaultModel, enabledProviders, type DesktopConfig } from "./providers.ts";
@@ -355,9 +355,14 @@ function defaultSystem(workspace: string): string {
     "# How you act (this desktop app)",
     "You can actually do the work through tools — show your steps as you go.",
     `WORKSPACE_DIR = ${workspace} — read inputs and write outputs here.`,
-    "To read or write OUTSIDE the workspace (e.g. ~/Downloads), call request_write_access with that",
-    "absolute directory first (param: `directory`); the user approves, then retry. Never claim you",
-    "lack a tool for this — request_write_access is always available.",
+    "Sandbox: you can READ anywhere, but WRITES (write_file, and shell/run_code that create or",
+    "modify files) are confined to WORKSPACE_DIR and the system temp dir. To write ANYWHERE else",
+    "(e.g. ~/Downloads, ~/Desktop, another project), you MUST FIRST call request_write_access with",
+    "that absolute directory (param: `directory`), wait for the user's approval, THEN retry. Do this",
+    "BEFORE attempting the write — don't wait to fail. If a shell/run_code command fails with",
+    "'Operation not permitted' / 'Read-only file system' / permission errors, it's this sandbox:",
+    "request_write_access for the target directory and retry. Never claim you lack a tool — ",
+    "request_write_access is always available, in every mode.",
   ].join("\n");
 }
 
@@ -413,7 +418,10 @@ export function productionRuntime(workspace = process.cwd()): Runtime {
   // file ops / shell / code / memory all operate where the conversation points.
   // (Also per-run so the sensitive-command gate binds to the run's SSE stream.)
   const makeTools = (permission: PermissionProvider, ask: AskProvider, ws: string): Tool[] => {
-    const writable = [ws];
+    // Writable = the conversation's workspace + the system temp dir (commands and
+    // scripts routinely need $TMPDIR; it's ephemeral, so it's a safe default).
+    // Anything else stays read-only until request_write_access grants it.
+    const writable = [ws, tmpdir()];
     const env = { WORKSPACE_DIR: ws };
     return [
       new ReadFileTool({ roots: writable }),

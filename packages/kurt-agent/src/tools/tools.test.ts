@@ -164,6 +164,31 @@ describe("ShellTool env option", () => {
   });
 });
 
+describe("ShellTool sandbox write-denial hint", () => {
+  test("a permission-denied failure tells the model to request_write_access", async () => {
+    const fake: SandboxProvider = {
+      name: "fake",
+      async exec() {
+        return { stdout: "", stderr: "tee: /etc/hosts: Operation not permitted", exitCode: 1, timedOut: false, truncated: false };
+      },
+    };
+    const res = await new ShellTool(fake).execute({ command: "echo x >> /etc/hosts" }, ctx());
+    expect(res.isError).toBe(true);
+    expect(res.content).toContain("request_write_access");
+  });
+
+  test("an ordinary non-zero exit does NOT add the request_write_access hint", async () => {
+    const fake: SandboxProvider = {
+      name: "fake",
+      async exec() {
+        return { stdout: "", stderr: "grep: no match", exitCode: 1, timedOut: false, truncated: false };
+      },
+    };
+    const res = await new ShellTool(fake).execute({ command: "grep zzz f" }, ctx());
+    expect(res.content).not.toContain("request_write_access");
+  });
+});
+
 describe("RequestWriteAccessTool", () => {
   test("approved request adds the dir to the shared writable roots; WriteFileTool then allows it", async () => {
     const extra = mkdtempSync(join(tmpdir(), "kurt-grant-"));
