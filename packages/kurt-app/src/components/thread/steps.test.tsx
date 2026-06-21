@@ -68,6 +68,15 @@ describe("renderStep", () => {
     expect(onOpenOutput).toHaveBeenCalledWith(expect.objectContaining({ content: cmd }));
   });
 
+  test("the in-flight tool step (liveId) shows a running spinner; a finished one doesn't", () => {
+    const step: Step = { _id: 2, type: "tool", name: "web_search", title: "", cmd: "q", out: "" };
+    const live = render(<>{renderStep(step, ctx({ liveId: 2 }))}</>);
+    expect(live.container.querySelector(".step-head-spin")).toBeInTheDocument();
+    cleanup();
+    const idle = render(<>{renderStep(step, ctx({ liveId: 9 }))}</>);
+    expect(idle.container.querySelector(".step-head-spin")).toBeNull();
+  });
+
   test("clicking anywhere on the tool header row toggles (not just the chevron)", () => {
     const onToggle = vi.fn();
     const step: Step = { _id: 2, type: "tool", name: "web_search", title: "", cmd: "q", out: "" };

@@ -54,6 +54,20 @@ const persisted = <V extends string>(key: string, fallback: V): V => {
   try { const v = localStorage.getItem(key); return v === null ? fallback : (v as V); } catch { return fallback; }
 };
 
+/** A short label for what the run is doing right now, from the live step. */
+function liveActivity(thread: Step[], liveId: number | null, lang: Lang): string {
+  const s = liveId != null ? thread.find((x) => x._id === liveId) : undefined;
+  if (!s) return tr(T.actWorking, lang);
+  switch (s.type) {
+    case "thinking": return tr(T.actThinking, lang);
+    case "text": return tr(T.actReplying, lang);
+    case "tool": return tr(T.actRunning, lang, { name: s.name });
+    case "read": return tr(T.actReading, lang, { name: s.file.split("/").pop() || s.file });
+    case "skill": return tr(T.actSkill, lang, { name: s.name });
+    default: return tr(T.actWorking, lang);
+  }
+}
+
 export default function App() {
   const [theme, setTheme] = useState<Theme>(() => persisted<Theme>("kurt-theme", "light"));
   const [lang, setLang] = useState<Lang>(() => persisted<Lang>("kurt-lang", "zh"));
@@ -338,7 +352,9 @@ export default function App() {
         if (run.sessionId) setRunningIds((s) => { const n = new Set(s); n.delete(run.sessionId!); return n; });
         if (run.sessionId && run.sessionId !== activeIdRef.current) setUnread((u) => new Set(u).add(run.sessionId!));
         if (newChatRunIdRef.current === run.runId) setNewChatRun(null);
-        if (isViewing(run)) { setLiveId(null); setQueuedMsgs([]); setViewStats(null); }
+        // Reconcile the visible thread from the authoritative buffer so the final
+        // reply is always shown, even if a late mirror was missed.
+        if (isViewing(run)) { setThread(run.buf.slice()); setLiveId(null); setQueuedMsgs([]); setViewStats(null); }
         // Auto-preview: the run finished and produced a document → split-open the last one.
         if (!run.ctrl.signal.aborted && run.previewables.length > 0 && isViewing(run)) {
           openFile(run.previewables[run.previewables.length - 1]!);
@@ -637,7 +653,8 @@ export default function App() {
                 <div className="run-status">
                   <span className="spin" />
                   <span className="run-status-text">
-                    {fmtElapsed(Date.now() - viewStats.startedAt)}
+                    {liveActivity(thread, liveId, lang)}
+                    {" · "}{fmtElapsed(Date.now() - viewStats.startedAt)}
                     {/* current context size (matches the ring); cumulative run total
                         lives in the context card to avoid two conflicting numbers */}
                     {viewStats.contextTokens > 0 ? ` · ${fmtTokens(viewStats.contextTokens)} tokens` : ""}

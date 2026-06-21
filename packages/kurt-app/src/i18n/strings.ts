@@ -23,6 +23,13 @@ export const T = {
   collapse: { zh: "折叠", en: "Collapse" },
   readPrefix: { zh: "Read", en: "Read" },
   linesLabel: { zh: "行 {range}", en: "lines {range}" },
+  // live run activity (bottom run-status)
+  actThinking: { zh: "正在思考", en: "Thinking" },
+  actRunning: { zh: "正在执行 {name}", en: "Running {name}" },
+  actReading: { zh: "正在读取 {name}", en: "Reading {name}" },
+  actSkill: { zh: "正在运行技能 {name}", en: "Running skill {name}" },
+  actReplying: { zh: "正在回复", en: "Replying" },
+  actWorking: { zh: "正在处理", en: "Working" },
   // workspace tabs
   tabSession: { zh: "会话", en: "Session" },
   tabTerminal: { zh: "终端", en: "Terminal" },

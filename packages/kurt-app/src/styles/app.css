@@ -344,6 +344,14 @@ code.inl {
   transition: transform .2s;
 }
 .step-head.open .step-head-chev { transform: rotate(90deg); }
+/* live spinner on the in-flight tool/skill step */
+.step-head-spin {
+  width: 12px; height: 12px; flex: 0 0 12px; margin-left: auto;
+  border: 2px solid var(--border-strong); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin .7s linear infinite;
+}
+.step-head-spin + .step-head-chev { margin-left: 6px; }
+.step-head.running .step-head-icon { color: var(--accent); }
 
 .think-body {
   margin-top: 8px;

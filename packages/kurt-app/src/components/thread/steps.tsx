@@ -40,14 +40,15 @@ function basename(path: string): string {
 /** Unified expand/collapse header shared by thinking / tool / skill steps:
  *  [icon] label  sub  [chevron]. `sub` carries e.g. the file a tool writes
  *  (a clickable link). The whole row toggles. */
-function StepHead({ icon, label, sub, open, onToggle, lang }: {
-  icon: string; label: string; sub?: ReactNode; open: boolean; onToggle: () => void; lang: Lang;
+function StepHead({ icon, label, sub, open, onToggle, lang, running }: {
+  icon: string; label: string; sub?: ReactNode; open: boolean; onToggle: () => void; lang: Lang; running?: boolean;
 }) {
   return (
-    <div className={"step-head" + (open ? " open" : "")} onClick={onToggle} title={tr(open ? T.collapse : T.expand, lang)}>
+    <div className={"step-head" + (open ? " open" : "") + (running ? " running" : "")} onClick={onToggle} title={tr(open ? T.collapse : T.expand, lang)}>
       <Icon name={icon} className="step-head-icon" />
       <span className="step-head-label">{label}</span>
       {sub && <span className="step-head-sub">{sub}</span>}
+      {running && <span className="step-head-spin" aria-hidden="true" />}
       <Icon name="chevR" className="step-head-chev" />
     </div>
   );
@@ -84,8 +85,8 @@ export function TextStepView({ step, typing, lang, showActions }: { step: TextSt
   );
 }
 
-export function ToolStepView({ step, open, onToggle, lang, onOpenOutput, onOpenFile }: {
-  step: ToolStep; open: boolean; onToggle: () => void; lang: Lang; onOpenOutput?: (o: OpenOutput) => void; onOpenFile?: (file: string) => void;
+export function ToolStepView({ step, open, onToggle, lang, onOpenOutput, onOpenFile, running }: {
+  step: ToolStep; open: boolean; onToggle: () => void; lang: Lang; onOpenOutput?: (o: OpenOutput) => void; onOpenFile?: (file: string) => void; running?: boolean;
 }) {
   const title = tr(step.title, lang);
   const inText = step.cmd;
@@ -106,7 +107,7 @@ export function ToolStepView({ step, open, onToggle, lang, onOpenOutput, onOpenF
 
   return (
     <div className="step act">
-      <StepHead icon="wrench" label={step.name} sub={fileLink} open={open} onToggle={onToggle} lang={lang} />
+      <StepHead icon="wrench" label={step.name} sub={fileLink} open={open} onToggle={onToggle} lang={lang} running={running} />
       {open && (
         <div className="tool-card">
           <div className={"tool-row" + (inClip.truncated ? " clickable" : "")} onClick={() => inClip.truncated && openFull("IN", inText)}>
@@ -141,15 +142,15 @@ export function ReadStepView({ step, lang, onOpen }: { step: ReadStep; lang: Lan
   );
 }
 
-export function SkillStepView({ step, open, onToggle, lang, onOpenOutput }: {
-  step: SkillStep; open: boolean; onToggle: () => void; lang: Lang; onOpenOutput?: (o: OpenOutput) => void;
+export function SkillStepView({ step, open, onToggle, lang, onOpenOutput, running }: {
+  step: SkillStep; open: boolean; onToggle: () => void; lang: Lang; onOpenOutput?: (o: OpenOutput) => void; running?: boolean;
 }) {
   const title = tr(step.title, lang);
   const inText = step.input ? tr(step.input, lang) : "";
   const inClip = clip(inText);
   return (
     <div className="step act skill-step">
-      <StepHead icon="skills" label={step.name} open={open} onToggle={onToggle} lang={lang} />
+      <StepHead icon="skills" label={step.name} open={open} onToggle={onToggle} lang={lang} running={running} />
       {open && (
         <div className="tool-card">
           {title && <div className="tool-card-title">{title}</div>}
@@ -186,11 +187,11 @@ export function renderStep(
     case "thinking":
       return <ThinkingStepView key={step._id} step={step} open={open} typing={typing} onToggle={() => ctx.onToggle(step._id)} lang={ctx.lang} />;
     case "tool":
-      return <ToolStepView key={step._id} step={step} open={open} onToggle={() => ctx.onToggle(step._id)} lang={ctx.lang} onOpenOutput={ctx.onOpenOutput} onOpenFile={ctx.onOpenFile} />;
+      return <ToolStepView key={step._id} step={step} open={open} onToggle={() => ctx.onToggle(step._id)} lang={ctx.lang} onOpenOutput={ctx.onOpenOutput} onOpenFile={ctx.onOpenFile} running={typing} />;
     case "read":
       return <ReadStepView key={step._id} step={step} lang={ctx.lang} onOpen={ctx.onOpenFile} />;
     case "skill":
-      return <SkillStepView key={step._id} step={step} open={open} onToggle={() => ctx.onToggle(step._id)} lang={ctx.lang} onOpenOutput={ctx.onOpenOutput} />;
+      return <SkillStepView key={step._id} step={step} open={open} onToggle={() => ctx.onToggle(step._id)} lang={ctx.lang} onOpenOutput={ctx.onOpenOutput} running={typing} />;
     default:
       return <TextStepView key={step._id} step={step} typing={typing} lang={ctx.lang} showActions={step._id === ctx.lastTextId} />;
   }
