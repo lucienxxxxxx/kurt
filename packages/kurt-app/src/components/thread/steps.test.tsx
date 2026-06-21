@@ -111,6 +111,16 @@ describe("renderStep", () => {
     expect(onOpenFile).toHaveBeenCalledWith(".eslintrc.js");
   });
 
+  test("read step shows only the basename, opens with the full path", () => {
+    const onOpenFile = vi.fn();
+    const step: Step = { _id: 3, type: "read", file: "src/lib/foo.ts", lines: "1-18" };
+    render(<>{renderStep(step, ctx({ onOpenFile }))}</>);
+    expect(screen.getByText("foo.ts")).toBeInTheDocument();
+    expect(screen.queryByText("src/lib/foo.ts")).toBeNull();
+    fireEvent.click(screen.getByText("foo.ts"));
+    expect(onOpenFile).toHaveBeenCalledWith("src/lib/foo.ts");
+  });
+
   test("skill step shows name + IN/OUT sections", () => {
     const step: Step = { _id: 4, type: "skill", name: "web_search", title: { zh: "搜", en: "search" }, input: { zh: "q", en: "query" }, output: { zh: "o", en: "out" } };
     render(<>{renderStep(step, ctx())}</>);

@@ -134,7 +134,7 @@ export function ReadStepView({ step, lang, onOpen }: { step: ReadStep; lang: Lan
     <div className="step act">
       <div className="read-line">
         <span className="tool-name">{tr(T.readPrefix, lang)}</span>
-        <button className="read-file-link" onClick={() => onOpen?.(step.file)}>{step.file}</button>
+        <button className="read-file-link" title={step.file} onClick={() => onOpen?.(step.file)}>{basename(step.file)}</button>
         <span className="read-meta">({tr(T.linesLabel, lang, { range: step.lines })})</span>
       </div>
     </div>
