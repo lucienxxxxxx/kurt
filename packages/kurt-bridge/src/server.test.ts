@@ -324,6 +324,30 @@ describe("plan frame", () => {
   }, 20_000);
 });
 
+describe("SSE keep-alive heartbeat", () => {
+  test("a quiet run still emits `: ping` comment frames so the webview stream survives", async () => {
+    const prev = process.env.KURT_SSE_HEARTBEAT_MS;
+    process.env.KURT_SSE_HEARTBEAT_MS = "20"; // fast heartbeat for the test
+    try {
+      // A tool that runs long enough to span several heartbeats with no data frame.
+      const slow: Tool = {
+        spec: { name: "shell", description: "", inputSchema: { type: "object", properties: { command: { type: "string" } } } },
+        execute: async () => { await new Promise((r) => setTimeout(r, 120)); return { content: "done" }; },
+      };
+      const model = new MockModel([{ toolCalls: [{ name: "shell", input: { command: "sleep" } }] }, { text: "ok" }]);
+      const rt = createRuntime({ workspace: ws, model, makeTools: () => [slow], store: new SessionStore(sessions) });
+      server = startServer(rt);
+
+      const res = await fetch(server.url + "/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "go" }) });
+      const text = await res.text(); // whole stream (run is short)
+      expect(text).toContain(": ping");      // heartbeat kept the connection warm
+      expect(text).toContain('"kind":"done"'); // and the run still completed normally
+    } finally {
+      if (prev === undefined) delete process.env.KURT_SSE_HEARTBEAT_MS; else process.env.KURT_SSE_HEARTBEAT_MS = prev;
+    }
+  }, 20_000);
+});
+
 describe("per-conversation workspace", () => {
   test("opts.workspace roots the tools + system prompt (else falls back to default)", async () => {
     let toolsWs = "";

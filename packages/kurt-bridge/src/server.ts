@@ -170,25 +170,31 @@ interface RunBody {
 }
 
 /** Run one turn and stream its frames as Server-Sent Events. */
+// SSE keep-alive: the webview's streaming fetch (WebKit) drops a connection that
+// goes quiet too long (e.g. a slow first model token), surfacing as "Load failed".
+// A periodic comment frame keeps the socket warm without affecting the data stream.
+function heartbeatMs(): number { return Number(process.env.KURT_SSE_HEARTBEAT_MS) || 15000; }
+
 function runSSE(rt: Runtime, body: RunBody): Response {
   const ctrl = new AbortController();
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const send = (f: RunFrame): void => {
-        try {
-          controller.enqueue(enc.encode(`data: ${JSON.stringify(f)}\n\n`));
-        } catch {
-          /* stream already closed */
-        }
+      const write = (s: string): void => {
+        try { controller.enqueue(enc.encode(s)); } catch { /* stream already closed */ }
       };
-      void runTurn(rt, { sessionId: body.sessionId, text: body.text!, model: body.model, effort: body.effort, thinking: body.thinking, mode: body.mode, workspace: body.workspace, signal: ctrl.signal, onFrame: send }).finally(() => {
-        try {
-          controller.close();
-        } catch {
-          /* already closed */
-        }
-      });
+      const send = (f: RunFrame): void => write(`data: ${JSON.stringify(f)}\n\n`);
+      const heartbeat = setInterval(() => write(`: ping\n\n`), heartbeatMs());
+
+      runTurn(rt, { sessionId: body.sessionId, text: body.text!, model: body.model, effort: body.effort, thinking: body.thinking, mode: body.mode, workspace: body.workspace, signal: ctrl.signal, onFrame: send })
+        // runTurn is meant to never throw, but if it ever rejects, surface it as a
+        // graceful error frame instead of an unhandled rejection (which could crash
+        // the bridge → drop every SSE connection).
+        .catch((err: unknown) => send({ kind: "error", message: err instanceof Error ? err.message : String(err) }))
+        .finally(() => {
+          clearInterval(heartbeat);
+          try { controller.close(); } catch { /* already closed */ }
+        });
     },
     cancel() {
       ctrl.abort(); // client closed the stream (stop) → abort the run

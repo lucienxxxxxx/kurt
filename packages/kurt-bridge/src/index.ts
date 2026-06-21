@@ -11,6 +11,12 @@
 import { productionRuntime } from "./runtime.ts";
 import { startServer } from "./server.ts";
 
+// Resilience: never let one stray error take the whole bridge down. A crash here
+// closes every SSE socket → the desktop shows "Load failed" and all sessions die.
+// Log and keep serving instead; a bad run surfaces as an error frame in the UI.
+process.on("uncaughtException", (err) => console.error("[bridge] uncaughtException (kept alive):", err));
+process.on("unhandledRejection", (reason) => console.error("[bridge] unhandledRejection (kept alive):", reason));
+
 const workspace = process.env.KURT_WORKSPACE ?? process.cwd();
 const port = Number(process.env.KURT_BRIDGE_PORT ?? 0) || 0;
 
