@@ -21,6 +21,8 @@ import { CodeTool } from "./code.ts";
 import { WriteFileTool } from "./write-file.ts";
 import { WebSearchTool } from "./web-search.ts";
 import { RequestWriteAccessTool } from "./request-write.ts";
+import { RequestAccessTool, type AccessGrants } from "./request-access.ts";
+import { resolve } from "node:path";
 import { MALFORMED_ARGS } from "../tool-args.ts";
 
 const onDarwin = process.platform === "darwin" && existsSync("/usr/bin/sandbox-exec");
@@ -220,6 +222,58 @@ describe("RequestWriteAccessTool", () => {
     const res = await new RequestWriteAccessTool(writable, deny).execute({ directory: "/tmp/kurt-x" }, ctx());
     expect(res.isError).toBe(true);
     expect(writable).toHaveLength(0);
+  });
+});
+
+describe("RequestAccessTool (generalized capability requests)", () => {
+  const allow = { request: async () => "allow" as const };
+  const deny = { request: async () => "deny" as const };
+  const fresh = (): AccessGrants => ({ network: false, open: false, dirs: [] });
+
+  test("kind=network flips the session network grant", async () => {
+    const grants = fresh();
+    const res = await new RequestAccessTool([], grants, { permission: allow }).execute({ kind: "network" }, ctx());
+    expect(res.isError).toBeFalsy();
+    expect(grants.network).toBe(true);
+  });
+
+  test("kind=write adds to the live writable roots AND the session dirs", async () => {
+    const extra = mkdtempSync(join(tmpdir(), "kurt-acc-"));
+    try {
+      const writable: string[] = [];
+      const grants = fresh();
+      await new RequestAccessTool(writable, grants, { permission: allow }).execute({ kind: "write", target: extra }, ctx());
+      expect(writable).toContain(resolve(extra));
+      expect(grants.dirs).toContain(resolve(extra));
+    } finally {
+      rmSync(extra, { recursive: true, force: true });
+    }
+  });
+
+  test("kind=open invokes the injected opener with the target", async () => {
+    let opened = "";
+    const res = await new RequestAccessTool([], fresh(), { permission: allow, opener: async (t) => { opened = t; } })
+      .execute({ kind: "open", target: "https://example.com" }, ctx());
+    expect(res.isError).toBeFalsy();
+    expect(opened).toBe("https://example.com");
+  });
+
+  test("denied request grants nothing", async () => {
+    const grants = fresh();
+    const res = await new RequestAccessTool([], grants, { permission: deny }).execute({ kind: "network" }, ctx());
+    expect(res.isError).toBe(true);
+    expect(grants.network).toBe(false);
+  });
+
+  test("legacy {directory} (no kind) is treated as a write request", async () => {
+    const extra = mkdtempSync(join(tmpdir(), "kurt-acc-"));
+    try {
+      const writable: string[] = [];
+      await new RequestAccessTool(writable, fresh(), { permission: allow }).execute({ directory: extra }, ctx());
+      expect(writable).toContain(resolve(extra));
+    } finally {
+      rmSync(extra, { recursive: true, force: true });
+    }
   });
 });
 

@@ -21,3 +21,5 @@ export type { CodeToolOptions } from "./code.ts";
 export { WebSearchTool } from "./web-search.ts";
 export type { WebSearchToolOptions } from "./web-search.ts";
 export { RequestWriteAccessTool } from "./request-write.ts";
+export { RequestAccessTool } from "./request-access.ts";
+export type { AccessGrants, AccessKind, RequestAccessOptions } from "./request-access.ts";

@@ -20,7 +20,9 @@ export interface ShellToolOptions {
   /** Dirs the command may write to. Default: none (read-only world). */
   writablePaths?: string[];
   /** Allow network access. Default: false. */
-  allowNetwork?: boolean;
+  /** Network access. A function is resolved at call time so a mid-session grant
+   *  (request_access kind:"network") takes effect on the next command. */
+  allowNetwork?: boolean | (() => boolean);
   /** Extra env vars for the command (e.g. WORKSPACE_DIR). */
   env?: Record<string, string>;
   /** Hard wall-clock cap (ms); a per-call `timeout` arg overrides it. */
@@ -96,7 +98,7 @@ export class ShellTool implements Tool {
         env: this.#opts.env,
         policy: {
           writablePaths: this.#opts.writablePaths ?? [],
-          allowNetwork: this.#opts.allowNetwork ?? false,
+          allowNetwork: typeof this.#opts.allowNetwork === "function" ? this.#opts.allowNetwork() : this.#opts.allowNetwork ?? false,
         },
         timeoutMs: typeof timeoutSec === "number" && timeoutSec > 0 ? timeoutSec * 1000 : this.#opts.timeoutMs,
         idleTimeoutMs: this.#opts.idleTimeoutMs,

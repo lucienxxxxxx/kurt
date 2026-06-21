@@ -41,7 +41,8 @@ const ALIASES: Record<string, string> = {
 };
 
 export interface CodeToolOptions {
-  allowNetwork?: boolean;
+  /** Network access; a function is resolved at call time (live grants). */
+  allowNetwork?: boolean | (() => boolean);
   /** Extra writable dirs beyond the script temp (e.g. the agent's WORKSPACE_DIR). */
   writablePaths?: string[];
   /** Extra env vars for the script (e.g. WORKSPACE_DIR). */
@@ -115,7 +116,7 @@ export class CodeTool implements Tool {
           env: this.#opts.env,
           policy: {
             writablePaths: [this.#workspace.root, ...(this.#opts.writablePaths ?? [])],
-            allowNetwork: this.#opts.allowNetwork ?? false,
+            allowNetwork: typeof this.#opts.allowNetwork === "function" ? this.#opts.allowNetwork() : this.#opts.allowNetwork ?? false,
           },
           timeoutMs: this.#opts.timeoutMs,
           idleTimeoutMs: this.#opts.idleTimeoutMs,
