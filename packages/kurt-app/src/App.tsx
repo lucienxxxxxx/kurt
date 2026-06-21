@@ -44,7 +44,8 @@ interface Run {
   idMap: Map<number, number>; // bridge step _id → app uid, for the current turn
   queue: QueuedMsg[];         // messages queued onto THIS run while it streams
   startedAt: number;          // for the elapsed-time readout
-  tokens: number;             // total tokens reported via usage frames
+  tokens: number;             // cumulative total tokens reported via usage frames
+  contextTokens: number;      // latest call's input/prompt tokens = current context size (API)
   previewables: string[];     // previewable docs (md/html/pdf) written this run → auto-preview on done
   workspace: string;          // the conversation's workspace for this run
 }
@@ -87,7 +88,7 @@ export default function App() {
   const [newChatRunId, setNewChatRunId] = useState<number | null>(null);
   const [queuedMsgs, setQueuedMsgs] = useState<QueuedMsg[]>([]); // the VIEWED run's queue
   // Live run readout for the VIEWED conversation (elapsed + tokens); null when idle.
-  const [viewStats, setViewStats] = useState<{ startedAt: number; tokens: number } | null>(null);
+  const [viewStats, setViewStats] = useState<{ startedAt: number; tokens: number; contextTokens: number } | null>(null);
   const [loadingSession, setLoadingSession] = useState(false); // fetching a session's steps (no cache yet)
   const [, forceTick] = useState(0);
   // Workspace tabs are PER conversation: each session id (and "new" for the unsaved
@@ -314,7 +315,7 @@ export default function App() {
           },
           onApproval: (req) => { if (run.sessionId) setPendingApprovals((m) => ({ ...m, [run.sessionId!]: req })); },
           onAsk: (req) => { if (run.sessionId) setPendingAsks((m) => ({ ...m, [run.sessionId!]: req })); },
-          onUsage: (u) => { run.tokens += u.totalTokens; if (isViewing(run)) setViewStats({ startedAt: run.startedAt, tokens: run.tokens }); },
+          onUsage: (u) => { run.tokens += u.totalTokens; if (u.inputTokens > 0) run.contextTokens = u.inputTokens; if (isViewing(run)) setViewStats({ startedAt: run.startedAt, tokens: run.tokens, contextTokens: run.contextTokens }); },
           onError: (message) => upsertRun(run, { _id: uid(), type: "text", text: `⚠ ${message}`, ts: Date.now() } as Step),
         },
         run.ctrl.signal,
@@ -355,12 +356,12 @@ export default function App() {
 
   /** Start a fresh run for `sessionId` (null = the unsaved new chat in view). */
   const beginRun = (sessionId: string | null, seed: Step[], text: string): void => {
-    const run: Run = { runId: uid(), sessionId, ctrl: new AbortController(), buf: seed, idMap: new Map(), queue: [], startedAt: Date.now(), tokens: 0, previewables: [], workspace: convWorkspace };
+    const run: Run = { runId: uid(), sessionId, ctrl: new AbortController(), buf: seed, idMap: new Map(), queue: [], startedAt: Date.now(), tokens: 0, contextTokens: 0, previewables: [], workspace: convWorkspace };
     runsRef.current.set(run.runId, run);
     if (sessionId) setRunningIds((s) => new Set(s).add(sessionId));
     else setNewChatRun(run.runId);
     setLiveId(seed.length ? seed[seed.length - 1]!._id : null);
-    setViewStats({ startedAt: run.startedAt, tokens: 0 }); // beginRun is always for the viewed conversation
+    setViewStats({ startedAt: run.startedAt, tokens: 0, contextTokens: 0 }); // beginRun is always for the viewed conversation
     void streamRun(run, text);
   };
 
@@ -522,7 +523,7 @@ export default function App() {
       setThread(run.buf.slice());
       setLiveId(run.buf.length ? run.buf[run.buf.length - 1]!._id : null);
       setQueuedMsgs(run.queue.slice());
-      setViewStats({ startedAt: run.startedAt, tokens: run.tokens });
+      setViewStats({ startedAt: run.startedAt, tokens: run.tokens, contextTokens: run.contextTokens });
       setTitleEntry(title);
       return;
     }
@@ -663,7 +664,7 @@ export default function App() {
                 ? <Ask req={pendingAsks[approvalKey(activeId)]!} lang={lang} onAnswer={answerAsk} />
                 : null
           }
-          meter={thread.length > 0 ? <ContextMeter steps={thread} model={model} lang={lang} apiTokens={viewStats?.tokens} /> : null} />
+          meter={thread.length > 0 ? <ContextMeter steps={thread} model={model} lang={lang} apiTokens={viewStats?.tokens} contextTokens={viewStats?.contextTokens} /> : null} />
       </div>
     );
   }

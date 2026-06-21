@@ -98,6 +98,7 @@ export const T = {
   ctxReplies: { zh: "回复", en: "Replies" },
   ctxSystem: { zh: "系统提示", en: "System prompt" },
   ctxApprox: { zh: "为按文本长度估算值（API 只报总量）", en: "Estimated from text length (the API reports only totals)" },
+  ctxContextApi: { zh: "上下文总量来自接口实际用量；下方分类为估算", en: "Context total is the API's real count; the category split below is estimated" },
   ctxApiTotal: { zh: "本轮 API 实际用量：{n} tokens", en: "Actual API usage this run: {n} tokens" },
   // ask_user prompt
   askTitle: { zh: "需要你的回答", en: "A question for you" },

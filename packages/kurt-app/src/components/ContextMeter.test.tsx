@@ -34,4 +34,12 @@ describe("ContextMeter", () => {
     fireEvent.click(screen.getByRole("button"));
     expect(screen.getByText(/1\.5k/)).toBeInTheDocument();
   });
+
+  test("ring % uses the API context size, not the text estimate", () => {
+    // app's deepseek context window = 128,000; 64,000 = 50% (the text estimate would be ~0%).
+    const { container } = render(
+      <ContextMeter steps={steps} model="deepseek-v4-flash" lang="en" contextTokens={64_000} />,
+    );
+    expect(container.querySelector(".ctx-ring-text")?.textContent).toBe("50%");
+  });
 });

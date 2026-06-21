@@ -29,12 +29,15 @@ function breakdownOf(steps: Step[], lang: Lang): Breakdown {
 
 const fmt = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
 
-export function ContextMeter({ steps, model, lang, apiTokens }: {
+export function ContextMeter({ steps, model, lang, apiTokens, contextTokens }: {
   steps: Step[];
   model: string;
   lang: Lang;
-  /** Real total tokens reported by the API for the current run, if any. */
+  /** Real cumulative total tokens reported by the API for the current run, if any. */
   apiTokens?: number;
+  /** Real current-context size (latest call's input/prompt tokens) from the API —
+   *  authoritative for the ring %; the estimate is only a fallback before any usage. */
+  contextTokens?: number;
 }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -46,7 +49,11 @@ export function ContextMeter({ steps, model, lang, apiTokens }: {
 
   const b = breakdownOf(steps, lang);
   const max = modelContextWindow(model);
-  const pct = Math.min(100, Math.round((b.total / max) * 100));
+  // The ring + headline use the API's real context size when we have it; the
+  // per-category split below is still an estimate (the API gives no breakdown).
+  const usedApi = contextTokens && contextTokens > 0;
+  const used = usedApi ? contextTokens! : b.total;
+  const pct = Math.min(100, Math.round((used / max) * 100));
   const level = pct >= 90 ? "high" : pct >= 70 ? "med" : "low";
 
   const C = 2 * Math.PI * 16; // ring circumference (r=16)
@@ -64,7 +71,7 @@ export function ContextMeter({ steps, model, lang, apiTokens }: {
         <div className="ctx-card">
           <div className="ctx-card-head">
             <span className="ctx-card-title">{tr(T.ctxTitle, lang)}</span>
-            <span className="ctx-card-used">{tr(T.ctxUsed, lang, { used: fmt(b.total), max: fmt(max) })} · {pct}%</span>
+            <span className="ctx-card-used">{tr(T.ctxUsed, lang, { used: fmt(used), max: fmt(max) })} · {pct}%</span>
           </div>
           <div className="ctx-rows">
             {rows.map((r) => (
@@ -75,7 +82,7 @@ export function ContextMeter({ steps, model, lang, apiTokens }: {
               </div>
             ))}
           </div>
-          <div className="ctx-note">{tr(T.ctxApprox, lang)}</div>
+          <div className="ctx-note">{tr(usedApi ? T.ctxContextApi : T.ctxApprox, lang)}</div>
           {apiTokens ? <div className="ctx-note">{tr(T.ctxApiTotal, lang, { n: fmt(apiTokens) })}</div> : null}
         </div>
       )}
