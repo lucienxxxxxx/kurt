@@ -30,11 +30,26 @@ export interface ParsedSkill {
   body: string;
 }
 
+/** Where a loaded skill came from. */
+export type SkillScope = "global" | "project";
+
+/** Display-facing info for a loaded skill (the front-end's `/skills` view). */
+export interface SkillInfo {
+  name: string;
+  description: string;
+  /** global = ~/.kurt/skills, project = <ws>/.kurt/skills (overrides global). */
+  scope: SkillScope;
+  /** Absolute path to the skill's SKILL.md / <name>.md. */
+  path: string;
+}
+
 export interface LoadedSkills {
   provider: SkillProvider;
   /** Prompt catalog (descriptions only), or "" when no skills exist. */
   catalog: string;
   metas: SkillMeta[];
+  /** Richer per-skill info for display (name/description/scope/path). */
+  infos: SkillInfo[];
 }
 
 /** Parse skill text (optional frontmatter + body). Returns null if there's no usable content. */
@@ -62,24 +77,32 @@ export function parseSkill(text: string, fallbackName: string): ParsedSkill | nu
   return { name, description, body };
 }
 
+/** Internal: a parsed skill plus where it came from. */
+type LoadedSkillRecord = ParsedSkill & { scope: SkillScope; path: string };
+
 /** Load + merge skills from global then project dirs (project wins on name collision). */
 export async function loadSkills(workspaceRoot: string): Promise<LoadedSkills> {
-  const byName = new Map<string, ParsedSkill>();
-  for (const dir of [globalSkillsDir(), projectSkillsDir(workspaceRoot)]) {
-    for (const skill of await readSkillsDir(dir)) byName.set(skill.name, skill); // later dir overrides
+  const byName = new Map<string, LoadedSkillRecord>();
+  const dirs: [string, SkillScope][] = [
+    [globalSkillsDir(), "global"],
+    [projectSkillsDir(workspaceRoot), "project"],
+  ];
+  for (const [dir, scope] of dirs) {
+    for (const skill of await readSkillsDir(dir, scope)) byName.set(skill.name, skill); // later dir overrides
   }
 
   const skills = [...byName.values()];
   const metas: SkillMeta[] = skills.map((s) => ({ name: s.name, description: s.description }));
+  const infos: SkillInfo[] = skills.map((s) => ({ name: s.name, description: s.description, scope: s.scope, path: s.path }));
   const provider: SkillProvider = {
     list: () => metas,
     load: async (name) => byName.get(name)?.body ?? null,
   };
-  return { provider, catalog: skillCatalog(metas), metas };
+  return { provider, catalog: skillCatalog(metas), metas, infos };
 }
 
 /** Read every skill in one directory: `<name>/SKILL.md` dirs and flat `<name>.md` files. */
-async function readSkillsDir(dir: string): Promise<ParsedSkill[]> {
+async function readSkillsDir(dir: string, scope: SkillScope): Promise<LoadedSkillRecord[]> {
   let entries: import("node:fs").Dirent[];
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -87,7 +110,7 @@ async function readSkillsDir(dir: string): Promise<ParsedSkill[]> {
     return []; // missing dir → no skills
   }
 
-  const out: ParsedSkill[] = [];
+  const out: LoadedSkillRecord[] = [];
   for (const entry of entries) {
     let path: string | null = null;
     let fallback = entry.name;
@@ -99,7 +122,7 @@ async function readSkillsDir(dir: string): Promise<ParsedSkill[]> {
     }
     if (!path) continue;
     const skill = await readSkillFile(path, fallback);
-    if (skill) out.push(skill);
+    if (skill) out.push({ ...skill, scope, path });
   }
   return out;
 }

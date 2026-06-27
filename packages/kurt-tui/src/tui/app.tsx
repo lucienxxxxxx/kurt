@@ -8,10 +8,12 @@ import { StatusBar, type ChatMode, type Status } from "./status-bar.tsx";
 import { Welcome } from "./welcome.tsx";
 import { Approval } from "./approval.tsx";
 import { SessionPicker } from "./session-picker.tsx";
+import { SkillsPicker } from "./skills-picker.tsx";
 import { AskPrompt } from "./ask-prompt.tsx";
 import { entriesFromMessages } from "./session-view.ts";
 import type { PermissionBridge } from "./permission.ts";
 import type { AskBridge, PendingAsk } from "./ask.ts";
+import type { SkillInfo } from "../skills.ts";
 
 const NO_SUBSCRIBE = (): (() => void) => () => {};
 const NO_PENDING = (): PermissionRequest | null => null;
@@ -71,13 +73,15 @@ export interface AppProps {
   session?: SessionController;
   /** Bridge for the agent's ask_user prompts (when enabled). */
   ask?: AskBridge;
+  /** Loaded skills + a body loader, for the `/skills` command (when enabled). */
+  skills?: { list: SkillInfo[]; load: (name: string) => Promise<string | null> };
 }
 
 const MODES: ChatMode[] = ["chat", "agent", "plan"];
 const EFFORTS = ["low", "medium", "high"];
 const PALETTE_MAX = 8;
 
-export function App({ run, compact, models, config, onNewSession, onConfigChange, permission, session, ask }: AppProps) {
+export function App({ run, compact, models, config, onNewSession, onConfigChange, permission, session, ask, skills }: AppProps) {
   const { stdout } = useStdout();
   const { exit } = useApp();
 
@@ -90,6 +94,9 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
 
   // Session picker overlay (null when closed). Opened by /sessions.
   const [picker, setPicker] = useState<{ sessions: SessionMeta[]; selected: number } | null>(null);
+
+  // Skills list overlay (null when closed). Opened by /skills.
+  const [skillsView, setSkillsView] = useState<{ skills: SkillInfo[]; selected: number } | null>(null);
 
   const [cols, setCols] = useState(stdout.columns || 80);
   useEffect(() => {
@@ -245,6 +252,22 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
     setPicker({ sessions: await session.list(), selected: 0 });
   }
 
+  function openSkills(): void {
+    const list = skills?.list ?? [];
+    if (list.length === 0) {
+      notice("info", "no skills loaded (drop one in ~/.kurt/skills/ or <workspace>/.kurt/skills/)");
+      return;
+    }
+    setSkillsView({ skills: list, selected: 0 });
+  }
+
+  async function viewSkill(info: SkillInfo): Promise<void> {
+    setSkillsView(null);
+    const body = (await skills?.load(info.name)) ?? "";
+    const header = `skill: ${info.name}  [${info.scope}]  ${info.path}`;
+    notice("info", body.trim().length > 0 ? `${header}\n\n${body.trim()}` : `${header}\n\n(empty skill body)`);
+  }
+
   function handleCommand(name: string, args: string[]): void {
     switch (name) {
       case "/help":
@@ -281,6 +304,9 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
         break;
       case "/sessions":
         void openPicker();
+        break;
+      case "/skills":
+        openSkills();
         break;
       case "/clear":
         // The old conversation is already saved; begin a fresh session so we
@@ -361,6 +387,19 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
       }
       return; // swallow other keys while the picker is open
     }
+    // Skills list: arrows move, ↵ views the body (into scrollback), esc closes.
+    if (skillsView) {
+      if (key.escape) return void setSkillsView(null);
+      if (key.upArrow) return void setSkillsView((p) => (p ? { ...p, selected: Math.max(0, p.selected - 1) } : p));
+      if (key.downArrow)
+        return void setSkillsView((p) => (p ? { ...p, selected: Math.min(p.skills.length - 1, p.selected + 1) } : p));
+      if (key.return) {
+        const s = skillsView.skills[skillsView.selected];
+        if (s) void viewSkill(s);
+        return;
+      }
+      return; // swallow other keys while the skills list is open
+    }
     if (key.escape) {
       if (running && abortRef.current) abortRef.current.abort();
       else setInput("");
@@ -423,7 +462,7 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
           <EntryView key={i} entry={entry} width={cols} live />
         ))}
 
-        {!picker && !pendingAsk && cmdItems.length > 0 && (
+        {!picker && !skillsView && !pendingAsk && cmdItems.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
             {cmdItems.slice(0, PALETTE_MAX).map((c, i) => (
               <Text key={c.name} inverse={i === sel} color={i === sel ? undefined : "gray"}>
@@ -439,6 +478,8 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
           <AskPrompt pending={pendingAsk} input={askInput} selected={askSel} />
         ) : picker ? (
           <SessionPicker sessions={picker.sessions} selected={picker.selected} />
+        ) : skillsView ? (
+          <SkillsPicker skills={skillsView.skills} selected={skillsView.selected} />
         ) : (
           <Box marginTop={1}>
             <Text color="green">{"› "}</Text>

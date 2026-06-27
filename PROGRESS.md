@@ -6,7 +6,8 @@
 
 - **最后更新**:2026-06-22 · `main`(**并发授权/询问改顺序队列(一个一个处理)**;**显示当前执行步骤(底部活动 + 工具 spinner)+ 回复结束重对账(防被吃)**;**上下文用量改用接口返回 token(双环 % 用真实 inputTokens,估算仅兜底)**;**通用授权 request_access(write/network/open,不再写死写目录)**;**修沙盒过窄 + 模型不会申请授权:可写根加系统临时目录、shell 写拒错追加 request_write_access 提示、prompt 明确沙盒规则**;**修 SSE「Load failed」:心跳保活 + bridge 崩溃兜底(LLM 重试已确认存在)**;**多模型提供商 阶段1(OpenAI/Claude/DeepSeek/自定义 + 启用开关 + 分组下拉;Claude 原生留阶段2)**;**markdown 改用 react-markdown + remark-gfm(支持 `>`/`*斜体*`/删除线/嵌套列表等)**;**workspace 按会话(composer 底部目录选择器,引擎工具/提示/文件树/终端全部 rooted 到会话目录)**;**会话全局统一列表(不再按 workspace 过滤)+ 标签最小宽度/禁横向滚动条**;**引擎并行工具调用(同一轮多个独立调用并发执行)**;**发送/完成音效 + 后台完成系统通知**;**system prompt 注入当前时间+系统信息(每轮)**;**对话条件式底部跟随 + 回到最新 + 流式淡入**;**工作区标签栏 Phase A+B+C + 分屏标签组 + 按会话独立 + 下拉层级**:分屏=两个编辑器组(每屏自带标签条);标签/分屏按会话各存一份;模式/模型/强度持久化;下拉菜单改 fixed 不被分屏裁切 + z-index 规范;单屏铺满宽度修复。**工作区标签栏 Phase A+B+C 全部完成**:标题下标签栏 + 自研左右分屏；会话/文件/预览/计划/**终端**标签，DetailPanel 统一进标签系统；bridge `/fs`·`/file`·`/raw` + `/info` 暴露 workspace + `plan` 帧；**自动触发**:计划→自动开计划标签、run 产出文档→自动开预览；**终端** = Rust portable-pty + xterm.js(懒加载)。前置:新 app 图标、统一步骤头、IN/OUT 截断、文件名点击预览、隐藏输入框滚动条、已思考 N秒)
 - **本轮结构更新(2026-06-27)**:`kurt-agent` 新增 **AgentProfile/AgentRuntime** 组合层(把 persona/system、工具子集、memory context、策略收束成可复用 agent 对象,仍委托 runLoop);新增 **MemoryStore/MarkdownMemoryStore** memory subsystem seam,`MemoryTool` 改为注入 store 且兼容旧固定路径构造;**RAG 进入 memory 后续排期**(走 `MemoryStore.search` + 检索注入策略,不进 engine)。
-- **门禁**:kurt-agent **165** · kurt-tui **70** · kurt-bridge **27** · kurt-app build+**Vitest 69**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
+- **TUI `/skills` 命令(2026-06-27)**:kurt-tui 新增运行中 `/skills` 发现命令(纯前端)——覆盖层列出已加载 skill(名称 · [global/project] · 描述),↵ 把所选 skill 正文打印到 scrollback,esc 关闭;`loadSkills()` 新增 `infos: SkillInfo[]`(name/description/scope/path),`SkillsPicker` 覆盖层镜像 `SessionPicker`。skills.test/commands.test/skills-picker.test +4(kurt-tui 74)。
+- **门禁**:kurt-agent **165** · kurt-tui **74** · kurt-bridge **27** · kurt-app build+**Vitest 69**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
 
@@ -150,7 +151,7 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
   仅在 `src/mcp/` 使用,`src/engine/` 仍零依赖零 I/O。已记入 `kurt-agent/CLAUDE.md` §1/§8,**不要当违规删**。
 - **MCP 工具只在 agent 模式可见**:chat/plan 取的是固定工具名单(`TOOLS_BY_MODE`),MCP 工具是动态名,
   目前不进 chat/plan —— 即便是只读 MCP 工具(readOnlyHint)。后续可让 `toolsForMode` 放只读 MCP 工具进 chat/plan。
-- **无 TUI 内 `/mcp`、`/skills` 发现命令**(只在启动横幅打印);后续可加,列出已连服务器/工具与已加载 skill。
+- **TUI 内 `/skills` 发现命令已落地**(2026-06-27):运行中 `/skills` 列出已加载 skill(名称 · [global/project] · 描述),↵ 把所选 skill 正文打印到 scrollback,esc 关闭;数据来自 `loadSkills().infos`(name/description/scope/path)。**`/mcp` 发现命令仍缺**(MCP 只在启动横幅打印),后续可加,列出已连服务器/工具。
 - **Skills v1 只加载正文(无捆绑资源/脚本)**:`skill` 工具只返回 `SKILL.md` 正文;若 skill 目录里还带脚本/模板,
   模型需自行 read(且它们在 `~/.kurt/skills/` 工作区外,要 request_write_access)。后续可让 `skill` 顺带列出捆绑文件+目录路径。
 - Skills 与 MCP 工具都在每次启动时同步发现/连接,会话期间新增不会热加载(需重启);量大时启动略慢。

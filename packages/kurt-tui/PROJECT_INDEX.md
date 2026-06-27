@@ -1,7 +1,7 @@
 # PROJECT_INDEX — kurt-tui
 
 > Cached architecture map. Read this first; scan only what it points to.
-> Last synced: 2026-06-15, after the B1–B5 bug sweep: atomic writes + session occupancy lock, `kurt worktree list|prune`, autoCompactThreshold. (Phase 5 MCP + Skills complete before that.)
+> Last synced: 2026-06-27, after the in-TUI `/skills` discovery command (lists loaded skills + view a skill's body). Earlier: B1–B5 bug sweep (atomic writes + session occupancy lock, `kurt worktree list|prune`, autoCompactThreshold); Phase 5 MCP + Skills.
 
 ## 1. Overview
 Ink terminal UI for `kurt-agent`. A front-end consumer: subscribes to the engine
@@ -21,7 +21,7 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 - **Write outside the workspace**: the agent calls `request_write_access` (same approval prompt); on allow, the dir is opened for write_file/shell/run_code for the rest of the session (`makeTools` shares one mutable writable-roots array). "Always" persists `write-access:<dir>` in the allowlist.
 - **Working dir**: the agent works inside one workspace — `WORKSPACE_DIR` (the whole dir, **fully writable, no approval**). Injected into the system prompt AND as env to shell/run_code. No `import/`/`export/` subdirs are created. Sandbox blocks writes *outside* the workspace (+ `--allow-write` dirs). File writes and command approval are **independent**: in-workspace writes never prompt; sensitive commands always do.
 - Settings (`model/effort/thinking/mode`) persist to `~/.kurt/config.json` (override path with `KURT_CONFIG_PATH`). Precedence: persisted > env > default. API key is env-only.
-- Gate before merge: **`bun run typecheck && bun test`** (currently 70 tests, offline; SessionStore tests moved to kurt-agent in 6.2).
+- Gate before merge: **`bun run typecheck && bun test`** (currently 74 tests, offline; SessionStore tests moved to kurt-agent in 6.2).
 
 ## 3. Architecture
 - Depends on `kurt-agent` only through its public API (`"kurt-agent"` → its `src/lib.ts`):
@@ -44,12 +44,13 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 | `src/config.ts` | Persisted user settings at `~/.kurt/config.json` (path via `kurtHome()`): `loadConfig`/`saveConfig`/`configPath`/`sanitize` | (those) | `./paths` |
 | `src/paths.ts` | `~/.kurt/` layout: `kurtHome` (KURT_HOME override), `sessionsDir`, `globalMemoryPath`, `projectRulesPath(ws)`, `projectMemoryPath(ws)`, `globalMcpConfigPath`/`projectMcpConfigPath(ws)`, `globalSkillsDir`/`projectSkillsDir(ws)` | (those) | — |
 | `src/mcp-config.ts` | Load + merge MCP server config: `parseMcpConfig` (tolerant `{mcpServers}` parse) + `loadMcpServers(ws)` (global `~/.kurt/mcp.json` ∪ project `<ws>/.kurt/mcp.json`, project wins). Connecting/using them is kurt-agent's `connectMcpServers` | `parseMcpConfig`, `loadMcpServers` | `kurt-agent` (types), `./paths` |
-| `src/skills.ts` | Discover + parse skills: `parseSkill` (frontmatter+body, tolerant) + `loadSkills(ws)` (scan `~/.kurt/skills/` ∪ `<ws>/.kurt/skills/`, `<name>/SKILL.md` or flat `<name>.md`, project wins) → `{ provider, catalog, metas }`. Catalog goes in the prompt; the `skill` tool (kurt-agent) loads bodies | `parseSkill`, `loadSkills` | `kurt-agent` (`skillCatalog`/types), `./paths` |
+| `src/skills.ts` | Discover + parse skills: `parseSkill` (frontmatter+body, tolerant) + `loadSkills(ws)` (scan `~/.kurt/skills/` ∪ `<ws>/.kurt/skills/`, `<name>/SKILL.md` or flat `<name>.md`, project wins) → `{ provider, catalog, metas, infos }`. Catalog goes in the prompt; the `skill` tool (kurt-agent) loads bodies; `infos: SkillInfo[]` (name/description/scope/path) feeds the `/skills` overlay | `parseSkill`, `loadSkills`, `SkillInfo` | `kurt-agent` (`skillCatalog`/types), `./paths` |
 | _(SessionStore)_ | **Moved to kurt-agent** (`src/session/store.ts`) in Phase 6.2 so TUI + bridge + desktop share one `~/.kurt/sessions` + one impl. Import `SessionStore`/`SessionMeta`/`SessionRecord` `from "kurt-agent"` | — | `kurt-agent` |
 | `src/context-files.ts` | `loadContextPrelude(ws)` → reads `~/.kurt/memory.md` (global) + `<ws>/.kurt/memory.md` (project, agent-written) + `<ws>/.kurt/rules.md` (user rules) into a system-prompt prelude | `loadContextPrelude` | `./paths` |
 | `src/tui/app.tsx` | Root Ink component: `committed` (→ `<Static>` scrollback) + `live` (current turn) + session state, command palette, drives the loop, `/compact`, `/sessions` picker, `/new`, `/clear`; autosave + auto-title via `SessionController` | `App`, `EngineRunner`, `Compactor`, `SessionState`, `SessionController` | ink, react, kurt-agent, sibling files |
 | `src/tui/session-view.ts` | `entriesFromMessages` — rebuild display entries from saved `Message[]` (resume repaint; renders thinking/text/tool blocks) | `entriesFromMessages` | `kurt-agent`, `./entries` |
 | `src/tui/session-picker.tsx` | The `/sessions` list overlay (title · msg count · time-ago); keys handled in App | `SessionPicker` | ink, `../session-store` |
+| `src/tui/skills-picker.tsx` | The `/skills` list overlay (name · [global/project] · description); ↵ views a skill's body (printed to scrollback); keys handled in App | `SkillsPicker` | ink, `../skills` |
 | `src/tui/conversation.tsx` | Renders one entry: user (divider+plain), kurt (markdown when final), thinking (plain gray, no italic), tool cards (header `⚙ label + brief one-liner`, then IN:/OUT:, live stream tail + ⠿ while running, clipped), notices | `EntryView` | ink, `./markdown`, `./tool-format`, `./entries` |
 | `src/tui/status-bar.tsx` | Bottom bar: model · ctx + scarcity dot · effort · think · mode | `StatusBar`, `Status`, `ChatMode` | ink, `./theme` |
 | `src/tui/banner.ts` | Startup banner (printed once at launch; scrolls with history) | `bannerString` | — |
@@ -80,6 +81,7 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 - **Change the approval prompt / allowlist** → `tui/approval.tsx` (UI), `tui/permission.ts` (bridge), `allowlist.ts` (storage); the *classifier* is in `kurt-agent` (`classifyCommand`).
 - **MCP servers (config / which servers / lifecycle)** → `mcp-config.ts` (load+merge `mcp.json`) + `paths.ts` (file locations); wired in `run-tui.tsx`/`run-chat.ts` (connect → add tools to hub → close on exit). The client/adapter/transports are in kurt-agent `src/mcp/`.
 - **Skills (discovery / parsing / catalog)** → `skills.ts` (`loadSkills`/`parseSkill`) + `paths.ts` (skills dirs); wired in `run-tui.tsx`/`run-chat.ts` (provider → `makeTools`; catalog appended to the prompt prelude). The `skill` tool + `skillCatalog` are in kurt-agent `src/skills/`/`tools/skill.ts`. Mode gating: `skill` is in all of chat/plan/agent (`TOOLS_BY_MODE`).
+- **Browse loaded skills at runtime (`/skills`)** → command in `commands.ts`; `app.tsx` (`openSkills`/`viewSkill` + `skillsView` overlay state + key handling) renders `tui/skills-picker.tsx`. Data comes from `run-tui.tsx` (`skills={{ list: skills.infos, load: skills.provider.load }}`); ↵ prints the chosen skill's body into scrollback.
 - **New engine capability needed** → implement in `kurt-agent`, export from its `src/lib.ts`, then consume here.
 - Tests: `src/tui/*.test.ts(x)` (entries/commands/markdown/tool-format + an Ink render of `App`).
 

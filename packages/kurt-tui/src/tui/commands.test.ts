@@ -19,4 +19,9 @@ describe("slash commands", () => {
     expect(parseCommand("/compact")).toEqual({ name: "/compact", args: [] });
     expect(parseCommand("plain")).toBeNull();
   });
+
+  test("/skills is registered and discoverable from the palette", () => {
+    expect(COMMANDS.some((c) => c.name === "/skills")).toBe(true);
+    expect(filterCommands("/sk").map((c) => c.name)).toEqual(["/skills"]);
+  });
 });

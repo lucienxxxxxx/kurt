@@ -58,20 +58,33 @@ describe("loadSkills (global + project)", () => {
     mkdirSync(join(ws, ".kurt", "skills", "only-project"), { recursive: true });
     writeFileSync(join(ws, ".kurt", "skills", "only-project", "SKILL.md"), "---\nname: only-project\ndescription: p\n---\npbody");
 
-    const { provider, catalog, metas } = await loadSkills(ws);
+    const { provider, catalog, metas, infos } = await loadSkills(ws);
     expect(metas.map((m) => m.name).sort()).toEqual(["flat", "only-project", "shared"]);
     expect(metas.find((m) => m.name === "shared")?.description).toBe("project version");
     expect(await provider.load("shared")).toBe("PROJECT body"); // project wins
     expect(await provider.load("flat")).toBe("flat body");
     expect(await provider.load("nope")).toBeNull();
     expect(catalog).toContain("- shared: project version");
+
+    // infos carries scope + path for the `/skills` display.
+    const flat = infos.find((i) => i.name === "flat");
+    expect(flat?.scope).toBe("global");
+    expect(flat?.path).toBe(join(home, "skills", "flat.md"));
+    const onlyProject = infos.find((i) => i.name === "only-project");
+    expect(onlyProject?.scope).toBe("project");
+    expect(onlyProject?.path).toBe(join(ws, ".kurt", "skills", "only-project", "SKILL.md"));
+    // project override → scope flips to project, path points at the project file.
+    const shared = infos.find((i) => i.name === "shared");
+    expect(shared?.scope).toBe("project");
+    expect(shared?.path).toBe(join(ws, ".kurt", "skills", "shared", "SKILL.md"));
   });
 
-  test("no skills dirs → empty provider + empty catalog (never throws)", async () => {
+  test("no skills dirs → empty provider + empty catalog + empty infos (never throws)", async () => {
     setup();
-    const { metas, catalog, provider } = await loadSkills(ws);
+    const { metas, catalog, provider, infos } = await loadSkills(ws);
     expect(metas).toEqual([]);
     expect(catalog).toBe("");
     expect(provider.list()).toEqual([]);
+    expect(infos).toEqual([]);
   });
 });

@@ -214,6 +214,7 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
       permission={permission}
       session={sessions}
       ask={askBridge}
+      skills={{ list: skills.infos, load: skills.provider.load }}
       config={{ model: cfg.modelId, contextLimit: cfg.contextLimit, effort: cfg.effort, thinking: cfg.thinking, mode: cfg.mode }}
     />,
   );
