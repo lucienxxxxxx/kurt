@@ -11,7 +11,7 @@ describe("slash commands", () => {
     expect(filterCommands("/mo").map((c) => c.name)).toEqual(["/model", "/mode"]);
     expect(filterCommands("/")).toHaveLength(COMMANDS.length);
     expect(filterCommands("hi")).toEqual([]);
-    expect(filterCommands("/model deep")).toEqual([{ name: "/model", summary: "Switch model", args: "[id]" }]);
+    expect(filterCommands("/model deep")).toEqual([{ name: "/model", summary: "Pick a model from the list (or pass an id)", args: "[id]" }]);
   });
 
   test("parseCommand splits name and args", () => {

@@ -10,6 +10,7 @@ import { Approval } from "./approval.tsx";
 import { SessionPicker } from "./session-picker.tsx";
 import { SkillsPicker } from "./skills-picker.tsx";
 import { McpPicker } from "./mcp-picker.tsx";
+import { ModelPicker, type ModelOption } from "./model-picker.tsx";
 import { ProviderConfigView, editFields, type ProvEdit } from "./provider-config.tsx";
 import { AskPrompt } from "./ask-prompt.tsx";
 import { entriesFromMessages } from "./session-view.ts";
@@ -118,6 +119,9 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
 
   // MCP servers overlay (null when closed). Opened by /mcp.
   const [mcpView, setMcpView] = useState<{ servers: McpServerInfo[]; selected: number } | null>(null);
+
+  // Model picker overlay (null when closed). Opened by /model with no argument.
+  const [modelView, setModelView] = useState<{ items: ModelOption[]; selected: number } | null>(null);
 
   // Provider setup overlay (null when closed). Opened by /provider (and on launch
   // when nothing is configured). `edit` null = the provider list; otherwise the form.
@@ -335,6 +339,22 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
     setProvView({ rows: providers.snapshot(), selected: 0, edit: null });
   }
 
+  // Map each usable model to the provider serving it (for the picker's context column).
+  function modelOptions(): ModelOption[] {
+    const rows = providers?.snapshot() ?? [];
+    return modelList.map((model) => ({ model, provider: rows.find((p) => p.models.includes(model))?.label ?? "" }));
+  }
+
+  function openModelPicker(): void {
+    if (modelList.length === 0) {
+      notice("warn", "No models available. Configure a provider with /provider first.");
+      openProvider();
+      return;
+    }
+    const items = modelOptions();
+    setModelView({ items, selected: Math.max(0, items.findIndex((it) => it.model === modelId)) });
+  }
+
   function beginEdit(row: ResolvedProvider): ProvEdit {
     return {
       id: row.id,
@@ -363,9 +383,13 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
         notice("info", COMMANDS.map((c) => `${c.name}${c.args ? " " + c.args : ""} — ${c.summary}`).join("\n"));
         break;
       case "/model": {
-        const next = args[0] ?? cycle(modelList, modelId);
-        setModelId(next);
-        notice("info", `model → ${next}`);
+        // No argument → open the interactive list; an explicit name sets directly.
+        if (!args[0]) {
+          openModelPicker();
+          break;
+        }
+        setModelId(args[0]);
+        notice("info", `model → ${args[0]}`);
         break;
       }
       case "/mode": {
@@ -508,6 +532,23 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
       }
       return; // swallow other keys while the MCP list is open
     }
+    // Model picker: arrows move, ↵ selects, esc cancels.
+    if (modelView) {
+      if (key.escape) return void setModelView(null);
+      if (key.upArrow) return void setModelView((p) => (p ? { ...p, selected: Math.max(0, p.selected - 1) } : p));
+      if (key.downArrow)
+        return void setModelView((p) => (p ? { ...p, selected: Math.min(p.items.length - 1, p.selected + 1) } : p));
+      if (key.return) {
+        const it = modelView.items[modelView.selected];
+        setModelView(null);
+        if (it && it.model !== modelId) {
+          setModelId(it.model);
+          notice("info", `model → ${it.model}`);
+        }
+        return;
+      }
+      return; // swallow other keys while the model list is open
+    }
     // Provider setup: list mode (move/toggle/edit) or the per-provider edit form.
     if (provView) {
       const v = provView;
@@ -627,7 +668,7 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
           <EntryView key={i} entry={entry} width={cols} live />
         ))}
 
-        {!picker && !skillsView && !mcpView && !provView && !pendingAsk && cmdItems.length > 0 && (
+        {!picker && !skillsView && !mcpView && !modelView && !provView && !pendingAsk && cmdItems.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
             {cmdItems.slice(0, PALETTE_MAX).map((c, i) => (
               <Text key={c.name} inverse={i === sel} color={i === sel ? undefined : "gray"}>
@@ -647,6 +688,8 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
           <SkillsPicker skills={skillsView.skills} selected={skillsView.selected} />
         ) : mcpView ? (
           <McpPicker servers={mcpView.servers} selected={mcpView.selected} />
+        ) : modelView ? (
+          <ModelPicker items={modelView.items} selected={modelView.selected} current={modelId} />
         ) : provView ? (
           <ProviderConfigView rows={provView.rows} selected={provView.selected} edit={provView.edit} />
         ) : (

@@ -8,7 +8,8 @@
 - **本轮结构更新(2026-06-27)**:`kurt-agent` 新增 **AgentProfile/AgentRuntime** 组合层(把 persona/system、工具子集、memory context、策略收束成可复用 agent 对象,仍委托 runLoop);新增 **MemoryStore/MarkdownMemoryStore** memory subsystem seam,`MemoryTool` 改为注入 store 且兼容旧固定路径构造;**RAG 进入 memory 后续排期**(走 `MemoryStore.search` + 检索注入策略,不进 engine)。
 - **TUI `/skills` 命令(2026-06-27)**:kurt-tui 新增运行中 `/skills` 发现命令(纯前端)——覆盖层列出已加载 skill(名称 · [global/project] · 描述),↵ 把所选 skill 正文打印到 scrollback,esc 关闭;`loadSkills()` 新增 `infos: SkillInfo[]`(name/description/scope/path),`SkillsPicker` 覆盖层镜像 `SessionPicker`。
 - **TUI `/mcp` + `/provider`(2026-06-27)**:① **`/mcp`** 运行中发现命令——覆盖层列出已连 MCP 服务器(名称 · [ok/fail] · N tools · error),↵ 把该服务器工具清单打印到 scrollback;`mcpServerInfos()` 把扁平的 `mcp__<server>__<tool>` 按服务器归组。② **TUI 内多渠道 API 配置**(`src/providers.ts`,镜像 bridge):DeepSeek/OpenAI/Claude 内置预设 + Custom 自定义端点(baseURL/apiKey/models/format),持久化到 `config.json` 的 `providers`;`/provider` 覆盖层(列表 ↑/↓·space 启停·↵ 编辑;编辑表单 apiKey 掩码/baseURL/models/format),保存即持久化并实时刷新可用模型;**首启无 key 自动开引导**、无可用模型时拦截发送并引导;**不再用 `export DEEPSEEK_API_KEY` 退出**,env key 仍兼容(自动启用对应渠道)。Claude 暂存 `format:"claude"` 但仍走 OpenAI 兼容传输(原生 Anthropic 留后续)。
-- **门禁**:kurt-agent **165** · kurt-tui **94** · kurt-bridge **27** · kurt-app build+**Vitest 69**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
+- **TUI `/model` 改列表选择(2026-06-27)**:`/model` 无参数打开模型选择覆盖层(每个模型带渠道标签 · ● 标当前;↑/↓ + ↵ 选定),`/model <id>` 仍直接设置;无可用模型时引导去 `/provider`。`ModelPicker` 镜像其他覆盖层。
+- **门禁**:kurt-agent **165** · kurt-tui **96** · kurt-bridge **27** · kurt-app build+**Vitest 69**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
 
