@@ -59,16 +59,18 @@ describe("makeTools capability escalation (aligned with the desktop app)", () =>
   const codeTemp = new SessionWorkspace({ sessionId: "agent-test" });
   const perm = { request: async () => "allow" as const };
 
-  test("with an approver, exposes request_access + the request_write_access alias", () => {
+  test("with an approver, exposes request_access + the request_write_access alias + host_shell", () => {
     const names = makeTools(sandbox, codeTemp, { root: "/w" }, [], perm).map((t) => t.spec.name);
     expect(names).toContain("request_access");
     expect(names).toContain("request_write_access");
+    expect(names).toContain("host_shell");
   });
 
   test("without an approver, no escalation tools", () => {
     const names = makeTools(sandbox, codeTemp, { root: "/w" }, []).map((t) => t.spec.name);
     expect(names).not.toContain("request_access");
     expect(names).not.toContain("request_write_access");
+    expect(names).not.toContain("host_shell");
   });
 });
 

@@ -330,6 +330,44 @@ describe("ShellTool permission gating", () => {
   });
 });
 
+describe("ShellTool host variant (requireApproval, custom name)", () => {
+  test("custom name is advertised", () => {
+    const tool = new ShellTool(new DirectSandbox(), { name: "host_shell", requireApproval: true });
+    expect(tool.spec.name).toBe("host_shell");
+  });
+
+  test("EVERY command needs approval — even a safe one", async () => {
+    let asked = 0;
+    const allow = { request: async () => { asked++; return "allow" as const; } };
+    const res = await new ShellTool(new DirectSandbox(), { name: "host_shell", requireApproval: true, permission: allow }).execute(
+      { command: "echo hi" },
+      ctx(),
+    );
+    expect(asked).toBe(1); // safe command still gated
+    expect(res.content).toContain("hi");
+  });
+
+  test("denied → not run", async () => {
+    const marker = join(tmpdir(), `kurt-host-deny-${Date.now()}.txt`);
+    const deny = { request: async () => "deny" as const };
+    const res = await new ShellTool(new DirectSandbox(), { name: "host_shell", requireApproval: true, permission: deny }).execute(
+      { command: `touch ${marker}` },
+      ctx(),
+    );
+    expect(res.isError).toBe(true);
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  test("no approver → refuses to run", async () => {
+    const res = await new ShellTool(new DirectSandbox(), { name: "host_shell", requireApproval: true }).execute(
+      { command: "echo nope" },
+      ctx(),
+    );
+    expect(res.isError).toBe(true);
+    expect(res.content).toContain("No approver");
+  });
+});
+
 function ctx() {
   return { signal: new AbortController().signal, toolCallId: "test-call", emit: () => {} };
 }

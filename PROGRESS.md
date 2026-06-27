@@ -10,7 +10,8 @@
 - **TUI `/mcp` + `/provider`(2026-06-27)**:① **`/mcp`** 运行中发现命令——覆盖层列出已连 MCP 服务器(名称 · [ok/fail] · N tools · error),↵ 把该服务器工具清单打印到 scrollback;`mcpServerInfos()` 把扁平的 `mcp__<server>__<tool>` 按服务器归组。② **TUI 内多渠道 API 配置**(`src/providers.ts`,镜像 bridge):DeepSeek/OpenAI/Claude 内置预设 + Custom 自定义端点(baseURL/apiKey/models/format),持久化到 `config.json` 的 `providers`;`/provider` 覆盖层(列表 ↑/↓·space 启停·↵ 编辑;编辑表单 apiKey 掩码/baseURL/models/format),保存即持久化并实时刷新可用模型;**首启无 key 自动开引导**、无可用模型时拦截发送并引导;**不再用 `export DEEPSEEK_API_KEY` 退出**,env key 仍兼容(自动启用对应渠道)。Claude 暂存 `format:"claude"` 但仍走 OpenAI 兼容传输(原生 Anthropic 留后续)。
 - **TUI `/model` 改列表选择(2026-06-27)**:`/model` 无参数打开模型选择覆盖层(每个模型带渠道标签 · ● 标当前;↑/↓ + ↵ 选定),`/model <id>` 仍直接设置;无可用模型时引导去 `/provider`。`ModelPicker` 镜像其他覆盖层。
 - **TUI 权限/沙盒升级对齐 app 端(2026-06-27)**:kurt-tui 从旧的 `RequestWriteAccessTool`(仅申请写目录)换成通用 **`request_access`**(kind=write/network/open,与 bridge/桌面端同款)——`network` 让 shell/run_code 出网(`allowNetwork` 运行时解析 `grants.network`)、`open` 用系统默认 app 打开文件/URL(注入 `openInDefaultApp`)、`write` 申请工作区外可写目录;保留 `request_write_access` 别名向后兼容。会话级 `AccessGrants` 跨 `/new` 保留;system prompt 同步说明三种 request_access。run-tui/run-chat 各建一份共享 grants。
-- **门禁**:kurt-agent **165** · kurt-tui **98** · kurt-bridge **27** · kurt-app build+**Vitest 69**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
+- **`host_shell` 宿主终端工具(2026-06-27)**:申请把某条命令**直接放到本机终端、脱离沙盒**运行(全文件系统+网络),每条命令一次审批。`ShellTool` 新增 `name`/`description`/`requireApproval` 选项,用 `DirectSandbox` + `requireApproval` 即得"裸跑+逐条审批"变体;TUI `makeTools` 在有审批者时挂 `host_shell`(仅 agent 模式),供 `shell` 沙盒做不到的场景(系统安装/工作区外文件/硬件 USB/GUI 程序)。tools.test +4 / agent.test +host_shell 断言。
+- **门禁**:kurt-agent **169** · kurt-tui **98** · kurt-bridge **27** · kurt-app build+**Vitest 69**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
 

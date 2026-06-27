@@ -397,6 +397,22 @@ export function makeTools(
   // Generalized capability escalation (write dir / network / open file|app) — same
   // as the desktop app. Only useful when there's an approver to ask.
   if (permission) {
+    // Unsandboxed escape hatch: run a command directly on the host terminal, with
+    // per-command approval. For things the sandboxed `shell` can't do.
+    tools.push(
+      new ShellTool(new DirectSandbox(), {
+        name: "host_shell",
+        description:
+          "Run a command on the user's machine OUTSIDE the sandbox (full filesystem + network), asking " +
+          "the user to approve EACH command. Use ONLY when the sandboxed `shell` can't do it — e.g. system " +
+          "installs, touching files outside the workspace, hardware/USB, or launching GUI apps. Prefer `shell` " +
+          "first; reach for this only when the sandbox blocks something essential.",
+        requireApproval: true,
+        cwd: ws.root,
+        env,
+        permission,
+      }),
+    );
     const access = new RequestAccessTool(writable, grants, { permission, opener: openInDefaultApp });
     tools.push(access);
     // Back-compat alias: models that still call request_write_access keep working.

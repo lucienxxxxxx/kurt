@@ -34,30 +34,28 @@ export interface ShellToolOptions {
   bashPath?: string;
   /** Gate sensitive commands (rm/sudo/…) for approval. If unset, no gating. */
   permission?: PermissionProvider;
+  /** Override the tool name (default "shell"). Lets a second, host-shell instance coexist. */
+  name?: string;
+  /** Override the advertised description (default: the sandboxed-shell blurb). */
+  description?: string;
+  /**
+   * Require approval for EVERY command (not just classified-risky ones). Use for an
+   * unsandboxed "run on the host terminal" variant so each command is confirmed.
+   * Without a `permission` provider the tool refuses to run.
+   */
+  requireApproval?: boolean;
 }
 
+const DEFAULT_SHELL_DESCRIPTION =
+  "Run a bash command line and return its stdout, stderr, and exit code. " +
+  "Prefer combining steps with pipes and && into a SINGLE call (e.g. " +
+  "`grep -rl TODO src | head` or `cat a.txt | sort | uniq -c`) instead of " +
+  "many calls. Commands run in a sandbox: writable only inside the workspace, " +
+  "and network is disabled. To write outside the workspace, first call " +
+  "request_write_access for that directory, then re-run.";
+
 export class ShellTool implements Tool {
-  readonly spec: ToolSpec = {
-    name: "shell",
-    description:
-      "Run a bash command line and return its stdout, stderr, and exit code. " +
-      "Prefer combining steps with pipes and && into a SINGLE call (e.g. " +
-      "`grep -rl TODO src | head` or `cat a.txt | sort | uniq -c`) instead of " +
-      "many calls. Commands run in a sandbox: writable only inside the workspace, " +
-      "and network is disabled. To write outside the workspace, first call " +
-      "request_write_access for that directory, then re-run.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        command: { type: "string", description: "The bash command line to execute." },
-        timeout: {
-          type: "number",
-          description: "Optional max seconds for a long command (e.g. installs/builds). Raises the hard cap.",
-        },
-      },
-      required: ["command"],
-    },
-  };
+  readonly spec: ToolSpec;
 
   #sandbox: SandboxProvider;
   #opts: ShellToolOptions;
@@ -65,6 +63,21 @@ export class ShellTool implements Tool {
   constructor(sandbox: SandboxProvider, opts: ShellToolOptions = {}) {
     this.#sandbox = sandbox;
     this.#opts = opts;
+    this.spec = {
+      name: opts.name ?? "shell",
+      description: opts.description ?? DEFAULT_SHELL_DESCRIPTION,
+      inputSchema: {
+        type: "object",
+        properties: {
+          command: { type: "string", description: "The bash command line to execute." },
+          timeout: {
+            type: "number",
+            description: "Optional max seconds for a long command (e.g. installs/builds). Raises the hard cap.",
+          },
+        },
+        required: ["command"],
+      },
+    };
   }
 
   async execute(input: unknown, ctx: ToolContext): Promise<ToolResult> {
@@ -75,18 +88,35 @@ export class ShellTool implements Tool {
       return { content: 'Invalid input: "command" must be a non-empty string.', isError: true };
     }
 
-    // Gate sensitive commands behind approval (the provider may whitelist/prompt).
-    const risk = classifyCommand(command);
-    if (risk && this.#opts.permission) {
+    // Approval. The unsandboxed "host" variant (requireApproval) confirms EVERY
+    // command; the normal sandboxed shell only gates classified-risky ones.
+    if (this.#opts.requireApproval) {
+      if (!this.#opts.permission) {
+        return { content: "No approver available — cannot run a command outside the sandbox.", isError: true };
+      }
       const decision = await this.#opts.permission.request({
-        key: risk.key,
-        title: risk.title,
+        key: `host_shell:${command}`,
+        title: "run on host — OUTSIDE the sandbox",
         command,
-        explanation: risk.explanation,
-        risk: risk.risk,
+        explanation: "Run this command directly on your machine with NO sandbox (full filesystem + network access).",
+        risk: "Unrestricted: it can read/modify any file and reach the network. Approve only commands you trust.",
       });
       if (decision === "deny") {
-        return { content: `Denied by user: ${risk.title} — command not run.`, isError: true };
+        return { content: "Denied by user: command not run on the host.", isError: true };
+      }
+    } else {
+      const risk = classifyCommand(command);
+      if (risk && this.#opts.permission) {
+        const decision = await this.#opts.permission.request({
+          key: risk.key,
+          title: risk.title,
+          command,
+          explanation: risk.explanation,
+          risk: risk.risk,
+        });
+        if (decision === "deny") {
+          return { content: `Denied by user: ${risk.title} — command not run.`, isError: true };
+        }
       }
     }
 
