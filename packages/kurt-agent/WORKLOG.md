@@ -360,3 +360,22 @@ MCP 客户端**用官方 `@modelcontextprotocol/sdk`,并明确批准把该依赖
 - 配对不变式:每个 `tool_call` 恒配对一个 `tool_result`(含 abort / 报错路径),保证 tool_use/tool_result 历史永不断裂。
 
 **验收结果**:`bun run typecheck` 干净;`bun test` 6 pass / 0 fail;三个 demo 输出符合预期(完整有序事件流 / 干净中断无悬挂 / 工具报错后恢复)。
+# 架构优化:AgentProfile/AgentRuntime + MemoryStore seam — ✅ 完成 (2026-06-27)
+
+**背景**:用户要求按“模块化、对象化、低耦合、可调用对象”的方向优化 kurt-agent,并明确 memory subsystem 要考虑后期引入 RAG。
+
+**交付物**
+- `src/agent/profile.ts`:新增 `AgentProfile` / `AgentRuntime` / `renderProfileSystem`。把 persona/system、工具子集、memory context、compaction/maxTurns/contextLimit 收束成可复用 agent 对象;`AgentRuntime` 仍只 materialize 现有 `Agent` 并委托 `runLoop`,不改 engine。
+- `src/memory/`:新增 `MemoryStore` seam、RAG-ready `MemorySearchQuery/Hit` 类型和默认 `MarkdownMemoryStore`。默认实现仍是固定 global/project markdown 文件,路径由编排层提供。
+- `MemoryTool`:改为依赖注入 `MemoryStore`,同时保留旧 `{globalPath, projectPath}` 构造方式,桥接/TUI 无需同步大改。
+- 文档:根 `AGENTS.md` 指向真实 `CLAUDE.md` + `docs/代码风格规范.md`;`PROJECT_INDEX.md` 和 `CLAUDE.md` 更新 memory/RAG 排期。
+
+**关键决策**
+- RAG 不在本轮引入向量库/索引依赖;先把接口边界放对。后续 RAG 是 memory backend + retrieval/prompt injection policy,不是 engine 能力。
+- Agent 本体先做组合对象,不把 persona/memory/planner 状态塞进 `runLoop`。
+
+**验收**
+- 新增测试覆盖:profile system memory 渲染、AgentRuntime 工具子集选择、MarkdownMemoryStore 读写/缺 project 行为、MemoryTool 注入 store。
+- 门禁:`bun run typecheck` 干净;`bun test` **165 pass / 0 fail**。受限 sandbox 下 Seatbelt/MCP HTTP fixture 会失败;提升到本机权限后全绿。
+
+---

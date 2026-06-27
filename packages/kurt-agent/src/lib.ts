@@ -9,6 +9,7 @@ export * from "./providers/index.ts";
 export * from "./tools/index.ts";
 export * from "./sandbox/index.ts";
 export * from "./session/index.ts";
+export * from "./memory/index.ts";
 export * from "./search/index.ts";
 export * from "./permission/index.ts";
 export * from "./ask/index.ts";

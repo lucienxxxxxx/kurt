@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Agent } from "./agent.ts";
+import { AgentRuntime, renderProfileSystem } from "./profile.ts";
 import { ToolHub } from "./tool-hub.ts";
 import { MockModel } from "../providers/mock-model.ts";
 import type { Event, Tool, ToolContext, ToolResult } from "../engine/index.ts";
@@ -48,5 +49,37 @@ describe("Agent", () => {
     const variant = base.with({ tools: [fakeTool("b"), fakeTool("c")] });
     expect(variant.tools.map((t) => t.spec.name)).toEqual(["b", "c"]);
     expect(base.tools.map((t) => t.spec.name)).toEqual(["a"]); // base unchanged
+  });
+});
+
+describe("AgentProfile / AgentRuntime", () => {
+  test("renderProfileSystem appends non-empty memory blocks", () => {
+    expect(renderProfileSystem({
+      system: "base",
+      memory: [
+        { title: "global memory", content: "- prefers Bun" },
+        { title: "empty", content: "  " },
+      ],
+    })).toBe("base\n\n# Memory\n## global memory\n- prefers Bun");
+  });
+
+  test("AgentRuntime selects named tools from a ToolHub", async () => {
+    const model = new MockModel([{ text: "done" }]);
+    const hub = new ToolHub([fakeTool("read_file"), fakeTool("write_file"), fakeTool("memory")]);
+    const runtime = new AgentRuntime({
+      model,
+      hub,
+      profile: {
+        system: "system",
+        tools: ["memory", "read_file"],
+        memory: [{ title: "project memory", content: "- use bun test" }],
+      },
+    });
+
+    const events = await collect(runtime.run([{ role: "user", content: [{ type: "text", text: "hi" }] }]));
+    expect(events.some((e) => e.type === "turn_end")).toBe(true);
+    expect(model.requests[0]!.tools.map((t) => t.name)).toEqual(["memory", "read_file"]);
+    expect(model.requests[0]!.system).toContain("# Memory");
+    expect(model.requests[0]!.system).toContain("use bun test");
   });
 });

@@ -5,7 +5,8 @@
 > 路线图的**定义**在 `packages/kurt-agent/CLAUDE.md` §4;这里是它的**实时状态**。
 
 - **最后更新**:2026-06-22 · `main`(**并发授权/询问改顺序队列(一个一个处理)**;**显示当前执行步骤(底部活动 + 工具 spinner)+ 回复结束重对账(防被吃)**;**上下文用量改用接口返回 token(双环 % 用真实 inputTokens,估算仅兜底)**;**通用授权 request_access(write/network/open,不再写死写目录)**;**修沙盒过窄 + 模型不会申请授权:可写根加系统临时目录、shell 写拒错追加 request_write_access 提示、prompt 明确沙盒规则**;**修 SSE「Load failed」:心跳保活 + bridge 崩溃兜底(LLM 重试已确认存在)**;**多模型提供商 阶段1(OpenAI/Claude/DeepSeek/自定义 + 启用开关 + 分组下拉;Claude 原生留阶段2)**;**markdown 改用 react-markdown + remark-gfm(支持 `>`/`*斜体*`/删除线/嵌套列表等)**;**workspace 按会话(composer 底部目录选择器,引擎工具/提示/文件树/终端全部 rooted 到会话目录)**;**会话全局统一列表(不再按 workspace 过滤)+ 标签最小宽度/禁横向滚动条**;**引擎并行工具调用(同一轮多个独立调用并发执行)**;**发送/完成音效 + 后台完成系统通知**;**system prompt 注入当前时间+系统信息(每轮)**;**对话条件式底部跟随 + 回到最新 + 流式淡入**;**工作区标签栏 Phase A+B+C + 分屏标签组 + 按会话独立 + 下拉层级**:分屏=两个编辑器组(每屏自带标签条);标签/分屏按会话各存一份;模式/模型/强度持久化;下拉菜单改 fixed 不被分屏裁切 + z-index 规范;单屏铺满宽度修复。**工作区标签栏 Phase A+B+C 全部完成**:标题下标签栏 + 自研左右分屏；会话/文件/预览/计划/**终端**标签，DetailPanel 统一进标签系统；bridge `/fs`·`/file`·`/raw` + `/info` 暴露 workspace + `plan` 帧；**自动触发**:计划→自动开计划标签、run 产出文档→自动开预览；**终端** = Rust portable-pty + xterm.js(懒加载)。前置:新 app 图标、统一步骤头、IN/OUT 截断、文件名点击预览、隐藏输入框滚动条、已思考 N秒)
-- **门禁**:kurt-agent **150** · kurt-tui **70** · kurt-bridge **27** · kurt-app build+**Vitest 69**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
+- **本轮结构更新(2026-06-27)**:`kurt-agent` 新增 **AgentProfile/AgentRuntime** 组合层(把 persona/system、工具子集、memory context、策略收束成可复用 agent 对象,仍委托 runLoop);新增 **MemoryStore/MarkdownMemoryStore** memory subsystem seam,`MemoryTool` 改为注入 store 且兼容旧固定路径构造;**RAG 进入 memory 后续排期**(走 `MemoryStore.search` + 检索注入策略,不进 engine)。
+- **门禁**:kurt-agent **165** · kurt-tui **70** · kurt-bridge **27** · kurt-app build+**Vitest 69**+cargo ✓ · 全 typecheck 干净(GUI 人工核对 `MANUAL_TESTS §6.3–§6.4`)
 
 ---
 
@@ -115,6 +116,8 @@ main 处在「**单机 TUI Agent 主线完整可用 + 正在做 macOS 桌面端(
   全模式可用)。发现/解析在 kurt-tui:`~/.kurt/skills/`(全局)+ `<ws>/.kurt/skills/`(项目覆盖),
   每个 skill 是 `<name>/SKILL.md` 或扁平 `<name>.md`,带可选 name/description frontmatter。引擎不感知。
 - **编排抽象**:`Agent`(包 runLoop)+ `ToolHub`(name→Tool 注册表);`AskProvider` seam。
+- **Agent 对象化组合层**:`AgentProfile` / `AgentRuntime` 把 persona/system、工具子集、memory context、compaction/maxTurns/contextLimit 收束成可复用 agent 对象;仍只 materialize `Agent` 并委托 `runLoop`,不改 engine。
+- **Memory subsystem seam**:`MemoryStore` + `MarkdownMemoryStore`;`MemoryTool` 面向 store 注入,旧 `{globalPath,projectPath}` 构造兼容。RAG 后续作为 memory backend/retrieval policy 进入排期,不进入 engine。
 - **TUI(kurt-tui)**:三模式 **chat/agent/plan**(按模式分配工具 + per-mode prompt);
   ask_user 选择题浮层;持久会话(`/sessions` 切换/删除/自动标题);命令审批 + 项目白名单;
   记忆/规则预载;markdown;原生滚动;状态栏;`/compact`/`/new`/`/clear`。

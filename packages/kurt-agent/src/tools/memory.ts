@@ -4,18 +4,21 @@
  * preloads into the system prompt, so notes saved now resurface in future turns
  * and sessions.
  *
- * Pure orchestration: a side-effect Tool over a FIXED path (never model-supplied,
- * so there's no path-traversal surface). The engine is untouched.
+ * Pure orchestration: a side-effect Tool over an injected MemoryStore. The default
+ * store is fixed markdown paths (never model-supplied), so there's no path-
+ * traversal surface. The engine is untouched.
  */
 
 import type { Tool, ToolContext, ToolResult, ToolSpec } from "../engine/index.ts";
-import { atomicWrite } from "../fs-atomic.ts";
+import { MarkdownMemoryStore, type MemoryScope, type MemoryStore } from "../memory/index.ts";
 
 const DEFAULT_MAX_BYTES = 32_000;
 
 export interface MemoryToolOptions {
+  /** Injected store. When absent, globalPath/projectPath build a MarkdownMemoryStore. */
+  store?: MemoryStore;
   /** Absolute path to the global memory file (e.g. ~/.kurt/memory.md). */
-  globalPath: string;
+  globalPath?: string;
   /** Absolute path to the project memory file (e.g. <ws>/.kurt/memory.md). */
   projectPath?: string;
   /** Soft cap; an append beyond it is refused with a "curate" hint. Default ~32KB. */
@@ -43,13 +46,16 @@ export class MemoryTool implements Tool {
     },
   };
 
-  #global: string;
-  #project: string | undefined;
+  #store: MemoryStore;
   #maxBytes: number;
 
   constructor(opts: MemoryToolOptions) {
-    this.#global = opts.globalPath;
-    this.#project = opts.projectPath;
+    if (opts.store) {
+      this.#store = opts.store;
+    } else {
+      if (!opts.globalPath) throw new Error("MemoryTool requires either store or globalPath.");
+      this.#store = new MarkdownMemoryStore({ globalPath: opts.globalPath, projectPath: opts.projectPath });
+    }
     this.#maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
   }
 
@@ -59,14 +65,13 @@ export class MemoryTool implements Tool {
       return { content: 'Invalid input: "action" must be one of view | append | replace.', isError: true };
     }
 
-    const useProject = scope === "project";
-    if (useProject && !this.#project) {
+    const memScope: MemoryScope = scope === "project" ? "project" : "global";
+    if (!this.#store.supports(memScope)) {
       return { content: "No project memory available (no workspace). Use scope 'global'.", isError: true };
     }
-    const path = useProject ? this.#project! : this.#global;
-    const label = useProject ? "project" : "global";
+    const label = this.#store.label(memScope);
 
-    const current = await readOrEmpty(path);
+    const current = await this.#store.read(memScope);
 
     if (action === "view") {
       return { content: current.trim().length > 0 ? current : `(${label} memory is empty)` };
@@ -94,7 +99,7 @@ export class MemoryTool implements Tool {
     }
 
     try {
-      await atomicWrite(path, next);
+      await this.#store.write(memScope, next);
     } catch (err) {
       return {
         content: `Failed to update ${label} memory: ${err instanceof Error ? err.message : String(err)}`,
@@ -103,9 +108,4 @@ export class MemoryTool implements Tool {
     }
     return { content: `Updated ${label} memory (${action}); it now has ${next.trimEnd().split("\n").length} lines.` };
   }
-}
-
-async function readOrEmpty(path: string): Promise<string> {
-  const file = Bun.file(path);
-  return (await file.exists()) ? await file.text() : "";
 }

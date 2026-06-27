@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MemoryTool } from "./memory.ts";
+import type { MemoryScope, MemoryStore } from "../memory/index.ts";
 
 let dir: string;
 let globalPath: string;
@@ -63,5 +64,23 @@ describe("MemoryTool", () => {
     const tool = new MemoryTool({ globalPath, projectPath });
     expect((await tool.execute({ action: "append" }, ctx())).isError).toBe(true);
     expect((await tool.execute({ action: "nope" }, ctx())).isError).toBe(true);
+  });
+
+  test("can use an injected MemoryStore", async () => {
+    const values = new Map<MemoryScope, string>();
+    const store: MemoryStore = {
+      supports: (scope) => scope === "global",
+      label: () => "test-store",
+      read: async (scope) => values.get(scope) ?? "",
+      write: async (scope, text) => {
+        values.set(scope, text);
+      },
+    };
+    const tool = new MemoryTool({ store });
+
+    await tool.execute({ action: "append", text: "- injected" }, ctx());
+    expect(values.get("global")).toContain("injected");
+    const project = await tool.execute({ action: "view", scope: "project" }, ctx());
+    expect(project.isError).toBe(true);
   });
 });

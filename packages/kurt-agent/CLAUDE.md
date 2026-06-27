@@ -59,7 +59,7 @@
 |---|---|---|---|
 | 1 | 最小闭环(承重墙):runLoop / 事件流 / 三接口定稿 / MockModel / ReadFileTool / stdout 模态 | ✅ 完成 | — |
 | 2 | 真实工具 + 沙盒:SandboxProvider + Seatbelt/Direct;文件读写/shell/代码执行/网络搜索;会话临时目录 | ✅ 完成 | 1 |
-| 3 | 预加载 + 长期记忆(Memory.md)+ 压缩 | 🚧 手动压缩核心已落地(`src/modes/compaction.ts`:`compactHistory`,只在 user 边界切分保配对);待:预加载 + Memory.md + 自动触发(CompactionPolicy seam) | 1 |
+| 3 | 预加载 + 长期记忆(Memory.md)+ 压缩 | ✅ 完成:预加载 + agent-writable memory + 手动/自动压缩已落地;当前新增 `MemoryStore` seam,后续 RAG 作为 memory backend/检索策略继续演进 | 1 |
 | 4 | 多厂家 ModelProvider(Anthropic/OpenAI/本地)+ 登录授权 | 🚧 OpenAI 兼容(DeepSeek)已落地+真机验证;引擎加了 thinking/usage 事件;待:更多厂家 + AuthProvider | 1 |
 | 5 | Skills 完整生命周期 + MCP 接入 | ✅ 完成(MCP `src/mcp/` + Skills `src/skills/`+`tools/skill.ts`) | 2,3,4 |
 | 6 | 多模态前端(WebUI/TUI/桌面/移动) | 🚧 TUI 已建为兄弟项目 **kurt-tui**(Ink:logo/对话视口/状态栏/markdown/命令面板/滚动/compact);待:WebUI/桌面/移动 | 引擎稳定 |
@@ -110,7 +110,7 @@ bun run typecheck  # tsc --noEmit
 ## 8. 阶段性关键约束备忘
 
 - **Phase 2**:`sandbox-exec` 官方 deprecated 但可用,**必须封在 `SandboxProvider` 接口后**,工具调用点不得直接依赖它(将来换 Firecracker/gVisor/远程容器只改实现类)。同一工具接口可有 本机/裸执行/沙盒/docker 多实现,选哪个是编排层的事,引擎不感知。子进程工具必须**设超时 + 输出截断**。code 工具脚本写**会话专属临时目录**,会话结束清理。
-- **Phase 3**:引擎绝不直接写 Memory.md。压缩必须保留最近一轮 tool_result 和未闭合 tool_call,否则配对断裂报错。Skills 渐进披露:预加载只注入 description。
+- **Phase 3 / Memory**:引擎绝不直接写 Memory.md 或任何记忆后端。`MemoryTool` 只面对 `MemoryStore`;默认 `MarkdownMemoryStore` 使用固定 global/project markdown 路径。后续 RAG 作为 `MemoryStore.search`/检索注入策略扩展,不得进入 `src/engine/`。压缩必须保留最近一轮 tool_result 和未闭合 tool_call,否则配对断裂报错。Skills 渐进披露:预加载只注入 description。
 - **Phase 4**:厂商差异不得泄漏到引擎层;授权凭证归编排层。
 - **Phase 5**:Tool=引擎执行接口,MCP=tool 的远程 provider,Skill=编排层上下文注入机制。三者别混。
   - **MCP 已落地(2026-06-14)**:`src/mcp/`(官方 SDK,stdio + Streamable HTTP)把远程 server 的工具

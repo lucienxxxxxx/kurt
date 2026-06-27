@@ -3,8 +3,9 @@
 > Cached architecture map. **Read this first**; scan the tree only for the files
 > this map points you to. Keep it fresh: update on every structural change.
 > Maintained via the `project-module-workflow` skill (see CLAUDE.md §3).
-> Last synced: 2026-06-20, after generalized request_access (write/network/open) +
-> live shell/code allowNetwork; parallel tool calls (`maxParallel`). Earlier: Phase 6.2 moved `SessionStore` + `kurtHome`/
+> Last synced: 2026-06-27, after AgentProfile/AgentRuntime composition layer +
+> MemoryStore/MarkdownMemoryStore subsystem seam (RAG-ready). Earlier: generalized request_access (write/network/open) +
+> live shell/code allowNetwork; parallel tool calls (`maxParallel`); Phase 6.2 moved `SessionStore` + `kurtHome`/
 > `sessionsDir` into `src/session/` (shared by TUI + bridge + desktop);
 > B1–B5 bug sweep (atomicWrite, MCP HTTP test); Phase 5 (MCP + Skills).
 
@@ -22,7 +23,7 @@ front-end + `kurt` CLI) consumes it. Public API is `src/lib.ts`.
 - Run demos: `bun run dev` · `bun run demo:abort` · `bun run demo:error` · `bun run demo:sandbox`
 - Live chat (stdout) vs a real LLM: `bun run chat ["prompt"]` (needs `DEEPSEEK_API_KEY`).
 - Public API for consumers (kurt-tui): `src/lib.ts` (re-exports engine/providers/tools/sandbox/session/search + history/compaction/stdout).
-- Gate before any merge: **`bun run typecheck && bun test`** (currently 133 tests pass; MCP tests round-trip local stdio **and** Streamable HTTP fixture servers, still offline/hermetic).
+- Gate before any merge: **`bun run typecheck && bun test`** (currently 165 tests pass; MCP tests round-trip local stdio **and** Streamable HTTP fixture servers, still offline/hermetic).
 
 ## 3. Architecture & invariants
 Three layers, three iron rules (full text in `CLAUDE.md` §2 — do not break them):
@@ -52,14 +53,15 @@ as each finishes, result BLOCKS in history keep the call order. Single call = po
 | `src/engine/loop.ts` | Agentic loop; pairs tool_call/result; abort handling; **runs same-turn tool calls concurrently** (`mapPool`, bounded by `maxParallel`) | `runLoop`, `RunLoopOptions` | types, tool, model, compaction, async-queue |
 | `src/engine/async-queue.ts` | Single-consumer channel powering `ToolContext.emit` | `AsyncEventQueue` | — |
 | `src/providers/` | `ModelProvider` impls + model metadata | `MockModel` (scripted, no deps); `OpenAICompatModel` (DeepSeek/OpenAI Chat Completions over SSE, key injected; `implements CapableModel`, shapes the request body from its `capabilities` — thinking on/off, mapped `reasoning_effort`, omits sampling params in thinking mode, and replays `reasoning_content` on tool-calling turns when `thinking.replayReasoning`); `capabilities.ts` (`ModelCapabilities`/`CapableModel`, `capabilitiesFor`, `mapEffort`, `replayReasoning`, DeepSeek V4 table) | engine types |
-| `src/tools/` | `Tool` impls — **all side effects live here** | `ReadFileTool` (confined + truncate + offset/limit), `LsTool`, `GrepTool` (pure-fs, workspace-confined), `WriteFileTool` (serialized FIFO queue, no size cap), `ShellTool`, `CodeTool`, `BrewTool` (unsandboxed Direct runner, mutating subcommands gated), `MemoryTool` (agent-writable memory at fixed global/project files; view/append/replace), `AskUserTool` (`ask_user` — agent asks the user via an injected `AskProvider`), `UpdatePlanTool` (`update_plan` — stateless checklist for plan mode), `SkillTool` (`skill` — loads a named skill's body on demand from an injected `SkillProvider`; read-only, no approval), `WebSearchTool`, `RequestAccessTool` (request_access: write/network/open, session grants) + `RequestWriteAccessTool`. `fs-access.ts` = shared `isInside`/`resolveWithin`; read/ls/grep/write share the live `writable` roots array (request_write_access grants apply immediately) | engine, sandbox, session, search, permission, `../truncate` |
+| `src/tools/` | `Tool` impls — **all side effects live here** | `ReadFileTool` (confined + truncate + offset/limit), `LsTool`, `GrepTool` (pure-fs, workspace-confined), `WriteFileTool` (serialized FIFO queue, no size cap), `ShellTool`, `CodeTool`, `BrewTool` (unsandboxed Direct runner, mutating subcommands gated), `MemoryTool` (agent-writable memory over injected `MemoryStore`; old fixed-path constructor still works; view/append/replace), `AskUserTool` (`ask_user` — agent asks the user via an injected `AskProvider`), `UpdatePlanTool` (`update_plan` — stateless checklist for plan mode), `SkillTool` (`skill` — loads a named skill's body on demand from an injected `SkillProvider`; read-only, no approval), `WebSearchTool`, `RequestAccessTool` (request_access: write/network/open, session grants) + `RequestWriteAccessTool`. `fs-access.ts` = shared `isInside`/`resolveWithin`; read/ls/grep/write share the live `writable` roots array (request_write_access grants apply immediately) | engine, sandbox, session, search, permission, memory, `../truncate` |
 | `src/truncate.ts` | Shared read-output cap (lines OR bytes, whichever first) | `truncate`, `truncationNote` | — |
 | `src/sandbox/` | Subprocess isolation behind `SandboxProvider` | `SeatbeltSandbox`, `DirectSandbox`, `buildProfile`; `run-process.ts` (detached spawn → group-kill; idle-timeout 90s + hard cap 10min; output cap; live `onOutput` streaming; abort) | — |
 | `src/session/` | Per-session scratch dir + **persistent session store** (shared by all front-ends) | `SessionWorkspace` (scratch dir); `SessionStore` (`~/.kurt/sessions/<id>.json`: create/save(atomic)/load/list/remove/**truncate** + occupancy lock; `truncateToUserTurns` pure helper for rollback) + `SessionMeta`/`SessionRecord`; `kurtHome`/`sessionsDir` (paths.ts) | `../fs-atomic`, engine types |
 | `src/search/` | Pluggable web-search backend | `SearchProvider`, `DuckDuckGoSearch` | — |
 | `src/permission/` | Approval seam for sensitive commands | `PermissionProvider`/`PermissionDecision`/`PermissionRequest`, `classifyCommand` (pure rules → key+explanation+risk), `allowAll`/`denyAll`. ShellTool consults it; the front-end supplies the prompt/whitelist | — (pure) |
 | `src/ask/` | Seam for the `ask_user` tool (agent → user) | `AskProvider`, `AskRequest` (front-end implements; mirrors permission) | — (pure) |
-| `src/agent/` | Composition shells around the engine | `Agent` ({model,system,tools}+`run()`→runLoop+`with()`); `ToolHub` (name→Tool registry; `get(names)`/`all()`). Engine untouched | engine, tools |
+| `src/agent/` | Composition shells around the engine | `Agent` ({model,system,tools}+`run()`→runLoop+`with()`); `ToolHub` (name→Tool registry; `get(names)`/`all()`); `AgentProfile`/`AgentRuntime` (persona/system + named tool subset + memory context + policies as a reusable agent object). Engine untouched | engine, tools |
+| `src/memory/` | Memory subsystem seam | `MemoryStore` (`read`/`write`/`supports` + optional future `search`), `MarkdownMemoryStore` (fixed global/project markdown files). This is RAG-ready orchestration state, never engine state | `fs-atomic` |
 | `src/mcp/` | **MCP = remote provider of `Tool`s** (Phase 5; the one place the SDK is used) | `McpTool` (wraps a remote tool as `Tool`; flattens content; non-read-only calls gated via `PermissionProvider`); `connectMcpServer`/`connectMcpServers` (stdio + Streamable HTTP; namespaced `mcp__<server>__<tool>`; per-server failures isolated → `statuses`; aggregate `close()`); `summarizeStatuses`; `expandEnv` (`${VAR}`). `_fixtures/echo-server.ts` = test-only local server | engine (types/Tool), permission, `@modelcontextprotocol/sdk` |
 | `src/worktree/` | Per-session git worktree isolation (Phase 7 groundwork) | `WorktreeManager` (create/list/isDirty/commitAll/remove; + currentBranch/isMerged/deleteBranch/listManaged/**pruneManaged** for `kurt worktree prune` — removes only merged+clean) via git subprocess | — (git CLI) |
 | `src/fs-atomic.ts` | Crash-/concurrency-safe whole-file write (temp + rename) | `atomicWrite(path, data)` — used by memory writes + kurt-tui's config/sessions/allowlist | — |
@@ -76,7 +78,8 @@ as each finishes, result BLOCKS in history keep the call order. Single call = po
 - **Describe a model's abilities** → add a `ModelCapabilities` entry in `src/providers/capabilities.ts` (thinking/effort/context/output-tokens/tools); the orchestration layer reads `capabilitiesFor(id)` to drive defaults and knobs. Pure metadata, no engine change.
 - **Add a sandbox backend** → `src/sandbox/<name>.ts` implementing `SandboxProvider`; only `seatbelt.ts` may reference `sandbox-exec`.
 - **Gate a new risky command** → add a rule in `src/permission/classify.ts` (key+explanation+risk). The front-end (kurt-tui) renders the prompt + persists the allowlist.
-- **Bundle a configured agent / share tools** → `src/agent/` (`Agent` wraps runLoop; `ToolHub` is the shared registry). The chat/agent/plan modes are built on these in kurt-tui (`toolsForMode`).
+- **Bundle a configured agent / share tools** → `src/agent/`. Use `AgentProfile` for persona/system/tool subset/memory/policies, `AgentRuntime` to materialize an `Agent`, and `ToolHub` as the shared registry. The chat/agent/plan modes are still built in front-ends (`toolsForMode`) and can migrate incrementally.
+- **Add or replace memory storage** → `src/memory/`. Implement `MemoryStore`; keep `MemoryTool` as the model-facing write/read tool. RAG belongs here as a later store/retrieval backend via `MemoryStore.search`, not in `src/engine/`.
 - **Agent asks the user** → `ask_user` tool + `AskProvider` (`src/ask/`); the front-end implements the prompt (TUI overlay / stdin).
 - **Write outside the workspace** → the agent calls `request_write_access` (a Tool) → approval → the dir is pushed to the shared writable-roots array; file/exec tools read it live.
 - **Front-end / TUI** → lives in the sibling package **`packages/kurt-tui`** (Ink), which consumes this lib. A minimal in-repo mode lives at `src/modes/stdout.ts` (clone its shape for new built-in modes).
@@ -95,7 +98,7 @@ as each finishes, result BLOCKS in history keep the call order. Single call = po
 - Docs: `CLAUDE.md` = rules + roadmap; `WORKLOG.md` = per-phase log; **this file** = architecture map.
 
 ## 7. Status / roadmap
-- **Done:** Phase 1 (minimal closed loop), Phase 2 (real tools + sandbox), Phase 3 (preload + agent-writable memory + manual & **auto** compaction), Phase 5 (**MCP接入** `src/mcp/` + **Skills** `src/skills/`+`tools/skill.ts`, progressive disclosure).
+- **Done:** Phase 1 (minimal closed loop), Phase 2 (real tools + sandbox), Phase 3 (preload + agent-writable memory + manual & **auto** compaction), Phase 5 (**MCP接入** `src/mcp/` + **Skills** `src/skills/`+`tools/skill.ts`, progressive disclosure), agent composition hardening (`AgentProfile`/`AgentRuntime`) + memory subsystem seam (`MemoryStore`).
 - **In progress:** Phase 4 — `OpenAICompatModel` live-verified vs DeepSeek + capabilities + reasoning replay + withRetry (remaining: more vendors + AuthProvider). Phase 6 — TUI mature as sibling package **`packages/kurt-tui`** (remaining: WebUI/desktop/mobile). Phase 7 — worktree isolation groundwork landed (`src/worktree/`); beehive prototype on `feat/beehive` only.
-- **Remaining:** Phase 4 (more vendors + AuthProvider) · Phase 6 frontends · Phase 7 (multi-agent orchestration).
+- **Remaining:** Phase 4 (more vendors + AuthProvider) · Phase 6 frontends · Phase 7 (multi-agent orchestration) · memory RAG backend (implement `MemoryStore.search`, retrieval ranking, prompt injection policy, and persistence/index migration).
 - Full roadmap + per-phase constraints: `CLAUDE.md` §4 and §8. Live status: repo-root `PROGRESS.md`.
