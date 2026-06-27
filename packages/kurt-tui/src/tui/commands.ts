@@ -19,6 +19,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: "/compact", summary: "Summarize & compress context" },
   { name: "/sessions", summary: "Browse / switch / delete saved sessions" },
   { name: "/skills", summary: "List loaded skills (view a skill's instructions)" },
+  { name: "/mcp", summary: "List connected MCP servers (view their tools)" },
   { name: "/clear", summary: "Clear & start a fresh conversation" },
   { name: "/new", summary: "New session (also resets the sandbox temp)" },
   { name: "/exit", summary: "Quit" },

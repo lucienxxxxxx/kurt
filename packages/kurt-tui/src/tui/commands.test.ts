@@ -24,4 +24,9 @@ describe("slash commands", () => {
     expect(COMMANDS.some((c) => c.name === "/skills")).toBe(true);
     expect(filterCommands("/sk").map((c) => c.name)).toEqual(["/skills"]);
   });
+
+  test("/mcp is registered and discoverable from the palette", () => {
+    expect(COMMANDS.some((c) => c.name === "/mcp")).toBe(true);
+    expect(filterCommands("/mc").map((c) => c.name)).toEqual(["/mcp"]);
+  });
 });

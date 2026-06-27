@@ -26,6 +26,7 @@ import {
 import { saveConfig } from "./config.ts";
 import { loadContextPrelude } from "./context-files.ts";
 import { loadSkills } from "./skills.ts";
+import { mcpServerInfos } from "./tui/mcp-info.ts";
 import { SessionStore, type SessionRecord } from "kurt-agent";
 import { Allowlist } from "./allowlist.ts";
 import { PermissionBridge } from "./tui/permission.ts";
@@ -215,6 +216,7 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
       session={sessions}
       ask={askBridge}
       skills={{ list: skills.infos, load: skills.provider.load }}
+      mcp={mcpServerInfos(mcp.statuses, mcp.tools)}
       config={{ model: cfg.modelId, contextLimit: cfg.contextLimit, effort: cfg.effort, thinking: cfg.thinking, mode: cfg.mode }}
     />,
   );

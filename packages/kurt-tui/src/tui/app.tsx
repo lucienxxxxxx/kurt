@@ -9,11 +9,13 @@ import { Welcome } from "./welcome.tsx";
 import { Approval } from "./approval.tsx";
 import { SessionPicker } from "./session-picker.tsx";
 import { SkillsPicker } from "./skills-picker.tsx";
+import { McpPicker } from "./mcp-picker.tsx";
 import { AskPrompt } from "./ask-prompt.tsx";
 import { entriesFromMessages } from "./session-view.ts";
 import type { PermissionBridge } from "./permission.ts";
 import type { AskBridge, PendingAsk } from "./ask.ts";
 import type { SkillInfo } from "../skills.ts";
+import type { McpServerInfo } from "./mcp-info.ts";
 
 const NO_SUBSCRIBE = (): (() => void) => () => {};
 const NO_PENDING = (): PermissionRequest | null => null;
@@ -75,13 +77,15 @@ export interface AppProps {
   ask?: AskBridge;
   /** Loaded skills + a body loader, for the `/skills` command (when enabled). */
   skills?: { list: SkillInfo[]; load: (name: string) => Promise<string | null> };
+  /** Connected MCP servers (+ their tools), for the `/mcp` command (when enabled). */
+  mcp?: McpServerInfo[];
 }
 
 const MODES: ChatMode[] = ["chat", "agent", "plan"];
 const EFFORTS = ["low", "medium", "high"];
 const PALETTE_MAX = 8;
 
-export function App({ run, compact, models, config, onNewSession, onConfigChange, permission, session, ask, skills }: AppProps) {
+export function App({ run, compact, models, config, onNewSession, onConfigChange, permission, session, ask, skills, mcp }: AppProps) {
   const { stdout } = useStdout();
   const { exit } = useApp();
 
@@ -97,6 +101,9 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
 
   // Skills list overlay (null when closed). Opened by /skills.
   const [skillsView, setSkillsView] = useState<{ skills: SkillInfo[]; selected: number } | null>(null);
+
+  // MCP servers overlay (null when closed). Opened by /mcp.
+  const [mcpView, setMcpView] = useState<{ servers: McpServerInfo[]; selected: number } | null>(null);
 
   const [cols, setCols] = useState(stdout.columns || 80);
   useEffect(() => {
@@ -268,6 +275,23 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
     notice("info", body.trim().length > 0 ? `${header}\n\n${body.trim()}` : `${header}\n\n(empty skill body)`);
   }
 
+  function openMcp(): void {
+    const servers = mcp ?? [];
+    if (servers.length === 0) {
+      notice("info", "no MCP servers connected (configure them in ~/.kurt/mcp.json or <workspace>/.kurt/mcp.json)");
+      return;
+    }
+    setMcpView({ servers, selected: 0 });
+  }
+
+  function viewMcpServer(info: McpServerInfo): void {
+    setMcpView(null);
+    const head = `mcp server: ${info.name}  ${info.ok ? "[ok]" : "[fail]"}  ${info.toolCount} tools`;
+    if (!info.ok) return void notice("warn", `${head}${info.error ? `\n\n${info.error}` : ""}`);
+    const lines = info.tools.map((t) => `  • ${t.name}${t.description ? ` — ${t.description}` : ""}`);
+    notice("info", lines.length > 0 ? `${head}\n\n${lines.join("\n")}` : `${head}\n\n(no tools)`);
+  }
+
   function handleCommand(name: string, args: string[]): void {
     switch (name) {
       case "/help":
@@ -307,6 +331,9 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
         break;
       case "/skills":
         openSkills();
+        break;
+      case "/mcp":
+        openMcp();
         break;
       case "/clear":
         // The old conversation is already saved; begin a fresh session so we
@@ -400,6 +427,19 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
       }
       return; // swallow other keys while the skills list is open
     }
+    // MCP servers list: arrows move, ↵ views the server's tools, esc closes.
+    if (mcpView) {
+      if (key.escape) return void setMcpView(null);
+      if (key.upArrow) return void setMcpView((p) => (p ? { ...p, selected: Math.max(0, p.selected - 1) } : p));
+      if (key.downArrow)
+        return void setMcpView((p) => (p ? { ...p, selected: Math.min(p.servers.length - 1, p.selected + 1) } : p));
+      if (key.return) {
+        const s = mcpView.servers[mcpView.selected];
+        if (s) viewMcpServer(s);
+        return;
+      }
+      return; // swallow other keys while the MCP list is open
+    }
     if (key.escape) {
       if (running && abortRef.current) abortRef.current.abort();
       else setInput("");
@@ -462,7 +502,7 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
           <EntryView key={i} entry={entry} width={cols} live />
         ))}
 
-        {!picker && !skillsView && !pendingAsk && cmdItems.length > 0 && (
+        {!picker && !skillsView && !mcpView && !pendingAsk && cmdItems.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
             {cmdItems.slice(0, PALETTE_MAX).map((c, i) => (
               <Text key={c.name} inverse={i === sel} color={i === sel ? undefined : "gray"}>
@@ -480,6 +520,8 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
           <SessionPicker sessions={picker.sessions} selected={picker.selected} />
         ) : skillsView ? (
           <SkillsPicker skills={skillsView.skills} selected={skillsView.selected} />
+        ) : mcpView ? (
+          <McpPicker servers={mcpView.servers} selected={mcpView.selected} />
         ) : (
           <Box marginTop={1}>
             <Text color="green">{"› "}</Text>
