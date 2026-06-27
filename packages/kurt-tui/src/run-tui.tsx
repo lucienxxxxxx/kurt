@@ -7,7 +7,7 @@
 import { render } from "ink";
 import { runLoop, SessionWorkspace, ToolHub, type Event, type Message } from "kurt-agent";
 import { autoCompaction, compactHistory, serializeForSummary, type CompactionPolicy } from "kurt-agent";
-import { connectMcpServers, summarizeStatuses, type McpRuntime } from "kurt-agent";
+import { connectMcpServers, summarizeStatuses, type McpRuntime, type AccessGrants } from "kurt-agent";
 import { loadMcpServers } from "./mcp-config.ts";
 import { App, bannerString, type Compactor, type EngineRunner, type SessionController, type SessionState } from "./tui/index.ts";
 import {
@@ -93,12 +93,17 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
   // the `skill` tool loads a body on demand (progressive disclosure).
   const skills = await loadSkills(ws.root);
 
+  // Session-scoped capability grants (request_access widens these: network / open
+  // / extra writable dirs). Shared across tool-set rebuilds so a grant persists
+  // through /new — same model as the desktop app.
+  const grants: AccessGrants = { network: false, open: false, dirs: [] };
+
   // All tools live in one hub; the runner hands each mode its allowed subset.
-  let hub = new ToolHub([...makeTools(sandbox, codeTemp, ws, allowWrite, permission, askBridge, skills.provider), ...mcp.tools]);
+  let hub = new ToolHub([...makeTools(sandbox, codeTemp, ws, allowWrite, permission, askBridge, skills.provider, grants), ...mcp.tools]);
   const newSession = (): void => {
     codeTemp.dispose();
     codeTemp = new SessionWorkspace({ sessionId: "tui" });
-    hub = new ToolHub([...makeTools(sandbox, codeTemp, ws, allowWrite, permission, askBridge, skills.provider), ...mcp.tools]);
+    hub = new ToolHub([...makeTools(sandbox, codeTemp, ws, allowWrite, permission, askBridge, skills.provider, grants), ...mcp.tools]);
   };
 
   // Preload global memory (~/.kurt/memory.md) + project rules (.kurt/rules.md) + skill catalog.

@@ -14,6 +14,7 @@ import {
   connectMcpServers,
   summarizeStatuses,
   type AskProvider,
+  type AccessGrants,
   type Event,
   type Message,
   type McpRuntime,
@@ -87,7 +88,9 @@ export async function runChat(args: string[], opts: LaunchOptions = {}): Promise
   const skills = await loadSkills(ws.root);
   if (skills.metas.length) console.log(`(skills: ${skills.metas.map((s) => s.name).join(", ")})`);
 
-  const hub = new ToolHub([...makeTools(sandbox, codeTemp, ws, opts.allowWrite ?? [], permission, cliAsk(), skills.provider), ...mcp.tools]);
+  // Session-scoped capability grants (request_access widens network/open/dirs).
+  const grants: AccessGrants = { network: false, open: false, dirs: [] };
+  const hub = new ToolHub([...makeTools(sandbox, codeTemp, ws, opts.allowWrite ?? [], permission, cliAsk(), skills.provider, grants), ...mcp.tools]);
   const tools = toolsForMode(hub, cfg.mode); // chat/agent/plan tool subset
   const model = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey, cfg.maxTokens, {
     thinking: cfg.thinking,

@@ -2,10 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ToolHub, type Tool } from "kurt-agent";
+import { SessionWorkspace, ToolHub, type Tool } from "kurt-agent";
 import { maybeWorktree } from "./agent.ts";
 import {
   autoCompactThreshold,
+  makeSandbox,
+  makeTools,
   normalizeMode,
   parseLaunchFlags,
   resolveWorkspace,
@@ -38,7 +40,9 @@ describe("systemPrompt", () => {
     const p = systemPrompt({ root: "/w" });
     expect(p).toContain("WORKSPACE_DIR = /w");
     expect(p).toContain("fully writable");
-    expect(p).toContain("request_write_access");
+    // The escalation path is now the generalized request_access (write/network/open).
+    expect(p).toContain("request_access");
+    expect(p).toContain("kind='network'");
     expect(p).not.toContain("IMPORT_DIR");
     expect(p).not.toContain("EXPORT_DIR");
   });
@@ -47,6 +51,24 @@ describe("systemPrompt", () => {
     expect(systemPrompt({ root: "/w" }, "chat")).toContain("MODE: chat");
     expect(systemPrompt({ root: "/w" }, "plan")).toContain("update_plan");
     expect(systemPrompt({ root: "/w" }, "agent")).toContain("MODE: agent");
+  });
+});
+
+describe("makeTools capability escalation (aligned with the desktop app)", () => {
+  const sandbox = makeSandbox();
+  const codeTemp = new SessionWorkspace({ sessionId: "agent-test" });
+  const perm = { request: async () => "allow" as const };
+
+  test("with an approver, exposes request_access + the request_write_access alias", () => {
+    const names = makeTools(sandbox, codeTemp, { root: "/w" }, [], perm).map((t) => t.spec.name);
+    expect(names).toContain("request_access");
+    expect(names).toContain("request_write_access");
+  });
+
+  test("without an approver, no escalation tools", () => {
+    const names = makeTools(sandbox, codeTemp, { root: "/w" }, []).map((t) => t.spec.name);
+    expect(names).not.toContain("request_access");
+    expect(names).not.toContain("request_write_access");
   });
 });
 

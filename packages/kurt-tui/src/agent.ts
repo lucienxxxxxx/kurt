@@ -15,7 +15,6 @@ import {
   ShellTool,
   CodeTool,
   WebSearchTool,
-  RequestWriteAccessTool,
   LsTool,
   GrepTool,
   BrewTool,
@@ -26,6 +25,8 @@ import {
   ToolHub,
   WorktreeManager,
   DuckDuckGoSearch,
+  RequestAccessTool,
+  type AccessGrants,
   type SandboxProvider,
   type Tool,
   type PermissionProvider,
@@ -214,8 +215,9 @@ export function systemPrompt(ws: Workspace, mode: Mode = "agent"): string {
   return [
     "You are kurt-agent, a concise coding assistant running locally.",
     "Prefer the native read_file/ls/grep over shelling out for reads — they're confined to the workspace.",
-    "shell and run_code are sandboxed and have no network; web_search and brew are the networked tools",
-    "(brew runs outside the sandbox and asks for approval before installing/changing software).",
+    "shell and run_code are sandboxed: writes confined to the workspace, and NO network by default.",
+    "web_search is the always-on networked tool; brew runs outside the sandbox and asks for approval",
+    "before installing/changing software.",
     "",
     ...modeGuidance(mode),
     "",
@@ -227,11 +229,16 @@ export function systemPrompt(ws: Workspace, mode: Mode = "agent"): string {
     "Curate with action:'replace' when it grows stale or repetitive.",
     "",
     `WORKSPACE_DIR = ${ws.root} (also exported as an env var to shell/run_code).`,
-    "This is your working directory and it is fully writable — read inputs and write all outputs",
-    "here. Use relative paths or $WORKSPACE_DIR. The sandbox blocks writes OUTSIDE it; if you",
-    "genuinely need to write elsewhere (e.g. ~/Downloads), call request_write_access with that",
-    "directory (the user approves), then retry. Don't explore the filesystem beyond what you need.",
-    "Prefer doing real work with the tools over guessing. Keep answers short.",
+    "This is your working directory and it is fully writable — read inputs and write all outputs here.",
+    "Use relative paths or $WORKSPACE_DIR. You can READ anywhere, but some capabilities are off by",
+    "default; use request_access to ask the user (one approval lasts the session):",
+    "- kind='write' → write OUTSIDE the workspace (target = abs dir), then retry the write.",
+    "- kind='network' → let shell/run_code reach the internet (npm/curl/git).",
+    "- kind='open' → open a file or URL in the user's default app (great for delivering results).",
+    "Request BEFORE attempting — don't wait to fail. If shell/run_code fails with 'Operation not",
+    "permitted' / 'Read-only file system' / a network error, that's the sandbox: request_access and retry.",
+    "Don't explore the filesystem beyond what you need. Prefer real work with the tools over guessing.",
+    "Keep answers short.",
   ].join("\n");
 }
 
@@ -312,6 +319,22 @@ export function makeSandbox(): SandboxProvider {
 }
 
 /**
+ * Open a file/URL in the user's default app (the `open` capability of
+ * request_access). Composition-layer I/O injected into RequestAccessTool so the
+ * engine stays I/O-free.
+ */
+async function openInDefaultApp(target: string): Promise<void> {
+  const cmd =
+    process.platform === "darwin"
+      ? ["open", target]
+      : process.platform === "win32"
+        ? ["cmd", "/c", "start", "", target]
+        : ["xdg-open", target];
+  const proc = Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" });
+  await proc.exited;
+}
+
+/**
  * Auto-compaction trigger = 75% of the EFFECTIVE context window, i.e. the smaller
  * of the configured contextLimit and the model's real maximum (from capabilities).
  * Clamping to the real max means a high `contextLimit` (status-bar display) can't
@@ -327,6 +350,8 @@ export function autoCompactThreshold(modelId: string, contextLimit: number): num
  * @param codeTemp  ephemeral SessionWorkspace for run_code scripts (kept out of the user's dir)
  * @param ws        the agent's working area (WORKSPACE_DIR + import/export)
  * @param allowWrite extra writable dirs beyond the workspace (explicit escalation)
+ * @param grants    session-scoped capability grants (network/open/dirs) that
+ *                  request_access widens; shared across runs so a grant persists.
  */
 export function makeTools(
   sandbox: SandboxProvider,
@@ -336,11 +361,16 @@ export function makeTools(
   permission?: PermissionProvider,
   askProvider?: AskProvider,
   skills?: SkillProvider,
+  grants: AccessGrants = { network: false, open: false, dirs: [] },
 ): Tool[] {
-  // Shared, mutable writable-roots — request_write_access pushes to this and the
-  // file/exec tools (which read it live) immediately see the new dir.
-  const writable = [ws.root, ...allowWrite];
+  // Shared, mutable writable-roots — request_access(kind:"write") pushes to this
+  // and the file/exec tools (which read it live) immediately see the new dir.
+  // grants.dirs seeds it so an earlier grant survives a tool-set rebuild (/new).
+  const writable = [ws.root, ...allowWrite, ...grants.dirs];
   const env = workspaceEnv(ws);
+  // Network stays OFF until request_access(kind:"network"); resolved at call time
+  // so a mid-session grant takes effect on the next shell/run_code call.
+  const network = (): boolean => grants.network;
   const tools: Tool[] = [
     // read/ls/grep are pure-fs and confined to the workspace (+ approved dirs) —
     // they share the same live `writable` roots array as write_file.
@@ -348,10 +378,10 @@ export function makeTools(
     new LsTool({ roots: writable }),
     new GrepTool({ roots: writable }),
     new WriteFileTool({ roots: writable }),
-    new ShellTool(sandbox, { cwd: ws.root, writablePaths: writable, env, permission }),
+    new ShellTool(sandbox, { cwd: ws.root, writablePaths: writable, env, permission, allowNetwork: network }),
     // Scripts run WITH the workspace as CWD (relative paths resolve there); the
     // script files themselves stay in the session temp dir.
-    new CodeTool(sandbox, codeTemp, { writablePaths: writable, env, cwd: ws.root }),
+    new CodeTool(sandbox, codeTemp, { writablePaths: writable, env, cwd: ws.root, allowNetwork: network }),
     // brew runs UNSANDBOXED (network + system writes) via a Direct runner, gated
     // by approval for mutating subcommands.
     new BrewTool(new DirectSandbox(), { cwd: ws.root, permission }),
@@ -364,8 +394,24 @@ export function makeTools(
   ];
   // The agent-asks-user tool only works when there's a UI to answer it.
   if (askProvider) tools.push(new AskUserTool(askProvider));
-  // The escalation tool only makes sense when there's an approver to ask.
-  if (permission) tools.push(new RequestWriteAccessTool(writable, permission));
+  // Generalized capability escalation (write dir / network / open file|app) — same
+  // as the desktop app. Only useful when there's an approver to ask.
+  if (permission) {
+    const access = new RequestAccessTool(writable, grants, { permission, opener: openInDefaultApp });
+    tools.push(access);
+    // Back-compat alias: models that still call request_write_access keep working.
+    tools.push({
+      spec: {
+        name: "request_write_access",
+        description: 'Alias of request_access(kind:"write"): request write access to a directory outside the workspace.',
+        inputSchema: {
+          type: "object",
+          properties: { directory: { type: "string" }, path: { type: "string" }, reason: { type: "string" } },
+        },
+      },
+      execute: (input, ctx) => access.execute({ ...(input as object), kind: "write" }, ctx),
+    });
+  }
   // The skill loader is only useful when at least one skill is discovered.
   if (skills && skills.list().length > 0) tools.push(new SkillTool(skills));
   return tools;
