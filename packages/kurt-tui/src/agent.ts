@@ -37,6 +37,14 @@ import type { SessionWorkspace } from "kurt-agent";
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { loadConfig, type PersistedConfig } from "./config.ts";
+import {
+  normalizeProviders,
+  usableModels,
+  usableProviders,
+  resolveModel,
+  defaultModel,
+  type ProvidersConfig,
+} from "./providers.ts";
 import { globalMemoryPath, kurtHome, projectMemoryPath } from "./paths.ts";
 
 /**
@@ -167,8 +175,14 @@ export interface Settings {
 }
 
 export interface ResolvedConfig extends Settings {
+  /** Multi-provider config (the source of truth for keys/baseURL/models). */
+  desktop: ProvidersConfig;
+  /** The active model's provider key (undefined when nothing is configured yet). */
   apiKey: string | undefined;
+  /** Usable models across all configured providers (the model dropdown). */
   models: string[];
+  /** True when no provider has a usable key+model — the TUI should run setup. */
+  needsSetup: boolean;
 }
 
 /** Per-mode guidance appended to the base prompt. */
@@ -246,10 +260,24 @@ export function normalizeMode(mode: string | undefined): Mode {
 }
 
 export async function resolveConfig(): Promise<ResolvedConfig> {
-  const settings = resolveSettings(await loadConfig(), process.env);
-  const apiKey = process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY;
-  const models = [...new Set([settings.modelId, "deepseek-v4-flash", "deepseek-v4-pro"])];
-  return { ...settings, apiKey, models };
+  const persisted = await loadConfig();
+  const settings = resolveSettings(persisted, process.env);
+  // Build the multi-provider config from the persisted file (new `providers` shape
+  // or a migrated legacy {apiKey,baseURL,model}) plus env keys.
+  const desktop = normalizeProviders(persisted, process.env);
+  const models = usableModels(desktop);
+  // Active model: the persisted choice if it's still usable, else the first usable.
+  const modelId = models.includes(settings.modelId) ? settings.modelId : defaultModel(desktop) || settings.modelId;
+  const active = resolveModel(desktop, modelId);
+  return {
+    ...settings,
+    modelId,
+    baseURL: active?.baseURL ?? settings.baseURL,
+    desktop,
+    apiKey: active?.apiKey || undefined,
+    models,
+    needsSetup: usableProviders(desktop).length === 0,
+  };
 }
 
 /** Reasoning knobs threaded from the session into the provider. */

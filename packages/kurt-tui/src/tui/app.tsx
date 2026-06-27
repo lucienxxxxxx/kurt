@@ -10,12 +10,14 @@ import { Approval } from "./approval.tsx";
 import { SessionPicker } from "./session-picker.tsx";
 import { SkillsPicker } from "./skills-picker.tsx";
 import { McpPicker } from "./mcp-picker.tsx";
+import { ProviderConfigView, editFields, type ProvEdit } from "./provider-config.tsx";
 import { AskPrompt } from "./ask-prompt.tsx";
 import { entriesFromMessages } from "./session-view.ts";
 import type { PermissionBridge } from "./permission.ts";
 import type { AskBridge, PendingAsk } from "./ask.ts";
 import type { SkillInfo } from "../skills.ts";
 import type { McpServerInfo } from "./mcp-info.ts";
+import type { ProviderConfig, ProviderId, ResolvedProvider } from "../providers.ts";
 
 const NO_SUBSCRIBE = (): (() => void) => () => {};
 const NO_PENDING = (): PermissionRequest | null => null;
@@ -79,13 +81,25 @@ export interface AppProps {
   skills?: { list: SkillInfo[]; load: (name: string) => Promise<string | null> };
   /** Connected MCP servers (+ their tools), for the `/mcp` command (when enabled). */
   mcp?: McpServerInfo[];
+  /** Model-provider setup (snapshot for display + save to persist/apply live). */
+  providers?: ProvidersController;
+  /** True at launch when no provider is configured yet → auto-open setup. */
+  needsSetup?: boolean;
+}
+
+/** Front-end seam for the `/provider` setup overlay (implemented in run-tui). */
+export interface ProvidersController {
+  /** Current providers, resolved for display (includes the raw key for editing). */
+  snapshot: () => ResolvedProvider[];
+  /** Persist a per-provider patch and apply it live; returns the refreshed usable models. */
+  save: (id: ProviderId, patch: Partial<ProviderConfig>) => Promise<{ models: string[]; needsSetup: boolean }>;
 }
 
 const MODES: ChatMode[] = ["chat", "agent", "plan"];
 const EFFORTS = ["low", "medium", "high"];
 const PALETTE_MAX = 8;
 
-export function App({ run, compact, models, config, onNewSession, onConfigChange, permission, session, ask, skills, mcp }: AppProps) {
+export function App({ run, compact, models, config, onNewSession, onConfigChange, permission, session, ask, skills, mcp, providers, needsSetup }: AppProps) {
   const { stdout } = useStdout();
   const { exit } = useApp();
 
@@ -104,6 +118,13 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
 
   // MCP servers overlay (null when closed). Opened by /mcp.
   const [mcpView, setMcpView] = useState<{ servers: McpServerInfo[]; selected: number } | null>(null);
+
+  // Provider setup overlay (null when closed). Opened by /provider (and on launch
+  // when nothing is configured). `edit` null = the provider list; otherwise the form.
+  const [provView, setProvView] = useState<{ rows: ResolvedProvider[]; selected: number; edit: ProvEdit | null } | null>(null);
+
+  // The model list can grow when the user configures a provider, so keep it in state.
+  const [modelList, setModelList] = useState<string[]>(models);
 
   const [cols, setCols] = useState(stdout.columns || 80);
   useEffect(() => {
@@ -161,12 +182,29 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
   const commit = (entries: Entry[]): void => setCommitted((c) => [...c, ...entries]);
   const notice = (level: "info" | "warn" | "error", text: string): void => commit([{ kind: "notice", level, text }]);
 
+  // First-run onboarding: if nothing is configured, open provider setup on mount.
+  const didOnboard = useRef(false);
+  useEffect(() => {
+    if (didOnboard.current) return;
+    didOnboard.current = true;
+    if (needsSetup && providers) {
+      notice("info", "Welcome — configure a model provider to get started (API key required).");
+      setProvView({ rows: providers.snapshot(), selected: 0, edit: null });
+    }
+  }, []);
+
   const setLiveBoth = (next: Entry[]): void => {
     liveRef.current = next;
     setLive(next);
   };
 
   async function submit(text: string): Promise<void> {
+    // No usable model yet → send the user to provider setup instead of a dead run.
+    if (modelList.length === 0) {
+      notice("warn", "No model configured. Add a provider + API key (opening setup).");
+      openProvider();
+      return;
+    }
     const isFirstTurn = historyRef.current.length === 0;
     commit([{ kind: "user", text }]); // user line lands in scrollback immediately
     const nextHistory = [...historyRef.current, { role: "user", content: [{ type: "text", text }] } as Message];
@@ -292,13 +330,40 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
     notice("info", lines.length > 0 ? `${head}\n\n${lines.join("\n")}` : `${head}\n\n(no tools)`);
   }
 
+  function openProvider(): void {
+    if (!providers) return void notice("warn", "provider setup is not available");
+    setProvView({ rows: providers.snapshot(), selected: 0, edit: null });
+  }
+
+  function beginEdit(row: ResolvedProvider): ProvEdit {
+    return {
+      id: row.id,
+      label: row.label,
+      custom: row.custom,
+      field: 0,
+      apiKey: row.apiKey,
+      baseURL: row.custom ? row.baseURL : "",
+      models: row.custom ? row.models.join(", ") : "",
+      format: row.format,
+    };
+  }
+
+  // Persist a provider patch, apply it live, and refresh the model list + selection.
+  async function saveProvider(id: ProviderId, patch: Partial<ProviderConfig>): Promise<void> {
+    if (!providers) return;
+    const { models: nextModels } = await providers.save(id, patch);
+    setModelList(nextModels);
+    if (nextModels.length > 0 && !nextModels.includes(modelId)) setModelId(nextModels[0]!);
+    setProvView((v) => (v ? { ...v, rows: providers.snapshot(), edit: null } : v));
+  }
+
   function handleCommand(name: string, args: string[]): void {
     switch (name) {
       case "/help":
         notice("info", COMMANDS.map((c) => `${c.name}${c.args ? " " + c.args : ""} — ${c.summary}`).join("\n"));
         break;
       case "/model": {
-        const next = args[0] ?? cycle(models, modelId);
+        const next = args[0] ?? cycle(modelList, modelId);
         setModelId(next);
         notice("info", `model → ${next}`);
         break;
@@ -334,6 +399,9 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
         break;
       case "/mcp":
         openMcp();
+        break;
+      case "/provider":
+        openProvider();
         break;
       case "/clear":
         // The old conversation is already saved; begin a fresh session so we
@@ -440,6 +508,63 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
       }
       return; // swallow other keys while the MCP list is open
     }
+    // Provider setup: list mode (move/toggle/edit) or the per-provider edit form.
+    if (provView) {
+      const v = provView;
+      if (!v.edit) {
+        if (key.escape) return void setProvView(null);
+        if (key.upArrow) return void setProvView((p) => (p ? { ...p, selected: Math.max(0, p.selected - 1) } : p));
+        if (key.downArrow) return void setProvView((p) => (p ? { ...p, selected: Math.min(p.rows.length - 1, p.selected + 1) } : p));
+        if (char === " ") {
+          const row = v.rows[v.selected];
+          if (row) void saveProvider(row.id, { enabled: !row.enabled });
+          return;
+        }
+        if (key.return) {
+          const row = v.rows[v.selected];
+          if (row) setProvView((p) => (p ? { ...p, edit: beginEdit(row) } : p));
+          return;
+        }
+        return; // swallow other keys in the provider list
+      }
+      // Edit form for one provider.
+      const edit = v.edit;
+      const fields = editFields(edit.custom);
+      if (key.escape) return void setProvView((p) => (p ? { ...p, edit: null } : p));
+      if (key.tab || key.downArrow)
+        return void setProvView((p) => (p?.edit ? { ...p, edit: { ...p.edit, field: (p.edit.field + 1) % fields.length } } : p));
+      if (key.upArrow)
+        return void setProvView((p) =>
+          p?.edit ? { ...p, edit: { ...p.edit, field: (p.edit.field - 1 + fields.length) % fields.length } } : p,
+        );
+      if (key.return) {
+        const patch: Partial<ProviderConfig> = { enabled: true, apiKey: edit.apiKey };
+        const ms = edit.models.split(",").map((s) => s.trim()).filter(Boolean);
+        if (edit.custom) {
+          patch.baseURL = edit.baseURL.trim() || undefined;
+          patch.models = ms;
+          patch.format = edit.format;
+        } else {
+          if (edit.baseURL.trim()) patch.baseURL = edit.baseURL.trim();
+          if (ms.length) patch.models = ms;
+        }
+        void saveProvider(edit.id, patch);
+        return;
+      }
+      const f = fields[edit.field]!;
+      if (f === "format") {
+        if (char === " " || key.leftArrow || key.rightArrow)
+          return void setProvView((p) =>
+            p?.edit ? { ...p, edit: { ...p.edit, format: p.edit.format === "openai" ? "claude" : "openai" } } : p,
+          );
+        return;
+      }
+      if (key.backspace || key.delete)
+        return void setProvView((p) => (p?.edit ? { ...p, edit: { ...p.edit, [f]: (p.edit[f] as string).slice(0, -1) } } : p));
+      if (char && !key.ctrl && !key.meta)
+        return void setProvView((p) => (p?.edit ? { ...p, edit: { ...p.edit, [f]: (p.edit[f] as string) + char } } : p));
+      return;
+    }
     if (key.escape) {
       if (running && abortRef.current) abortRef.current.abort();
       else setInput("");
@@ -502,7 +627,7 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
           <EntryView key={i} entry={entry} width={cols} live />
         ))}
 
-        {!picker && !skillsView && !mcpView && !pendingAsk && cmdItems.length > 0 && (
+        {!picker && !skillsView && !mcpView && !provView && !pendingAsk && cmdItems.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
             {cmdItems.slice(0, PALETTE_MAX).map((c, i) => (
               <Text key={c.name} inverse={i === sel} color={i === sel ? undefined : "gray"}>
@@ -522,6 +647,8 @@ export function App({ run, compact, models, config, onNewSession, onConfigChange
           <SkillsPicker skills={skillsView.skills} selected={skillsView.selected} />
         ) : mcpView ? (
           <McpPicker servers={mcpView.servers} selected={mcpView.selected} />
+        ) : provView ? (
+          <ProviderConfigView rows={provView.rows} selected={provView.selected} edit={provView.edit} />
         ) : (
           <Box marginTop={1}>
             <Text color="green">{"› "}</Text>

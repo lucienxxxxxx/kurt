@@ -63,7 +63,10 @@ function cliPermission(allowlist: Allowlist, yes: boolean): PermissionProvider {
 export async function runChat(args: string[], opts: LaunchOptions = {}): Promise<void> {
   const cfg = await resolveConfig();
   if (!cfg.apiKey) {
-    console.error("Missing API key. Set DEEPSEEK_API_KEY, then run `kurt chat`.");
+    console.error(
+      "No model provider configured. Run `kurt` and use /provider to add an API key " +
+        "(DeepSeek/OpenAI/Claude or a custom endpoint), or set DEEPSEEK_API_KEY for this shell.",
+    );
     process.exit(1);
   }
 

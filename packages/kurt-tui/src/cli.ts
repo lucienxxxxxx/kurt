@@ -47,10 +47,15 @@ Skills are reusable procedures in ~/.kurt/skills/ (global) and <workspace>/.kurt
 frontmatter. Only descriptions are preloaded; the agent loads a skill's full
 instructions on demand via the "skill" tool (available in every mode).
 
-Env: DEEPSEEK_API_KEY (required), DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DEEPSEEK_CONTEXT,
-DEEPSEEK_MAX_TOKENS (raise for large outputs, e.g. writing big files).
-Settings you change in the TUI (/model, /effort, /think, /mode) are remembered in
-the config file below.`;
+Model providers: configure API keys IN the TUI with /provider — DeepSeek, OpenAI,
+Claude (built-in presets, just add a key) or a Custom third-party endpoint (base URL
++ key + openai/claude wire format). Keys are saved in the config file below; no env
+var needed. If nothing is configured, kurt opens provider setup on launch.
+
+Env (optional, still honored): DEEPSEEK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY
+turn the matching provider on; DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DEEPSEEK_CONTEXT,
+DEEPSEEK_MAX_TOKENS (raise for large outputs). Settings you change in the TUI
+(/model, /effort, /think, /mode) are remembered in the config file below.`;
 
 async function runConfig(args: string[]): Promise<void> {
   const [sub, key, ...rest] = args;

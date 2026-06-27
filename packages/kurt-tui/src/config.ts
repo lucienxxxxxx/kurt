@@ -3,12 +3,13 @@
  * mode, …) survive across launches instead of resetting every time.
  *
  * Stored at ~/.kurt/config.json (override with KURT_CONFIG_PATH, used by tests).
- * The API key is NEVER persisted here — it stays in the environment.
+ * The API key is stored here as a convenience fallback; env vars still take priority.
  */
 
 import { join } from "node:path";
 import { atomicWrite } from "kurt-agent";
 import { kurtHome } from "./paths.ts";
+import type { ProviderConfig, ProviderId } from "./providers.ts";
 
 export interface PersistedConfig {
   model?: string;
@@ -19,9 +20,13 @@ export interface PersistedConfig {
   thinking?: boolean;
   /** chat | agent | plan. Legacy "ask" is migrated to "chat" on read. */
   mode?: "chat" | "agent" | "plan";
+  /** Legacy single-provider API key (migrated into `providers` on read). Env vars take priority. */
+  apiKey?: string;
+  /** Multi-provider config (openai/claude/deepseek/custom). The source of truth for keys/baseURL. */
+  providers?: Record<ProviderId, ProviderConfig>;
 }
 
-const PERSIST_KEYS: (keyof PersistedConfig)[] = ["model", "baseURL", "context", "maxTokens", "effort", "thinking", "mode"];
+const PERSIST_KEYS: (keyof PersistedConfig)[] = ["model", "baseURL", "context", "maxTokens", "effort", "thinking", "mode", "apiKey", "providers"];
 
 export function configPath(): string {
   return process.env.KURT_CONFIG_PATH ?? join(kurtHome(), "config.json");

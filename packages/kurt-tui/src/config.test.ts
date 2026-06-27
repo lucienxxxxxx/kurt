@@ -24,7 +24,22 @@ describe("persisted config", () => {
   });
 
   test("sanitize drops unknown keys", () => {
-    expect(sanitize({ model: "x", junk: 1, apiKey: "secret" } as never)).toEqual({ model: "x" });
+    expect(sanitize({ model: "x", junk: 1 } as never)).toEqual({ model: "x" });
+  });
+
+  test("sanitize keeps apiKey (known key)", () => {
+    expect(sanitize({ model: "x", apiKey: "sk-secret" } as never)).toEqual({ model: "x", apiKey: "sk-secret" });
+  });
+
+  test("providers config round-trips through save/load", async () => {
+    const providers = {
+      deepseek: { enabled: true, apiKey: "sk-ds" },
+      openai: { enabled: false, apiKey: "" },
+      claude: { enabled: false, apiKey: "" },
+      custom: { enabled: true, apiKey: "k", baseURL: "https://x.test/v1", models: ["m1"], format: "openai" as const },
+    };
+    await saveConfig({ providers });
+    expect((await loadConfig()).providers).toEqual(providers);
   });
 });
 

@@ -29,4 +29,9 @@ describe("slash commands", () => {
     expect(COMMANDS.some((c) => c.name === "/mcp")).toBe(true);
     expect(filterCommands("/mc").map((c) => c.name)).toEqual(["/mcp"]);
   });
+
+  test("/provider is registered and discoverable from the palette", () => {
+    expect(COMMANDS.some((c) => c.name === "/provider")).toBe(true);
+    expect(filterCommands("/prov").map((c) => c.name)).toEqual(["/provider"]);
+  });
 });

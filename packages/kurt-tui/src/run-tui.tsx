@@ -24,6 +24,16 @@ import {
   type WorktreeSession,
 } from "./agent.ts";
 import { saveConfig } from "./config.ts";
+import {
+  allProviders,
+  mergeProviders,
+  resolveModel,
+  usableModels,
+  usableProviders,
+  type ProviderConfig,
+  type ProviderId,
+  type ProvidersConfig,
+} from "./providers.ts";
 import { loadContextPrelude } from "./context-files.ts";
 import { loadSkills } from "./skills.ts";
 import { mcpServerInfos } from "./tui/mcp-info.ts";
@@ -39,10 +49,23 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
   }
 
   const cfg = await resolveConfig();
-  if (!cfg.apiKey) {
-    console.error("Missing API key. Set it, then run `kurt`:\n\n  export DEEPSEEK_API_KEY=sk-your-key");
-    process.exit(1);
-  }
+  // No env-var exit anymore: if nothing is configured the TUI launches straight
+  // into the provider setup overlay (see `needsSetup` below + the `/provider` command).
+
+  // The live multi-provider config. The setup overlay mutates this (and persists)
+  // so a freshly added key takes effect without restarting.
+  let desktop: ProvidersConfig = cfg.desktop;
+
+  /** Build a model for `id` using its provider's baseURL/key, or null if unconfigured. */
+  const modelForId = (
+    id: string,
+    maxTokens?: number,
+    reasoning: { thinking?: boolean; effort?: string } = {},
+  ): ReturnType<typeof modelFor> | null => {
+    const prov = resolveModel(desktop, id);
+    if (!prov || !prov.apiKey) return null;
+    return modelFor(id, prov.baseURL, prov.apiKey, maxTokens, reasoning);
+  };
 
   // --worktree: isolate this session in its own git worktree + branch.
   let worktree: WorktreeSession | null;
@@ -103,7 +126,8 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
       (firstUser?.content.find((b) => b.type === "text") as { text?: string } | undefined)?.text?.slice(0, 48).trim() ||
       "untitled";
     try {
-      const titler = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey!, 32);
+      const titler = modelForId(cfg.modelId, 32);
+      if (!titler) return fallback;
       const prompt =
         "Give a 3-6 word title (no quotes, no trailing punctuation) for this conversation's topic. " +
         "Reply with ONLY the title.\n\n" +
@@ -161,7 +185,8 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
 
   // Shared summarizer for both manual /compact and auto-compaction.
   const summarize = async (older: Message[], signal: AbortSignal): Promise<string> => {
-    const model = modelFor(cfg.modelId, cfg.baseURL, cfg.apiKey!, cfg.maxTokens);
+    const model = modelForId(cfg.modelId, cfg.maxTokens);
+    if (!model) return "(summary unavailable)";
     const prompt =
       "Summarize the following conversation transcript concisely. Preserve key facts, " +
       "decisions, file paths, code identifiers, and open tasks. No preamble.\n\n" +
@@ -183,20 +208,39 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
     summarize,
   });
 
-  const run: EngineRunner = (messages: Message[], signal: AbortSignal, session: SessionState): AsyncIterable<Event> =>
-    runLoop({
+  const run: EngineRunner = (messages: Message[], signal: AbortSignal, session: SessionState): AsyncIterable<Event> => {
+    const model = modelForId(session.modelId, cfg.maxTokens, { thinking: session.thinking, effort: session.effort });
+    if (!model) {
+      return (async function* () {
+        yield {
+          type: "error",
+          message: `No API key for "${session.modelId}". Open /provider to configure a model provider.`,
+          fatal: true,
+        } as Event;
+      })();
+    }
+    return runLoop({
       system: systemPrompt(ws, session.mode) + prelude,
       messages,
       tools: toolsForMode(hub, session.mode),
-      model: modelFor(session.modelId, cfg.baseURL, cfg.apiKey!, cfg.maxTokens, {
-        thinking: session.thinking,
-        effort: session.effort,
-      }),
+      model,
       compaction: autoCompact,
       signal,
     });
+  };
 
   const compact: Compactor = (messages, signal) => compactHistory(messages, (older) => summarize(older, signal), 2);
+
+  // Provider setup controller for the `/provider` overlay: snapshot for display,
+  // save to persist + apply live (returns the refreshed usable model list).
+  const providers = {
+    snapshot: () => allProviders(desktop),
+    save: async (id: ProviderId, patch: Partial<ProviderConfig>): Promise<{ models: string[]; needsSetup: boolean }> => {
+      desktop = mergeProviders(desktop, { [id]: patch });
+      await saveConfig({ providers: desktop.providers });
+      return { models: usableModels(desktop), needsSetup: usableProviders(desktop).length === 0 };
+    },
+  };
 
   // Natural-flow: no alternate screen → native scrollback + mouse wheel work.
   process.stdout.write("\n" + bannerString(process.stdout.columns || 80) + "\n");
@@ -204,6 +248,7 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
   if (worktree) process.stdout.write(`\x1b[2m  worktree:  isolated on branch ${worktree.branch} (of ${worktree.repoRoot})\x1b[0m\n`);
   if (mcp.statuses.length) process.stdout.write(`\x1b[2m  mcp:       ${summarizeStatuses(mcp.statuses)}\x1b[0m\n`);
   if (skills.metas.length) process.stdout.write(`\x1b[2m  skills:    ${skills.metas.map((s) => s.name).join(", ")}\x1b[0m\n`);
+  if (cfg.needsSetup) process.stdout.write(`\x1b[33m  setup:     no API key yet — opening provider setup (or type /provider)\x1b[0m\n`);
 
   const app = render(
     <App
@@ -217,6 +262,8 @@ export async function runTui(opts: LaunchOptions = {}): Promise<void> {
       ask={askBridge}
       skills={{ list: skills.infos, load: skills.provider.load }}
       mcp={mcpServerInfos(mcp.statuses, mcp.tools)}
+      providers={providers}
+      needsSetup={cfg.needsSetup}
       config={{ model: cfg.modelId, contextLimit: cfg.contextLimit, effort: cfg.effort, thinking: cfg.thinking, mode: cfg.mode }}
     />,
   );
