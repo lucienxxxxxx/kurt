@@ -56,7 +56,7 @@ function EditForm({ edit }: { edit: ProvEdit }) {
   const fields = editFields(edit.custom);
   const value = (f: ProvField): string => {
     if (f === "apiKey") return mask(edit.apiKey);
-    if (f === "baseURL") return edit.baseURL || "(default)";
+    if (f === "baseURL") return edit.baseURL || (edit.custom ? "(e.g. https://api.example.com/v1)" : "(default)");
     if (f === "models") return edit.models || "(provider defaults)";
     return edit.format;
   };
