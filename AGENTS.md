@@ -11,6 +11,7 @@ A single git repo, bun-workspace monorepo. Bun workspace = `["packages/kurt-agen
 - One repo (this one). `bun install` **here** at the root links the workspace (kurt-agent + kurt-tui) and owns the root `bun.lock`. kurt-app is installed separately (its own lockfile).
 - Dependency edge is one-way: front-ends → `kurt-agent`. kurt-agent exposes its public API via `packages/kurt-agent/src/lib.ts`; kurt-tui imports `from "kurt-agent"`. Never make the engine depend on a front-end.
 - UI deps (ink/react/marked/tauri) live only in the front-ends; the engine core stays dependency-free except the MCP SDK (per `packages/kurt-agent/CLAUDE.md` §1).
+- Front-end icons: use [Lucide](https://lucide.dev/icons/) as the first-choice icon set. In `kurt-app`, business components should render icons through `src/components/Icon.tsx` (the lucide adapter) and must not add hand-written SVG path icons unless the asset is a brand/product logo or a non-icon visualization.
 - Code style and module boundary rules live in [`docs/代码风格规范.md`](docs/代码风格规范.md). Read its first section before coding; drill into package-specific sections only as needed.
 
 ## Workflow (applies to this repo)

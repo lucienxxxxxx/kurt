@@ -1,54 +1,109 @@
-/** Hand-rolled SVG icons (ported from prototype/ui.jsx). PORTING_GUIDE §8 maps
- *  these to lucide-react; kept inline for 6.1 parity, swappable later. */
+/** App icon adapter. Lucide is the first-choice icon source; the local names
+ *  below preserve the existing UI API while mapping to lucide-react components. */
 
-const ICON: Record<string, string> = {
-  plus: "M12 5v14M5 12h14",
-  search: "M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.3-4.3",
-  sun: "M12 4V2M12 22v-2M4 12H2M22 12h-2M5.6 5.6L4.2 4.2M19.8 19.8l-1.4-1.4M5.6 18.4l-1.4 1.4M19.8 4.2l-1.4 1.4M12 8a4 4 0 100 8 4 4 0 000-8z",
-  moon: "M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z",
-  chat: "M21 12a8 8 0 01-8 8H7l-4 3v-5a8 8 0 018-11h2a8 8 0 016 5z",
-  folder: "M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z",
-  image: "M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M8.5 9.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z",
-  globe: "M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.5 2.5 3.5 6 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-6-3.5-9s1-6.5 3.5-9z",
-  calendar: "M5 5h14v15H5zM5 9h14M9 3v4M15 3v4",
-  broom: "M19 5l-7 7M11 13l-4 7M11 13l5 5M5.5 18.5L8 21",
-  mic: "M12 3a3 3 0 013 3v6a3 3 0 01-6 0V6a3 3 0 013-3zM5 11a7 7 0 0014 0M12 18v3",
-  bell: "M6 9a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6zM10 21h4",
-  chevR: "M9 6l6 6-6 6",
-  chevD: "M6 9l6 6 6-6",
-  send: "M5 12l14-7-5 7 5 7-14-7zM5 12h9",
-  stop: "M7 7h10v10H7z",
-  pause: "M8 6v12M16 6v12",
-  paperclip: "M21 11l-8.5 8.5a4 4 0 01-5.7-5.7L15 5.5a2.5 2.5 0 013.5 3.5l-8.4 8.4a1 1 0 01-1.4-1.4l7.7-7.7",
-  sliders: "M4 7h11M19 7h1M4 17h7M15 17h5M15 5v4M11 15v4",
-  spark: "M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z",
-  check: "M5 13l4 4L19 7",
-  newchat: "M12 5v14M5 12h14",
-  projects: "M3 8h6l2 2h10v9H3zM7 5h6l2 2",
-  skills: "M13 2L4 14h7l-2 8 10-12h-8z",
-  gear: "M12 9a3 3 0 100 6 3 3 0 000-6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3h.1a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8v.1a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z",
-  x: "M6 6l12 12M18 6l-12 12",
-  info: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 11v6M12 7v.01",
-  palette: "M12 3a9 9 0 100 18c1 0 1.5-.8 1.5-1.7 0-.4-.2-.8-.5-1.1-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H16a5 5 0 005-5c0-4.4-4-8-9-8zM7 12.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM10.5 8a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM15 8a1.5 1.5 0 100-3 1.5 1.5 0 000 3z",
-  dots3: "M12 5v.01M12 12v.01M12 19v.01",
-  copy: "M9 9h10v10H9zM5 15H4a1 1 0 01-1-1V5a1 1 0 011-1h9a1 1 0 011 1v1",
-  rollback: "M9 14L4 9l5-5M4 9h11a5 5 0 110 10h-1",
-  refresh: "M20 6v6h-6M4 18v-6h6M19 10a7 7 0 00-12.2-3.8L4 9M5 14a7 7 0 0012.2 3.8L20 15",
-  arrowUp: "M12 20V5M6 11l6-6 6 6",
-  brain: "M12 5a2.5 2.5 0 00-4.96-.46 2.5 2.5 0 00-1.98 3 2.5 2.5 0 00-1.32 4.24 3 3 0 00.34 5.58 2.5 2.5 0 004.5 1.98A2.5 2.5 0 0012 19.5M12 5a2.5 2.5 0 014.96-.46 2.5 2.5 0 011.98 3 2.5 2.5 0 011.32 4.24 3 3 0 01-.34 5.58 2.5 2.5 0 01-4.5 1.98A2.5 2.5 0 0112 19.5M12 5v14.5",
-  wrench: "M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z",
-  terminal: "M4 5h16v14H4zM7 9l3 3-3 3M13 16h4",
-  eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zM12 9.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z",
-  list: "M8 6h12M8 12h12M8 18h12M3.5 6h.01M3.5 12h.01M3.5 18h.01",
-  split: "M4 5h16v14H4zM12 5v14",
-};
+import type { SVGProps } from "react";
+import {
+  ArrowUp,
+  Bell,
+  Brain,
+  BrushCleaning,
+  Calendar,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Eye,
+  Folder,
+  FolderKanban,
+  Globe,
+  Image as ImageIcon,
+  Info,
+  List,
+  MessageCircle,
+  Mic,
+  Moon,
+  MoreVertical,
+  Palette,
+  Paperclip,
+  Pause,
+  Plus,
+  RefreshCw,
+  Search,
+  SendHorizontal,
+  Settings,
+  SlidersHorizontal,
+  Sparkles,
+  Split,
+  SquarePen,
+  SquareStop,
+  Sun,
+  Terminal,
+  Undo2,
+  Wrench,
+  X,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
+
+const LUCIDE_ICONS = {
+  plus: Plus,
+  search: Search,
+  sun: Sun,
+  moon: Moon,
+  chat: MessageCircle,
+  folder: Folder,
+  image: ImageIcon,
+  globe: Globe,
+  calendar: Calendar,
+  broom: BrushCleaning,
+  mic: Mic,
+  bell: Bell,
+  chevR: ChevronRight,
+  chevD: ChevronDown,
+  send: SendHorizontal,
+  stop: SquareStop,
+  pause: Pause,
+  paperclip: Paperclip,
+  sliders: SlidersHorizontal,
+  spark: Sparkles,
+  check: Check,
+  newchat: SquarePen,
+  projects: FolderKanban,
+  skills: Zap,
+  gear: Settings,
+  x: X,
+  info: Info,
+  palette: Palette,
+  dots3: MoreVertical,
+  copy: Copy,
+  rollback: Undo2,
+  refresh: RefreshCw,
+  arrowUp: ArrowUp,
+  brain: Brain,
+  wrench: Wrench,
+  terminal: Terminal,
+  eye: Eye,
+  list: List,
+  split: Split,
+} satisfies Record<string, LucideIcon>;
+
+export type IconName = keyof typeof LUCIDE_ICONS;
 
 export function Icon({ name, className }: { name: string; className?: string }) {
-  const d = ICON[name] || "";
+  const Lucide = LUCIDE_ICONS[name as IconName];
+  if (Lucide) {
+    return <Lucide className={className} aria-hidden="true" focusable="false" />;
+  }
+  return <MissingIcon className={className} />;
+}
+
+function MissingIcon({ className }: Pick<SVGProps<SVGSVGElement>, "className">) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {d.split("M").filter(Boolean).map((seg, i) => <path key={i} d={"M" + seg} />)}
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 8v5" />
+      <path d="M12 16h.01" />
     </svg>
   );
 }
