@@ -3,8 +3,11 @@
 > Cached architecture map. **Read this first**; scan the tree only for the files
 > this map points you to. Keep it fresh: update on every structural change.
 > Maintained via the `project-module-workflow` skill (see CLAUDE.md §3).
-> Last synced: 2026-06-27, after AgentProfile/AgentRuntime composition layer +
-> MemoryStore/MarkdownMemoryStore subsystem seam (RAG-ready). Earlier: generalized request_access (write/network/open) +
+> Last synced: 2026-06-29, after shared mode definitions (`src/agent/modes.ts`:
+> chat/agent/plan tool subset + per-mode guidance + normalizeMode, consumed by
+> kurt-tui AND kurt-bridge — ends the drifted local copies). Earlier: AgentProfile/
+> AgentRuntime composition layer + MemoryStore/MarkdownMemoryStore subsystem seam
+> (RAG-ready); generalized request_access (write/network/open) +
 > live shell/code allowNetwork; parallel tool calls (`maxParallel`); Phase 6.2 moved `SessionStore` + `kurtHome`/
 > `sessionsDir` into `src/session/` (shared by TUI + bridge + desktop);
 > B1–B5 bug sweep (atomicWrite, MCP HTTP test); Phase 5 (MCP + Skills).
@@ -23,7 +26,7 @@ front-end + `kurt` CLI) consumes it. Public API is `src/lib.ts`.
 - Run demos: `bun run dev` · `bun run demo:abort` · `bun run demo:error` · `bun run demo:sandbox`
 - Live chat (stdout) vs a real LLM: `bun run chat ["prompt"]` (needs `DEEPSEEK_API_KEY`).
 - Public API for consumers (kurt-tui): `src/lib.ts` (re-exports engine/providers/tools/sandbox/session/search + history/compaction/stdout).
-- Gate before any merge: **`bun run typecheck && bun test`** (currently 169 tests pass; MCP tests round-trip local stdio **and** Streamable HTTP fixture servers, still offline/hermetic).
+- Gate before any merge: **`bun run typecheck && bun test`** (181 tests, 174 pass; the 7 failures are environment-bound — real `sandbox-exec` / local HTTP needing host permissions — not logic. MCP tests round-trip local stdio **and** Streamable HTTP fixture servers, still offline/hermetic).
 
 ## 3. Architecture & invariants
 Three layers, three iron rules (full text in `CLAUDE.md` §2 — do not break them):
@@ -60,7 +63,7 @@ as each finishes, result BLOCKS in history keep the call order. Single call = po
 | `src/search/` | Pluggable web-search backend | `SearchProvider`, `DuckDuckGoSearch` | — |
 | `src/permission/` | Approval seam for sensitive commands | `PermissionProvider`/`PermissionDecision`/`PermissionRequest`, `classifyCommand` (pure rules → key+explanation+risk), `allowAll`/`denyAll`. ShellTool consults it; the front-end supplies the prompt/whitelist | — (pure) |
 | `src/ask/` | Seam for the `ask_user` tool (agent → user) | `AskProvider`, `AskRequest` (front-end implements; mirrors permission) | — (pure) |
-| `src/agent/` | Composition shells around the engine | `Agent` ({model,system,tools}+`run()`→runLoop+`with()`); `ToolHub` (name→Tool registry; `get(names)`/`all()`); `AgentProfile`/`AgentRuntime` (persona/system + named tool subset + memory context + policies as a reusable agent object). Engine untouched | engine, tools |
+| `src/agent/` | Composition shells around the engine | `Agent` ({model,system,tools}+`run()`→runLoop+`with()`); `ToolHub` (name→Tool registry; `get(names)`/`all()`); `AgentProfile`/`AgentRuntime` (persona/system + named tool subset + memory context + policies as a reusable agent object); **`modes.ts`** (chat/agent/plan = single source of truth: `MODE_TOOLS`/`READ_ONLY_TOOLS`, `toolsForMode`(flat list)/`toolsForModeFromHub`, `modeGuidance`, `normalizeMode` — consumed by BOTH front-ends). Engine untouched | engine, tools |
 | `src/memory/` | Memory subsystem seam | `MemoryStore` (`read`/`write`/`supports` + optional future `search`), `MarkdownMemoryStore` (fixed global/project markdown files). This is RAG-ready orchestration state, never engine state | `fs-atomic` |
 | `src/mcp/` | **MCP = remote provider of `Tool`s** (Phase 5; the one place the SDK is used) | `McpTool` (wraps a remote tool as `Tool`; flattens content; non-read-only calls gated via `PermissionProvider`); `connectMcpServer`/`connectMcpServers` (stdio + Streamable HTTP; namespaced `mcp__<server>__<tool>`; per-server failures isolated → `statuses`; aggregate `close()`); `summarizeStatuses`; `expandEnv` (`${VAR}`). `_fixtures/echo-server.ts` = test-only local server | engine (types/Tool), permission, `@modelcontextprotocol/sdk` |
 | `src/worktree/` | Per-session git worktree isolation (Phase 7 groundwork) | `WorktreeManager` (create/list/isDirty/commitAll/remove; + currentBranch/isMerged/deleteBranch/listManaged/**pruneManaged** for `kurt worktree prune` — removes only merged+clean) via git subprocess | — (git CLI) |
@@ -78,7 +81,7 @@ as each finishes, result BLOCKS in history keep the call order. Single call = po
 - **Describe a model's abilities** → add a `ModelCapabilities` entry in `src/providers/capabilities.ts` (thinking/effort/context/output-tokens/tools); the orchestration layer reads `capabilitiesFor(id)` to drive defaults and knobs. Pure metadata, no engine change.
 - **Add a sandbox backend** → `src/sandbox/<name>.ts` implementing `SandboxProvider`; only `seatbelt.ts` may reference `sandbox-exec`.
 - **Gate a new risky command** → add a rule in `src/permission/classify.ts` (key+explanation+risk). The front-end (kurt-tui) renders the prompt + persists the allowlist.
-- **Bundle a configured agent / share tools** → `src/agent/`. Use `AgentProfile` for persona/system/tool subset/memory/policies, `AgentRuntime` to materialize an `Agent`, and `ToolHub` as the shared registry. The chat/agent/plan modes are still built in front-ends (`toolsForMode`) and can migrate incrementally.
+- **Bundle a configured agent / share tools** → `src/agent/`. Use `AgentProfile` for persona/system/tool subset/memory/policies, `AgentRuntime` to materialize an `Agent`, and `ToolHub` as the shared registry. **The chat/agent/plan modes now live in `src/agent/modes.ts` (`MODE_TOOLS` + `modeGuidance` + `normalizeMode`) and are consumed by both kurt-tui and kurt-bridge** — change a mode's tool set or guidance HERE, not in a front-end. Read-only set = read_file/ls/grep/web_search/memory/ask_user/skill/request_access; plan adds update_plan; agent = all. `request_write_access` is accepted as a back-compat alias of `request_access`.
 - **Add or replace memory storage** → `src/memory/`. Implement `MemoryStore`; keep `MemoryTool` as the model-facing write/read tool. RAG belongs here as a later store/retrieval backend via `MemoryStore.search`, not in `src/engine/`.
 - **Agent asks the user** → `ask_user` tool + `AskProvider` (`src/ask/`); the front-end implements the prompt (TUI overlay / stdin).
 - **Write outside the workspace** → the agent calls `request_write_access` (a Tool) → approval → the dir is pushed to the shared writable-roots array; file/exec tools read it live.
@@ -98,7 +101,7 @@ as each finishes, result BLOCKS in history keep the call order. Single call = po
 - Docs: `CLAUDE.md` = rules + roadmap; `WORKLOG.md` = per-phase log; **this file** = architecture map.
 
 ## 7. Status / roadmap
-- **Done:** Phase 1 (minimal closed loop), Phase 2 (real tools + sandbox), Phase 3 (preload + agent-writable memory + manual & **auto** compaction), Phase 5 (**MCP接入** `src/mcp/` + **Skills** `src/skills/`+`tools/skill.ts`, progressive disclosure), agent composition hardening (`AgentProfile`/`AgentRuntime`) + memory subsystem seam (`MemoryStore`).
+- **Done:** Phase 1 (minimal closed loop), Phase 2 (real tools + sandbox), Phase 3 (preload + agent-writable memory + manual & **auto** compaction), Phase 5 (**MCP接入** `src/mcp/` + **Skills** `src/skills/`+`tools/skill.ts`, progressive disclosure), agent composition hardening (`AgentProfile`/`AgentRuntime`) + memory subsystem seam (`MemoryStore`) + **shared mode definitions** (`src/agent/modes.ts`, consumed by both front-ends).
 - **In progress:** Phase 4 — `OpenAICompatModel` live-verified vs DeepSeek + capabilities + reasoning replay + withRetry (remaining: more vendors + AuthProvider). Phase 6 — TUI mature as sibling package **`packages/kurt-tui`** (remaining: WebUI/desktop/mobile). Phase 7 — worktree isolation groundwork landed (`src/worktree/`); beehive prototype on `feat/beehive` only.
 - **Remaining:** Phase 4 (more vendors + AuthProvider) · Phase 6 frontends · Phase 7 (multi-agent orchestration) · memory RAG backend (implement `MemoryStore.search`, retrieval ranking, prompt injection policy, and persistence/index migration).
 - Full roadmap + per-phase constraints: `CLAUDE.md` §4 and §8. Live status: repo-root `PROGRESS.md`.
