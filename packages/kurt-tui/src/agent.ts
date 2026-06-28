@@ -26,6 +26,11 @@ import {
   WorktreeManager,
   DuckDuckGoSearch,
   RequestAccessTool,
+  modeGuidanceLines,
+  toolsForModeFromHub,
+  normalizeMode as normalizeModeShared,
+  MODE_TOOLS,
+  type Mode,
   type AccessGrants,
   type SandboxProvider,
   type Tool,
@@ -162,8 +167,8 @@ export function parseLaunchFlags(argv: string[]): { options: LaunchOptions; posi
   };
 }
 
-/** The three operating modes (structurally identical to the TUI's `ChatMode`). */
-export type Mode = "chat" | "agent" | "plan";
+/** The three operating modes — re-exported from kurt-agent (single source of truth). */
+export type { Mode } from "kurt-agent";
 
 export interface Settings {
   modelId: string;
@@ -186,28 +191,9 @@ export interface ResolvedConfig extends Settings {
   needsSetup: boolean;
 }
 
-/** Per-mode guidance appended to the base prompt. */
+/** Per-mode guidance appended to the base prompt (shared with kurt-bridge). */
 function modeGuidance(mode: Mode): string[] {
-  switch (mode) {
-    case "chat":
-      return [
-        "MODE: chat. You can read and search (read_file/ls/grep/web_search) and use memory,",
-        "but you CANNOT write files or run commands. Answer, explain, and explore. When the",
-        "request is ambiguous or a choice is the user's, call ask_user to clarify.",
-      ];
-    case "plan":
-      return [
-        "MODE: plan. Investigate (read_file/ls/grep/web_search) and produce a step-by-step",
-        "plan with the update_plan tool (keep it current). You CANNOT write files or run",
-        "commands — you plan, you don't execute. Use ask_user to resolve unknowns before",
-        "finalizing. End by presenting the plan and what running it (in agent mode) would do.",
-      ];
-    case "agent":
-      return [
-        "MODE: agent. Full tools available — act directly to accomplish the task. Use ask_user",
-        "only when a decision is genuinely the user's to make.",
-      ];
-  }
+  return modeGuidanceLines(mode);
 }
 
 /** System prompt with the framework-injected working dir and per-mode guidance. */
@@ -261,9 +247,7 @@ export function resolveSettings(persisted: PersistedConfig, env: Record<string, 
 
 /** Map a stored/legacy mode to a current one ("ask" → "chat"); default "agent". */
 export function normalizeMode(mode: string | undefined): Mode {
-  if (mode === "ask" || mode === "chat") return "chat";
-  if (mode === "plan") return "plan";
-  return "agent";
+  return normalizeModeShared(mode);
 }
 
 export async function resolveConfig(): Promise<ResolvedConfig> {
@@ -433,17 +417,12 @@ export function makeTools(
   return tools;
 }
 
-/** Tool names each mode exposes ("all" = the whole hub). */
-export const TOOLS_BY_MODE: Record<Mode, readonly string[] | "all"> = {
-  chat: ["read_file", "ls", "grep", "web_search", "memory", "ask_user", "skill"],
-  plan: ["read_file", "ls", "grep", "web_search", "memory", "ask_user", "update_plan", "skill"],
-  agent: "all",
-};
+/** Tool names each mode exposes ("all" = the whole hub). Shared with kurt-bridge. */
+export const TOOLS_BY_MODE = MODE_TOOLS;
 
 /** Select the tools a given mode is allowed to use, from the shared hub. */
 export function toolsForMode(hub: ToolHub, mode: Mode): Tool[] {
-  const profile = TOOLS_BY_MODE[mode];
-  return profile === "all" ? hub.all() : hub.get(profile);
+  return toolsForModeFromHub(hub, mode);
 }
 
 function num(v: string | undefined): number | undefined {
