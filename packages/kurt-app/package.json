@@ -1,11 +1,13 @@
 {
   "name": "kurt-app",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:bridge": "bun run scripts/build-bridge-sidecar.ts",
+    "build:mac": "bun run tauri build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

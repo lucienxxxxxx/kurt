@@ -1,7 +1,7 @@
 {
   "name": "kurt",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.2.0",
   "description": "kurt monorepo — kurt-agent (engine) + kurt-tui (Ink front-end) + kurt-app (Tauri desktop). Workspace root.",
   "comment:workspaces": "kurt-app is a standalone Tauri/Vite app with its own deps + bun.lock — intentionally NOT a workspace member (avoids hoisting React/Vite into the engine lockfile). It talks to kurt-bridge over HTTP, not via a TS workspace dep.",
   "workspaces": ["packages/kurt-agent", "packages/kurt-tui", "packages/kurt-bridge"]

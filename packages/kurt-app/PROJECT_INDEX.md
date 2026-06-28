@@ -2,7 +2,7 @@
 
 > Cached architecture map. **Read this first**; scan the tree only for files this map
 > points to. Keep it fresh on every structural change (project-module-workflow Step 6).
-> Last synced: 2026-06-20, after Workspace-tabs Phase A+B+C (tab bar + split + Files/Preview/Plan/Terminal; DetailPanel unified into tabs; plan + auto-preview triggers; Rust portable-pty terminal).
+> Last synced: 2026-06-28, after v0.2.0 macOS packaging (compiled `kurt-bridge` sidecar bundled into the Tauri release build).
 
 ## 1. Overview
 Tauri v2 macOS desktop front-end for kurt (Phase 6). It renders the agent's event
@@ -13,7 +13,7 @@ in the `kurt` monorepo. Design mapping: `PORTING_GUIDE.md`. Rules: `CLAUDE.md`.
 ## 2. Stack & commands
 - **Tauri v2** (Rust shell) + **React 19 + TypeScript + Vite** + (incoming) Tailwind + shadcn/ui + Zustand + TanStack Query.
 - **Not a bun-workspace member** — own `package.json` + `bun.lock`. Install: `cd packages/kurt-app && bun install`.
-- Dev (GUI): `bun run tauri dev` · Frontend build: `bun run build` (tsc + vite) · Bundle: `bun run tauri build`.
+- Dev (GUI): `bun run tauri dev` · Frontend build: `bun run build` (tsc + vite) · Sidecar: `bun run build:bridge` · Bundle: `bun run build:mac` / `bun run tauri build`.
 - Rust gate: `cd src-tauri && cargo check`. Component tests (from 6.1): `bun run test` (Vitest + RTL).
 - **Gate** = `bun run build` + `cargo check` (+ tests). GUI/visual → `MANUAL_TESTS.md`.
 
@@ -47,7 +47,8 @@ kurt-app (Tauri+React, this pkg)         kurt-bridge (Bun, packages/kurt-bridge 
 | `src/mocks/agent.ts` | `sessions`/`recents`/`liveRun`/`FILE_CONTENT` fixtures (from data.js) | 6.1 (replaced by bridge in 6.3) |
 | `src/styles/` | `tokens.css` (verbatim) + `app.css` (prototype CSS, window shell adapted for Tauri) | 6.1 ✓ |
 | `src/test/setup.ts` | Vitest + jest-dom setup (jsdom env in `vite.config.ts`) | 6.1 ✓ |
-| `src-tauri/` | Rust shell: `src/lib.rs` **spawns the kurt-bridge sidecar** (`bun run` the entry; reads `KURT_BRIDGE_PORT` from stdout; `bridge_url` command; kills on Exit; bridge dies on stdin-EOF). `tauri.conf.json` (productName "Kurt", macOS Overlay traffic lights). `capabilities/`, `icons/` | 6.0–6.3 ✓; compiled sidecar binary + signing in 6.4 |
+| `scripts/build-bridge-sidecar.ts` | Compiles `packages/kurt-bridge/src/index.ts` with `bun build --compile` into `src-tauri/binaries/kurt-bridge-<target-triple>` for Tauri `externalBin` packaging | 6.4d ✓ |
+| `src-tauri/` | Rust shell: `src/lib.rs` **spawns the kurt-bridge sidecar** (release: bundled `kurt-bridge` binary from resources/current exe dir; dev: `bun run` the source entry; reads `KURT_BRIDGE_PORT` from stdout; `bridge_url` command; kills on Exit; bridge dies on stdin-EOF). `tauri.conf.json` (productName "Kurt", macOS Overlay traffic lights, `externalBin`). `capabilities/`, `icons/` | 6.4d ✓ |
 | `index.html`, `vite.config.ts`, `tsconfig*.json` | Vite + TS config | 6.0 ✓ |
 | `prototype/` | **Design reference** (HTML/JSX mockup) — do NOT port scaffolding (`PORTING_GUIDE.md` §10) | reference |
 | `PORTING_GUIDE.md` | Prototype→production mapping (layout, tokens, components, i18n, icons) | reference |
@@ -70,4 +71,4 @@ kurt-app (Tauri+React, this pkg)         kurt-bridge (Bun, packages/kurt-bridge 
 - **6.1 Static UI parity ✓** — CSS-reuse (not shadcn, per user); sidebar/thread(5 step types)/composer+menus/settings/detail-panels/theme/i18n on mock data + faked streaming; real macOS traffic lights overlaid. Vitest 11 pass.
 - **6.2** `kurt-bridge` (Bun): Event→Step over HTTP/SSE; sessions CRUD; integration-tested.
 - **6.3** Wire app↔bridge: Tauri spawns bridge; Zustand + TanStack Query; live streaming run.
-- **6.4** Harden + package: API-key Settings, permission modal, persistence, bundle signed `.app`.
+- **6.4** Harden + package: API-key Settings, permission modal, persistence, compiled bridge sidecar, macOS `.app`/`.dmg` bundle. Signing/notarization remains distribution-specific.

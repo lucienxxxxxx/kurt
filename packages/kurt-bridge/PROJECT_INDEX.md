@@ -1,7 +1,7 @@
 # PROJECT_INDEX — kurt-bridge
 
 > Cached architecture map. Read this first. Keep fresh on structural change.
-> Last synced: 2026-06-15, after Phase 6.2 (HTTP/SSE bridge complete).
+> Last synced: 2026-06-28, after v0.2.0 macOS packaging (bridge can be compiled into the desktop sidecar binary).
 
 ## 1. Overview
 Local HTTP/SSE bridge (Bun) that runs the kurt engine for GUI front-ends — the
@@ -12,6 +12,7 @@ consumer of `kurt-agent` (铁律 #2), no engine logic of its own. `packages/kurt
 ## 2. Stack & commands
 - TypeScript on **Bun**; bun-workspace member; depends on `kurt-agent` (workspace).
 - `bun run start` (env: KURT_WORKSPACE, KURT_BRIDGE_PORT, DEEPSEEK_API_KEY/_BASE_URL/_MODEL).
+- Desktop packaging compiles this entry from `packages/kurt-app` via `bun run build:bridge`.
 - **Gate** = `bun run typecheck && bun test` (13 tests: pure mapper + real HTTP/SSE integration with MockModel).
 
 ## 3. Architecture
@@ -34,7 +35,7 @@ kurt-app (Tauri webview) ──fetch/SSE──▶ 127.0.0.1:<port>  (this pkg)
 | `src/server.ts` | `Bun.serve` on localhost (`idleTimeout:0` — SSE/approval streams legitimately go quiet): `POST /run` (SSE), `POST /approve`, `GET/POST /config`, `GET /info` (incl. `workspace`), **`GET /fs` / `/file` / `/raw`** (workspace-confined files for the desktop Files tab + preview), `GET /sessions`, `GET /sessions/:id` (→ reconstructed steps), `POST /sessions/:id/truncate` (rollback), `POST /answer`, `POST/DELETE /sessions`, `/health`; client-close aborts the run. **SSE keep-alive `: ping` heartbeat (KURT_SSE_HEARTBEAT_MS) + runTurn `.catch`→error frame** so a quiet/erroring run never drops the webview stream | `startServer`, `ServerHandle` |
 | `src/fs.ts` | Workspace file access for the desktop (Files tab + preview), confined to `rt.workspace` (path-escape rejected): `listDir`, `readTextFile`, `resolveInWorkspace`, `contentType` | (helpers) |
 | `src/providers.ts` | **Multi-provider model config** (openai/claude/deepseek built-ins + custom, each with an enable toggle): `DesktopConfig`/`ProviderConfig`, `normalizeConfig` (legacy + env migration), `resolveModel` (id→provider), `allModels`/`providerGroups`/`defaultModel`, `mergeConfig`. `runTime` routes a model id to its provider's client | (pure helpers) |
-| `src/index.ts` | Bin the Tauri sidecar spawns; prints `KURT_BRIDGE_PORT=<n>` to stdout; when stdin is piped (sidecar) exits on EOF (parent died → no orphan); **global uncaughtException/unhandledRejection guards keep the process alive** | — |
+| `src/index.ts` | Bin the Tauri sidecar spawns or compiles; prints `KURT_BRIDGE_PORT=<n>` to stdout; when stdin is piped (sidecar) exits on EOF (parent died → no orphan); **global uncaughtException/unhandledRejection guards keep the process alive** | — |
 | `src/*.test.ts` | `events.test.ts` (pure) · `server.test.ts` (real HTTP/SSE + MockModel + fake tool; truncate/modes/config/info) · `fs.test.ts` (workspace listing/read/escape-guard) — 33 total | — |
 
 ## 5. Navigation — "to do X, look at Y"
@@ -46,4 +47,4 @@ kurt-app (Tauri webview) ──fetch/SSE──▶ 127.0.0.1:<port>  (this pkg)
 ## 6. Status / debt
 - **6.2/6.3/6.4a/6.4b done** — `kurt-app` drives it live (auto-spawned sidecar; no orphan); reload reconstructs steps; **sensitive commands gated** via per-run permission → `approval` frame → `POST /approve` (the safety gap is closed).
 - **ask_user wired (6.4)**: per-run `AskProvider` → `ask` frame → `POST /answer` (mirrors approval); ask_user is in every mode.
-- Remaining: MCP / skills / memory-preload not yet in the bridge's tool set; auth = env (Keychain later); compiled sidecar + signing (6.4d).
+- Remaining: MCP / skills / memory-preload not yet in the bridge's tool set; auth = env/desktop config (Keychain later); signing/notarization is distribution-specific.

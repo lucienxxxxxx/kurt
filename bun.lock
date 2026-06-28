@@ -7,7 +7,7 @@
     },
     "packages/kurt-agent": {
       "name": "kurt-agent",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
       },
@@ -18,7 +18,7 @@
     },
     "packages/kurt-bridge": {
       "name": "kurt-bridge",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "bin": {
         "kurt-bridge": "src/index.ts",
       },
@@ -32,7 +32,7 @@
     },
     "packages/kurt-tui": {
       "name": "kurt-tui",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "bin": {
         "kurt": "./src/cli.ts",
       },

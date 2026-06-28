@@ -21,7 +21,7 @@
 ## 3. 不是 bun workspace 成员
 - 本包有**自己的 `package.json` + `bun.lock`**,刻意不在根 `workspaces` 里(避免把 React/Vite 灌进引擎 lockfile)。
 - 安装/运行:`cd packages/kurt-app && bun install`。**开发**:`bun run tauri dev`(开 GUI 窗口)。**前端构建**:`bun run build`(tsc+vite)。**打包**:`bun run tauri build`。
-- 引擎(bridge)v1 走**开发优先**:Tauri 启动时 spawn 本机 `bun` 跑 kurt-bridge;6.4 再编译成自包含 sidecar 二进制 + 签名。
+- 引擎(bridge)走**本地 sidecar**:开发版默认 spawn 本机 `bun` 跑 kurt-bridge;发布版优先运行随包携带的 `kurt-bridge` 二进制。可用 `KURT_BRIDGE_BIN`/`KURT_BRIDGE_ENTRY` 覆盖调试。
 
 ## 4. 工作流(同仓库)
 - 主工作流 = `project-module-workflow` skill:索引优先、遇疑必问、`feat/…` 分支、**先定可观测测试点再写**、门禁绿、rebase→ff-merge、收尾刷新索引。

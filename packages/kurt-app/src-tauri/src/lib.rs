@@ -7,6 +7,7 @@
 mod pty;
 
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use tauri::{Manager, RunEvent, State};
@@ -39,17 +40,44 @@ fn bun_path() -> String {
     "bun".to_string()
 }
 
-fn spawn_bridge(state: &Bridge) {
-    // Dev: run the workspace entry directly. (6.4 packaging will switch to a
-    // compiled sidecar binary.) Overridable via KURT_BRIDGE_ENTRY.
+fn bundled_bridge_path(app: &tauri::App) -> Option<PathBuf> {
+    let candidates = [
+        app.path().resource_dir().ok().map(|dir| dir.join("kurt-bridge")),
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(|dir| dir.join("kurt-bridge"))),
+    ];
+
+    candidates.into_iter().flatten().find(|path| path.exists())
+}
+
+fn bridge_command(app: &tauri::App) -> Command {
+    if let Ok(path) = std::env::var("KURT_BRIDGE_BIN") {
+        return Command::new(path);
+    }
+
+    if !cfg!(debug_assertions) {
+        if let Some(path) = bundled_bridge_path(app) {
+            return Command::new(path);
+        }
+    }
+
+    // Development: run the workspace entry directly. Overridable via
+    // KURT_BRIDGE_ENTRY when testing a different checkout.
     let entry = std::env::var("KURT_BRIDGE_ENTRY")
         .unwrap_or_else(|_| format!("{}/../../kurt-bridge/src/index.ts", env!("CARGO_MANIFEST_DIR")));
+    let mut command = Command::new(bun_path());
+    command.args(["run", &entry]);
+    command
+}
+
+fn spawn_bridge(app: &tauri::App, state: &Bridge) {
     let workspace = std::env::var("KURT_WORKSPACE")
         .or_else(|_| std::env::var("HOME"))
         .unwrap_or_else(|_| ".".to_string());
 
-    let mut child = match Command::new(bun_path())
-        .args(["run", &entry])
+    let mut command = bridge_command(app);
+    let mut child = match command
         .env("KURT_WORKSPACE", &workspace)
         // Piped stdin we keep open: when this process dies the pipe closes and
         // the bridge sees EOF on stdin and exits (no orphan).
@@ -60,7 +88,7 @@ fn spawn_bridge(state: &Bridge) {
     {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("kurt: failed to spawn bridge: {e} (is bun installed?)");
+            eprintln!("kurt: failed to spawn bridge: {e}");
             return;
         }
     };
@@ -96,7 +124,7 @@ pub fn run() {
         .manage(pty::Ptys::default())
         .invoke_handler(tauri::generate_handler![bridge_url, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill])
         .setup(|app| {
-            spawn_bridge(&app.state::<Bridge>());
+            spawn_bridge(app, &app.state::<Bridge>());
             Ok(())
         })
         .build(tauri::generate_context!())

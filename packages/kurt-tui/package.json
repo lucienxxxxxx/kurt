@@ -1,6 +1,6 @@
 {
   "name": "kurt-tui",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "An Ink terminal UI for kurt-agent — a protocol-agnostic front-end consumer of the engine.",
   "type": "module",
   "module": "src/cli.ts",
