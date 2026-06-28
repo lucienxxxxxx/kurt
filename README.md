@@ -54,6 +54,23 @@ code. Public engine API exports live in
 
 ## Quick Start: Terminal UI
 
+Install the latest prebuilt CLI:
+
+```bash
+curl -fsSL https://github.com/lucienxxxxxx/kurt/releases/latest/download/install.sh | sh
+kurt
+```
+
+The installer downloads the matching `kurt-<platform>-<arch>` binary from the
+latest GitHub Release and installs it to `~/.local/bin/kurt`. If that directory
+is not on your `PATH`, the installer prints the shell line to add.
+
+Inside the TUI, use `/provider` to configure model providers, `/model` to select
+a model, `/mcp` to inspect connected MCP servers, and `/skills` to inspect loaded
+skills.
+
+### From Source
+
 Install workspace dependencies from the repository root:
 
 ```bash
@@ -77,9 +94,12 @@ kurt tui
 kurt chat "Summarize this repository"
 ```
 
-Inside the TUI, use `/provider` to configure model providers, `/model` to select
-a model, `/mcp` to inspect connected MCP servers, and `/skills` to inspect loaded
-skills.
+### npm
+
+An npm package is not published yet. Users do not need an npm account to install
+a public package, but publishing one requires an npm account with access to the
+package name. The unscoped `kurt` package name is already taken on npm, so the
+practical route is a scoped package such as `@lucienxxxxxx/kurt`.
 
 ## Quick Start: macOS App
 
@@ -127,6 +147,12 @@ Useful desktop packaging commands:
 cd packages/kurt-app
 bun run build:bridge  # compile the kurt-bridge sidecar for this host target
 bun run build:mac     # frontend build + sidecar + Tauri bundle
+```
+
+Useful CLI packaging command:
+
+```bash
+bun run build:cli     # writes dist/kurt-<platform>-<arch>
 ```
 
 Before changing a package, read its `CLAUDE.md` and `PROJECT_INDEX.md`. Repository

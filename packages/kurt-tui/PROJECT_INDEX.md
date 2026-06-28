@@ -1,7 +1,7 @@
 # PROJECT_INDEX — kurt-tui
 
 > Cached architecture map. Read this first; scan only what it points to.
-> Last synced: 2026-06-27, after `/mcp` + `/provider` (in-TUI multi-provider API-key setup: DeepSeek/OpenAI/Claude presets + Custom; first-run onboarding; no env var needed). Earlier: `/skills` discovery command; B1–B5 bug sweep (atomic writes + session occupancy lock, `kurt worktree list|prune`, autoCompactThreshold); Phase 5 MCP + Skills.
+> Last synced: 2026-06-29, after CLI release installer support (`bun run build:cli` single-file binary + GitHub Release `install.sh`). Earlier: `/mcp` + `/provider` (in-TUI multi-provider API-key setup: DeepSeek/OpenAI/Claude presets + Custom; first-run onboarding; no env var needed), `/skills` discovery command, B1–B5 bug sweep, Phase 5 MCP + Skills.
 
 ## 1. Overview
 Ink terminal UI for `kurt-agent`. A front-end consumer: subscribes to the engine
@@ -13,7 +13,8 @@ event stream → renders; keystrokes → engine commands. All agent logic comes 
 - TypeScript on **Bun** + **Ink/React**; markdown via `marked` + `marked-terminal`.
 - Install once at the repo root (`kurt/`, two levels up): `cd ../.. && bun install`.
 - `bun run tui` / `bun run chat` (need `DEEPSEEK_API_KEY`) · `bun test` · `bun run typecheck`.
-- Global launcher: `kurt` (a `~/.bun/bin/kurt` wrapper → `src/cli.ts`). Subcommands: `kurt` (TUI), `kurt chat`, `kurt config [set|path]`, `kurt help`.
+- Global launcher: `kurt` (either a release binary installed by `scripts/install.sh`, or a local `~/.bun/bin/kurt` wrapper → `src/cli.ts`). Subcommands: `kurt` (TUI), `kurt chat`, `kurt config [set|path]`, `kurt help`.
+- Release CLI binary: `bun run build:cli` at the repo root compiles `packages/kurt-tui/src/cli.ts` to `dist/kurt-<platform>-<arch>` for GitHub Release assets. Ink's optional `react-devtools-core` peer is an explicit dependency so Bun's static compile can resolve it.
 - Flags (tui/chat): `--workspace`/`--workplace <path>` (working dir, default cwd) · `--allow-write <path>` (repeatable) · `--yes`/`-y` (auto-approve sensitive commands) · `--worktree` (isolate in a per-session git worktree+branch) · `--no-mcp` (skip MCP servers).
 - **MCP** (Phase 5): servers configured in `~/.kurt/mcp.json` (global) + `<ws>/.kurt/mcp.json` (project, overrides) using the `{ "mcpServers": {...} }` schema. Connected at launch (`mcp-config.ts` → `connectMcpServers` in kurt-agent); their tools join the hub (agent mode); side-effecting tools ask approval; status printed at launch. Implementation lives in kurt-agent's `src/mcp/`.
 - **Skills** (Phase 5): reusable procedures in `~/.kurt/skills/` (global) + `<ws>/.kurt/skills/` (project, overrides), each `<name>/SKILL.md` or flat `<name>.md` with optional name/description frontmatter. `skills.ts` (`loadSkills`) builds a `SkillProvider` + the prompt catalog (descriptions only); the `skill` tool (kurt-agent) loads a body on demand (available in every mode). Names printed at launch.

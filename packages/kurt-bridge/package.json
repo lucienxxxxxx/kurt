@@ -1,6 +1,6 @@
 {
   "name": "kurt-bridge",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Local HTTP/SSE bridge that runs the kurt engine for the desktop app (Phase 6.2).",
   "type": "module",
   "module": "src/index.ts",

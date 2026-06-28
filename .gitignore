@@ -1,5 +1,6 @@
 # Dependencies (installed at this workspace root).
 node_modules/
+dist/
 
 # bun
 .bun/
