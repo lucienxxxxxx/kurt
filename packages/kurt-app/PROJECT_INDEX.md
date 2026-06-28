@@ -32,9 +32,9 @@ kurt-app (Tauri+React, this pkg)         kurt-bridge (Bun, packages/kurt-bridge 
 | Path | Responsibility | Status |
 |------|----------------|--------|
 | `src/main.tsx` | React entry; imports `styles/{tokens,app}.css` | 6.0/6.1 ✓ |
-| `src/App.tsx` | Root: UI state, theme/lang (persisted), thread→segment grouping; **real runs via the bridge** (`startRun` streams steps, remaps bridge step ids, stop aborts, queue → multi-turn); routes chat/settings/skills views; derives sidebar projects from session workspaces | 6.3+ ✓ |
+| `src/App.tsx` | Root: UI state, theme/lang (persisted), thread→segment grouping; **real runs via the bridge** (`startRun` streams steps, remaps bridge step ids, stop aborts, queue → multi-turn); routes chat/settings/skills views; derives sidebar projects from session workspaces and filters project children out of Recent | 6.3+ ✓ |
 | `src/lib/bridge.ts` | kurt-bridge HTTP/SSE client: `runStream`, `listSessions` (incl. workspace), session CRUD, config/info, workspace file APIs, **`listSkills`/`getSkill`**. Wire types mirror `kurt-bridge/src/types.ts` | 6.3+ ✓ |
-| `src/lib/projects.ts` | Pure sidebar project grouping: compares full workspace paths, creates a project only when a workspace has 3+ sessions, and disambiguates duplicate folder names by adding parent path segments with compact ellipsis | ✓ |
+| `src/lib/projects.ts` | Pure sidebar project grouping: compares full workspace paths, creates a project only when a workspace has 3+ sessions, disambiguates duplicate folder names by adding parent path segments with compact ellipsis, and exposes project session ids so Recent can hide archived children | ✓ |
 | `src/lib/bridgeUrl.ts` | `resolveBridgeUrl` — polls Tauri `bridge_url` command (auto-spawned port), falls back to `VITE_BRIDGE_URL`/`127.0.0.1:8765` | 6.3 ✓ |
 | `src/lib/scroll.ts` | `isNearBottom`/`distanceFromBottom` — pure threshold check for the thread's conditional bottom-follow (App drives follow-state + the jump-to-latest pill from it) | ✓ |
 | `src/lib/notify.ts` | `playSend()` / `runComplete(body)` — send & completion sound effects (`assets/sounds/*.mp3`) + a desktop notification (tauri-plugin-notification) when the window is unfocused | ✓ |

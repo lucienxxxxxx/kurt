@@ -11,7 +11,7 @@ import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
 import { externalLinkFromClick, openExternal } from "./lib/external.ts";
 import { fmtElapsed, fmtTokens } from "./lib/format.ts";
 import { initTabs, tabsReducer, type TabsAction } from "./lib/tabs.ts";
-import { buildSessionProjects } from "./lib/projects.ts";
+import { buildSessionProjects, projectSessionIds } from "./lib/projects.ts";
 import { isNearBottom } from "./lib/scroll.ts";
 import { playSend, runComplete } from "./lib/notify.ts";
 import { pickFolder } from "./lib/dialog.ts";
@@ -669,6 +669,8 @@ export default function App() {
 
   const stepCtx = { lang, collapsed, collapseDetails, liveId, onToggle: toggleStep, onOpenFile: openFile, onOpenOutput: openToolOutput };
   const projects = buildSessionProjects(sessionList);
+  const projectedIds = projectSessionIds(projects);
+  const recentSessions = sessionList.filter((session) => !projectedIds.has(session.id));
   // The id of the run's LAST text step (per segment) — only it shows the copy/time footer.
   const lastTextId = (steps: Step[]): number | null => {
     for (let i = steps.length - 1; i >= 0; i--) if (steps[i]!.type === "text") return steps[i]!._id;
@@ -761,7 +763,7 @@ export default function App() {
 
   return (
     <div className="window">
-      <Sidebar recents={sessionList} projects={projects} activeId={activeId} runningIds={runningIds} unread={unread} onPick={loadSession} onDelete={removeSession} onNewChat={newChat}
+      <Sidebar recents={recentSessions} projects={projects} activeId={activeId} runningIds={runningIds} unread={unread} onPick={loadSession} onDelete={removeSession} onNewChat={newChat}
         onOpenSkills={() => setView("skills")} lang={lang} onOpenSettings={() => setView(view === "settings" ? "chat" : "settings")} />
 
       <div className="main">

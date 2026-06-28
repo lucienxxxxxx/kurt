@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buildSessionProjects } from "./projects.ts";
+import { buildSessionProjects, projectSessionIds } from "./projects.ts";
 import type { SessionMeta } from "../types.ts";
 
 const s = (id: string, workspace: string): SessionMeta => ({ id, title: id, icon: "chat", workspace });
@@ -28,5 +28,17 @@ describe("buildSessionProjects", () => {
       s("b3", "/private/tmp/work/komorebi"),
     ]);
     expect(projects.map((p) => p.label).sort()).toEqual(["me/work/komorebi", "tmp/work/komorebi"]);
+  });
+
+  test("collects project session ids so recent can hide archived sessions", () => {
+    const sessions = [
+      s("a1", "/Users/me/komorebi"),
+      s("a2", "/Users/me/komorebi"),
+      s("a3", "/Users/me/komorebi"),
+      s("b1", "/Users/me/other"),
+    ];
+    const ids = projectSessionIds(buildSessionProjects(sessions));
+    expect([...ids].sort()).toEqual(["a1", "a2", "a3"]);
+    expect(sessions.filter((item) => !ids.has(item.id)).map((item) => item.id)).toEqual(["b1"]);
   });
 });

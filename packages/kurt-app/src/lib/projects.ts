@@ -29,6 +29,14 @@ export function buildSessionProjects(sessions: SessionMeta[]): SessionProject[] 
     .sort((a, b) => b.sessions.length - a.sessions.length || a.label.localeCompare(b.label));
 }
 
+export function projectSessionIds(projects: SessionProject[]): Set<string> {
+  const ids = new Set<string>();
+  for (const project of projects) {
+    for (const session of project.sessions) ids.add(session.id);
+  }
+  return ids;
+}
+
 function labelsFor(paths: string[]): Map<string, string> {
   const byBase = new Map<string, string[]>();
   for (const path of paths) {

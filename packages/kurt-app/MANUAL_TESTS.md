@@ -565,7 +565,7 @@ Visual/interactive — `bun run tauri dev`. Bridge changed → fully restart the
    There is no standalone Projects button directly under New chat.
 2. **Projects section.** Create or load at least 3 sessions whose workspace is the same full path.
    A **Projects** section appears at the same level as **Recent**, with one folder row; expanding it
-   shows those sessions as children.
+   shows those sessions as children. Those child sessions no longer appear again in **Recent**.
 3. **Path disambiguation.** If two project workspaces share the same folder basename, their labels
    add enough parent path segments to tell them apart, and long labels are ellipsized instead of
    overflowing the sidebar.
