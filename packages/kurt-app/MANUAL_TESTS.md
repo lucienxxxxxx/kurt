@@ -557,6 +557,29 @@ Result: ____ (date / pass-fail / notes).
 
 ---
 
+## Sidebar projects + skills page
+
+Visual/interactive — `bun run tauri dev`. Bridge changed → fully restart the app.
+
+1. **No project button under New chat.** The sidebar top shows **New chat**, then **Skills**.
+   There is no standalone Projects button directly under New chat.
+2. **Projects section.** Create or load at least 3 sessions whose workspace is the same full path.
+   A **Projects** section appears at the same level as **Recent**, with one folder row; expanding it
+   shows those sessions as children.
+3. **Path disambiguation.** If two project workspaces share the same folder basename, their labels
+   add enough parent path segments to tell them apart, and long labels are ellipsized instead of
+   overflowing the sidebar.
+4. **Project child navigation.** Click a child session under a project → that conversation loads,
+   and running/unread dots still behave like the Recent list.
+5. **Skills page.** Click **Skills** → the skills page opens. It lists skills from local Kurt/project
+   directories plus Codex/Agents/Claude skill roots when present. Selecting a skill shows its body.
+6. **Use skill.** Click **Use** on a skill → the app returns to chat and fills the composer with a
+   skill invocation prompt. Sending it lets the bridge-injected `skill` tool load that skill.
+
+Result: ____ (date / pass-fail / notes).
+
+---
+
 ## Sound effects + completion notification
 
 Visual/interactive — `bun run tauri dev` (audio needs a real window; first sound may

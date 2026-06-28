@@ -7,6 +7,8 @@
  *   GET    /fs?path=&workspace=    → { path, entries[] }  (dir listing, ws-confined)
  *   GET    /file?path=&workspace=  → { path, content, truncated }  (text preview)
  *   GET    /raw?path=&workspace=   → raw bytes (pdf/html/img for an <iframe>)
+ *   GET    /skills?workspace=      → SkillInfo[] (local skills from Kurt/Codex/etc.)
+ *   GET    /skills/:name?workspace= → { name, body } (skill instructions)
  *   GET    /sessions?workspace=                  → SessionInfo[]
  *   POST   /sessions                             → SessionInfo (new)
  *   GET    /sessions/:id                          → full SessionRecord
@@ -92,6 +94,21 @@ export function startServer(rt: Runtime, opts: { port?: number; host?: string } 
         const body = (await req.json().catch(() => ({}))) as RunBody;
         if (!body.text || !body.text.trim()) return json({ error: "text required" }, 400);
         return runSSE(rt, body);
+      }
+
+      if (pathname === "/skills" && req.method === "GET") {
+        const root = url.searchParams.get("workspace") || rt.workspace;
+        const skills = await rt.loadSkills?.(root);
+        return json(skills?.infos ?? []);
+      }
+
+      const sm = pathname.match(/^\/skills\/(.+)$/);
+      if (sm && req.method === "GET") {
+        const name = decodeURIComponent(sm[1]!);
+        const root = url.searchParams.get("workspace") || rt.workspace;
+        const skills = await rt.loadSkills?.(root);
+        const body = await skills?.provider.load(name);
+        return body === undefined || body === null ? json({ error: "not found" }, 404) : json({ name, body });
       }
 
       if (pathname === "/approve" && req.method === "POST") {
@@ -205,8 +222,8 @@ function runSSE(rt: Runtime, body: RunBody): Response {
   });
 }
 
-function toInfo(rec: { id: string; title: string; updatedAt: number; messageCount: number }): SessionInfo {
-  return { id: rec.id, title: rec.title, updatedAt: rec.updatedAt, messageCount: rec.messageCount };
+function toInfo(rec: { id: string; title: string; updatedAt: number; messageCount: number; workspace: string }): SessionInfo {
+  return { id: rec.id, title: rec.title, updatedAt: rec.updatedAt, messageCount: rec.messageCount, workspace: rec.workspace };
 }
 
 function json(body: unknown, status = 200): Response {

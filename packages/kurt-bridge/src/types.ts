@@ -39,4 +39,15 @@ export interface SessionInfo {
   title: string;
   updatedAt: number;
   messageCount: number;
+  workspace: string;
+}
+
+/** Skill metadata returned by GET /skills. `name` is the callable id. */
+export interface SkillInfo {
+  name: string;
+  displayName: string;
+  description: string;
+  scope: "global" | "project" | "codex" | "agents" | "claude" | "custom";
+  source: string;
+  path: string;
 }

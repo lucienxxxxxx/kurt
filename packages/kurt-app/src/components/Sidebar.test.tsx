@@ -6,14 +6,14 @@ import type { SessionMeta } from "../types.ts";
 afterEach(cleanup);
 
 const recents: SessionMeta[] = [
-  { id: "s1", title: { zh: "整理下载", en: "Organize downloads" }, icon: "folder" },
-  { id: "s2", title: { zh: "ESLint 问题", en: "ESLint issue" }, icon: "chat" },
+  { id: "s1", title: { zh: "整理下载", en: "Organize downloads" }, icon: "folder", workspace: "/Users/me/komorebi" },
+  { id: "s2", title: { zh: "ESLint 问题", en: "ESLint issue" }, icon: "chat", workspace: "/Users/me/komorebi" },
 ];
 
 function renderSidebar(over: Partial<Parameters<typeof Sidebar>[0]> = {}) {
   const props = {
-    recents, activeId: "s1", runningIds: new Set<string>(), unread: new Set<string>(),
-    onPick: vi.fn(), onDelete: vi.fn(), onNewChat: vi.fn(), onOpenSettings: vi.fn(), lang: "en" as const,
+    recents, projects: [], activeId: "s1", runningIds: new Set<string>(), unread: new Set<string>(),
+    onPick: vi.fn(), onDelete: vi.fn(), onNewChat: vi.fn(), onOpenSkills: vi.fn(), onOpenSettings: vi.fn(), lang: "en" as const,
     ...over,
   };
   render(<Sidebar {...props} />);
@@ -46,6 +46,26 @@ describe("Sidebar", () => {
     expect(props.onPick).toHaveBeenCalledWith("s2");
     fireEvent.click(screen.getByText("New chat"));
     expect(props.onNewChat).toHaveBeenCalled();
+  });
+
+  test("clicking skills opens the skills page", () => {
+    const props = renderSidebar();
+    fireEvent.click(screen.getByText("Skills"));
+    expect(props.onOpenSkills).toHaveBeenCalled();
+  });
+
+  test("renders project groups as session submenus", () => {
+    const projectSessions = [
+      ...recents,
+      { id: "s3", title: "Third task", icon: "chat", workspace: "/Users/me/komorebi" },
+    ];
+    const props = renderSidebar({
+      recents: projectSessions,
+      projects: [{ workspace: "/Users/me/komorebi", label: "komorebi", sessions: projectSessions }],
+    });
+    expect(screen.getByText("komorebi")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByText("Third task")[0]!);
+    expect(props.onPick).toHaveBeenCalledWith("s3");
   });
 
   test("running session shows a pulsing status dot; a session with no status has no dot element", () => {

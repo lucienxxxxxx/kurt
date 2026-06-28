@@ -11,6 +11,7 @@ export const T = {
   skills: { zh: "技能", en: "Skills" },
   recent: { zh: "最近", en: "Recent" },
   search: { zh: "搜索", en: "Search" },
+  refresh: { zh: "刷新", en: "Refresh" },
   // top bar
   convNew: { zh: "新对话", en: "New chat" },
   toggleTheme: { zh: "切换主题", en: "Toggle theme" },
@@ -50,6 +51,9 @@ export const T = {
   notifyDone: { zh: "已完成回复", en: "finished replying" },
   planEmpty: { zh: "还没有计划。当 Kurt 制定计划时会显示在这里。", en: "No plan yet. It appears here when Kurt makes one." },
   planProgress: { zh: "已完成 {done}/{total}", en: "{done}/{total} done" },
+  skillsSubtitle: { zh: "本机可用技能", en: "Local skills" },
+  skillsEmpty: { zh: "没有可用技能", en: "No skills available" },
+  useSkill: { zh: "使用", en: "Use" },
   // composer
   phEmpty: { zh: "交给 Kurt 一个任务…", en: "Give Kurt a task…" },
   phRunning: { zh: "排队下一条消息…", en: "Queue another message…" },

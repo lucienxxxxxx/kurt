@@ -37,6 +37,8 @@ export interface SessionMeta {
   id: string;
   title: Loc;
   icon: string;
+  /** Absolute workspace path for project grouping. */
+  workspace?: string;
 }
 
 export interface Session extends SessionMeta {

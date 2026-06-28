@@ -47,6 +47,7 @@ export interface SessionInfo {
   title: string;
   updatedAt: number;
   messageCount: number;
+  workspace: string;
 }
 
 /** GET /sessions/:id — metadata + the conversation reconstructed into steps. */
@@ -165,6 +166,28 @@ export async function getSession(baseUrl: string, id: string): Promise<SessionDe
 
 export async function deleteSession(baseUrl: string, id: string): Promise<void> {
   await fetch(`${baseUrl}/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export interface SkillInfo {
+  /** Unique id/name accepted by the bridge `skill` tool. */
+  name: string;
+  displayName: string;
+  description: string;
+  scope: "global" | "project" | "codex" | "agents" | "claude" | "custom";
+  source: string;
+  path: string;
+}
+
+export async function listSkills(baseUrl: string, workspace?: string): Promise<SkillInfo[]> {
+  const url = workspace ? `${baseUrl}/skills?workspace=${encodeURIComponent(workspace)}` : `${baseUrl}/skills`;
+  const res = await fetch(url);
+  return res.ok ? ((await res.json()) as SkillInfo[]) : [];
+}
+
+export async function getSkill(baseUrl: string, name: string, workspace?: string): Promise<{ name: string; body: string } | null> {
+  const suffix = workspace ? `?workspace=${encodeURIComponent(workspace)}` : "";
+  const res = await fetch(`${baseUrl}/skills/${encodeURIComponent(name)}${suffix}`);
+  return res.ok ? ((await res.json()) as { name: string; body: string }) : null;
 }
 
 /** Rollback: keep only the first `keepUserTurns` user turns of a session. */

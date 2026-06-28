@@ -5,12 +5,13 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MockModel, SessionStore, AskUserTool, type Tool } from "kurt-agent";
 import { createRuntime, productionRuntime, runTurn } from "./runtime.ts";
 import { startServer, type ServerHandle } from "./server.ts";
+import { loadSkills, parseSkill } from "./skills.ts";
 import type { RunFrame, Step } from "./types.ts";
 
 const echoShell: Tool = {
@@ -378,6 +379,54 @@ describe("environment context", () => {
     expect(sys).toContain("# Environment");
     expect(sys).toContain("Current time:");
     expect(sys).toMatch(/Operating system:/);
+  });
+});
+
+describe("skills", () => {
+  const savedHome = process.env.KURT_HOME;
+  let home = "";
+  afterEach(() => {
+    if (savedHome === undefined) delete process.env.KURT_HOME; else process.env.KURT_HOME = savedHome;
+    if (home) rmSync(home, { recursive: true, force: true });
+  });
+
+  function writeSkill(root: string, name: string, body = "Steps\n1. do it"): void {
+    const dir = join(root, ".kurt", "skills", name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: >-\n  ${name} skill\n---\n${body}`);
+  }
+
+  test("parseSkill handles folded frontmatter descriptions", () => {
+    const skill = parseSkill("---\nname: demo\ndescription: >-\n  first line\n  second line\n---\nBody", "fallback");
+    expect(skill?.name).toBe("demo");
+    expect(skill?.description).toBe("first line second line");
+  });
+
+  test("GET /skills lists skills and loads their body", async () => {
+    home = realpathSync(mkdtempSync(join(tmpdir(), "bridge-home-")));
+    process.env.KURT_HOME = home;
+    writeSkill(ws, "demo");
+    const rt = createRuntime({ workspace: ws, model: new MockModel([{ text: "hi" }]), makeTools: () => [], store: new SessionStore(sessions) });
+    rt.loadSkills = (root) => loadSkills(root);
+    server = startServer(rt);
+
+    const list = (await (await fetch(server.url + `/skills?workspace=${encodeURIComponent(ws)}`)).json()) as { name: string; description: string; scope: string }[];
+    expect(list.some((s) => s.name === "demo" && s.scope === "project")).toBe(true);
+    const body = (await (await fetch(server.url + "/skills/demo")).json()) as { body: string };
+    expect(body.body).toContain("Steps");
+  });
+
+  test("runTurn injects the skill catalog and skill tool", async () => {
+    home = realpathSync(mkdtempSync(join(tmpdir(), "bridge-home-")));
+    process.env.KURT_HOME = home;
+    writeSkill(ws, "demo");
+    const model = new MockModel([{ text: "hi" }]);
+    const rt = createRuntime({ workspace: ws, model, makeTools: () => [], store: new SessionStore(sessions) });
+    rt.loadSkills = (root) => loadSkills(root);
+
+    await runTurn(rt, { text: "hi", mode: "chat", workspace: ws, signal: new AbortController().signal, onFrame: () => {} });
+    expect(model.requests[0]!.system).toContain("# Skills");
+    expect(model.requests[0]!.tools.map((t) => t.name)).toContain("skill");
   });
 });
 

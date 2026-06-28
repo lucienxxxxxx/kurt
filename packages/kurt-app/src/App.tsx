@@ -6,17 +6,19 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { Effort, Lang, Loc, Mode, QueuedMsg, SessionMeta, Step, Tab, TabKind, TabsState, Theme } from "./types.ts";
 import { T, tr } from "./i18n/strings.ts";
-import { runStream, listSessions, getSession, getInfo, approve, answer, truncateSession, deleteSession, readFile, rawFileUrl, type ApprovalRequest, type AskRequest, type PlanStep, type ProviderGroup } from "./lib/bridge.ts";
+import { runStream, listSessions, getSession, getInfo, approve, answer, truncateSession, deleteSession, readFile, rawFileUrl, listSkills, getSkill, type ApprovalRequest, type AskRequest, type PlanStep, type ProviderGroup, type SkillInfo } from "./lib/bridge.ts";
 import { resolveBridgeUrl } from "./lib/bridgeUrl.ts";
 import { externalLinkFromClick, openExternal } from "./lib/external.ts";
 import { fmtElapsed, fmtTokens } from "./lib/format.ts";
 import { initTabs, tabsReducer, type TabsAction } from "./lib/tabs.ts";
+import { buildSessionProjects } from "./lib/projects.ts";
 import { isNearBottom } from "./lib/scroll.ts";
 import { playSend, runComplete } from "./lib/notify.ts";
 import { pickFolder } from "./lib/dialog.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { Composer } from "./components/Composer.tsx";
 import { Settings } from "./components/Settings.tsx";
+import { SkillsPage } from "./components/SkillsPage.tsx";
 import { Approval } from "./components/Approval.tsx";
 import { Ask } from "./components/Ask.tsx";
 import { Workspace } from "./components/workspace/Workspace.tsx";
@@ -74,12 +76,16 @@ function liveActivity(thread: Step[], liveId: number | null, lang: Lang): string
 export default function App() {
   const [theme, setTheme] = useState<Theme>(() => persisted<Theme>("kurt-theme", "light"));
   const [lang, setLang] = useState<Lang>(() => persisted<Lang>("kurt-lang", "zh"));
-  const [view, setView] = useState<"chat" | "settings">("chat");
+  const [view, setView] = useState<"chat" | "settings" | "skills">("chat");
 
   const [thread, setThread] = useState<Step[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [titleEntry, setTitleEntry] = useState<Loc>(T.convNew);
   const [sessionList, setSessionList] = useState<SessionMeta[]>([]);
+  const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
+  const [skillBody, setSkillBody] = useState("");
+  const [skillsLoading, setSkillsLoading] = useState(false);
   // Sessions whose run finished while you weren't viewing them → unread dot.
   const [unread, setUnread] = useState<Set<string>>(() => new Set());
 
@@ -257,7 +263,7 @@ export default function App() {
       const list = await listSessions(await resolveBridgeUrl());
       // Keep the raw title (may be "" while a new session's title is still being
       // auto-summarized); the sidebar localizes the empty case to "新会话".
-      setSessionList(list.map((s) => ({ id: s.id, title: s.title, icon: "chat" })));
+      setSessionList(list.map((s) => ({ id: s.id, title: s.title, icon: "chat", workspace: s.workspace })));
     } catch { /* bridge not ready — leave the list as-is */ }
   }, []);
   useEffect(() => { void refreshSessions(); }, [refreshSessions]);
@@ -276,6 +282,51 @@ export default function App() {
     } catch { /* bridge not ready */ }
   }, []);
   useEffect(() => { void refreshInfo(); }, [refreshInfo]);
+
+  const refreshSkills = useCallback(async (): Promise<void> => {
+    setSkillsLoading(true);
+    try {
+      const list = await listSkills(await resolveBridgeUrl(), convWorkspace || workspace);
+      setSkills(list);
+      setSelectedSkill((current) => (current && list.some((s) => s.name === current) ? current : list[0]?.name ?? null));
+    } catch {
+      setSkills([]);
+      setSelectedSkill(null);
+    } finally {
+      setSkillsLoading(false);
+    }
+  }, [convWorkspace, workspace]);
+
+  const selectSkill = useCallback((name: string): void => {
+    setSelectedSkill(name);
+  }, []);
+
+  useEffect(() => {
+    if (view === "skills") void refreshSkills();
+  }, [view, refreshSkills]);
+
+  useEffect(() => {
+    if (view !== "skills" || !selectedSkill) { setSkillBody(""); return; }
+    let cancelled = false;
+    setSkillsLoading(true);
+    void (async () => {
+      try {
+        const detail = await getSkill(await resolveBridgeUrl(), selectedSkill, convWorkspace || workspace);
+        if (!cancelled) setSkillBody(detail?.body ?? "");
+      } catch {
+        if (!cancelled) setSkillBody("");
+      } finally {
+        if (!cancelled) setSkillsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [view, selectedSkill, convWorkspace, workspace]);
+
+  const useSkill = (skill: SkillInfo): void => {
+    const text = lang === "zh" ? `使用技能 ${skill.name}：` : `Use skill ${skill.name}:`;
+    setInput((prev) => (prev.trim() ? `${prev.trim()}\n\n${text}` : text));
+    setView("chat");
+  };
 
   /** Upsert a step into a run's buffer; mirror to the visible thread + cursor only
    *  while that run is the conversation on screen (a backgrounded run doesn't leak
@@ -617,6 +668,7 @@ export default function App() {
   });
 
   const stepCtx = { lang, collapsed, collapseDetails, liveId, onToggle: toggleStep, onOpenFile: openFile, onOpenOutput: openToolOutput };
+  const projects = buildSessionProjects(sessionList);
   // The id of the run's LAST text step (per segment) — only it shows the copy/time footer.
   const lastTextId = (steps: Step[]): number | null => {
     for (let i = steps.length - 1; i >= 0; i--) if (steps[i]!.type === "text") return steps[i]!._id;
@@ -709,14 +761,17 @@ export default function App() {
 
   return (
     <div className="window">
-      <Sidebar recents={sessionList} activeId={activeId} runningIds={runningIds} unread={unread} onPick={loadSession} onDelete={removeSession} onNewChat={newChat}
-        lang={lang} onOpenSettings={() => setView(view === "settings" ? "chat" : "settings")} />
+      <Sidebar recents={sessionList} projects={projects} activeId={activeId} runningIds={runningIds} unread={unread} onPick={loadSession} onDelete={removeSession} onNewChat={newChat}
+        onOpenSkills={() => setView("skills")} lang={lang} onOpenSettings={() => setView(view === "settings" ? "chat" : "settings")} />
 
       <div className="main">
         {view === "settings" ? (
           <Settings theme={theme} setTheme={setTheme} lang={lang} setLang={setLang}
             collapseDetails={collapseDetails} setCollapseDetails={setCollapseDetails}
             onConfigChanged={() => void refreshInfo()} onClose={() => setView("chat")} />
+        ) : view === "skills" ? (
+          <SkillsPage skills={skills} selected={selectedSkill} body={skillBody} loading={skillsLoading} lang={lang}
+            onSelect={selectSkill} onUse={useSkill} onRefresh={() => void refreshSkills()} onClose={() => setView("chat")} />
         ) : (
           <div className="main-chat">
             <div className="main-top" data-tauri-drag-region>

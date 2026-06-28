@@ -6,6 +6,8 @@ import type { Lang, SessionMeta } from "../types.ts";
 import { T, tr } from "../i18n/strings.ts";
 import { Icon } from "./Icon.tsx";
 import logo from "../assets/kurt_logo.svg";
+import type { SessionProject } from "../lib/projects.ts";
+import { Button } from "@/components/ui/button.tsx";
 
 function RecentItemMenu({ lang, onClose, onDelete }: { lang: Lang; onClose: () => void; onDelete: () => void }) {
   const [confirming, setConfirming] = useState(false);
@@ -16,9 +18,6 @@ function RecentItemMenu({ lang, onClose, onDelete }: { lang: Lang; onClose: () =
   }, [onClose]);
   return (
     <div className="menu" style={{ position: "absolute", top: 32, right: 0, zIndex: 60 }}>
-      <div className="menu-item" onClick={(e) => { e.stopPropagation(); onClose(); }}>
-        <Icon name="projects" />{tr(T.archiveToProject, lang)}
-      </div>
       {confirming ? (
         // Two-step: deleting is destructive, so the first click only arms it.
         <div className="menu-item del confirm" onClick={(e) => { e.stopPropagation(); onDelete(); onClose(); }}>
@@ -58,8 +57,38 @@ function RecentItem({ r, active, running, unread, onPick, onDelete, lang }: {
   );
 }
 
-export function Sidebar({ recents, activeId, runningIds, unread, onPick, onDelete, onNewChat, lang, onOpenSettings }: {
+function ProjectGroup({ project, activeId, runningIds, unread, onPick, onDelete, lang }: {
+  project: SessionProject;
+  activeId: string | null;
+  runningIds: Set<string>;
+  unread: Set<string>;
+  onPick: (id: string) => void;
+  onDelete: (id: string) => void;
+  lang: Lang;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="project-group">
+      <Button variant="nav" className="project-head" onClick={() => setOpen((v) => !v)} title={project.workspace}>
+        <span className={"project-caret" + (open ? " open" : "")}><Icon name="chevD" /></span>
+        <span className="ni-ico"><Icon name="projects" /></span>
+        <span className="ni-label">{project.label}</span>
+        <span className="project-count">{project.sessions.length}</span>
+      </Button>
+      {open && (
+        <div className="project-children">
+          {project.sessions.map((r) => (
+            <RecentItem key={r.id} r={r} active={r.id === activeId} running={runningIds.has(r.id)} unread={unread.has(r.id)} onPick={onPick} onDelete={onDelete} lang={lang} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Sidebar({ recents, projects, activeId, runningIds, unread, onPick, onDelete, onNewChat, onOpenSkills, lang, onOpenSettings }: {
   recents: SessionMeta[];
+  projects: SessionProject[];
   activeId: string | null;
   /** Session ids with an in-flight run (each conversation runs independently). */
   runningIds: Set<string>;
@@ -68,6 +97,7 @@ export function Sidebar({ recents, activeId, runningIds, unread, onPick, onDelet
   onPick: (id: string) => void;
   onDelete: (id: string) => void;
   onNewChat: () => void;
+  onOpenSkills: () => void;
   lang: Lang;
   onOpenSettings: () => void;
 }) {
@@ -79,7 +109,7 @@ export function Sidebar({ recents, activeId, runningIds, unread, onPick, onDelet
           The bar is a drag region so the window can be moved by it. */}
       <div className="sb-top" data-tauri-drag-region>
         <div style={{ marginLeft: "auto" }}>
-          <button className="icon-btn" title={tr(T.search, lang)}><Icon name="search" /></button>
+          <Button variant="ghost" size="icon" className="icon-btn" title={tr(T.search, lang)}><Icon name="search" /></Button>
         </div>
       </div>
 
@@ -89,19 +119,20 @@ export function Sidebar({ recents, activeId, runningIds, unread, onPick, onDelet
       </div>
 
       <div className="sb-scroll">
-        <div className="nav-item primary" onClick={onNewChat} title={tr(T.newChat, lang)}>
+        <Button variant="nav" className="nav-item primary" onClick={onNewChat} title={tr(T.newChat, lang)}>
           <span className="ni-ico"><Icon name="newchat" /></span>
           <span className="ni-label">{tr(T.newChat, lang)}</span>
-        </div>
+        </Button>
 
-        <div className="nav-item" title={tr(T.projects, lang)}>
-          <span className="ni-ico"><Icon name="projects" /></span>
-          <span className="ni-label">{tr(T.projects, lang)}</span>
-        </div>
-        <div className="nav-item" title={tr(T.skills, lang)}>
+        <Button variant="nav" className="nav-item" title={tr(T.skills, lang)} onClick={onOpenSkills}>
           <span className="ni-ico"><Icon name="skills" /></span>
           <span className="ni-label">{tr(T.skills, lang)}</span>
-        </div>
+        </Button>
+
+        <div className="sb-section-label"><span>{tr(T.projects, lang)}</span></div>
+        {projects.map((p) => (
+          <ProjectGroup key={p.workspace} project={p} activeId={activeId} runningIds={runningIds} unread={unread} onPick={onPick} onDelete={onDelete} lang={lang} />
+        ))}
 
         <div className="sb-section-label"><span>{tr(T.recent, lang)}</span></div>
         {recents.map((r) => (
@@ -116,9 +147,9 @@ export function Sidebar({ recents, activeId, runningIds, unread, onPick, onDelet
             <div className="p-name">lew</div>
             <div className="p-plan">Pro</div>
           </div>
-          <button className="icon-btn" onClick={onOpenSettings} title={tr(T.openSettings, lang)}>
+          <Button variant="ghost" size="icon" className="icon-btn" onClick={onOpenSettings} title={tr(T.openSettings, lang)}>
             <Icon name="gear" />
-          </button>
+          </Button>
         </div>
       </div>
     </div>

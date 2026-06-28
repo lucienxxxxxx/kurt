@@ -31,6 +31,7 @@ import {
   UpdatePlanTool,
   RequestAccessTool,
   AskUserTool,
+  SkillTool,
   DuckDuckGoSearch,
   sessionsDir,
   type Event,
@@ -50,6 +51,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { StepAccumulator, planFromInput } from "./events.ts";
 import { normalizeConfig, mergeConfig, resolveModel, allModels, providerGroups, defaultModel, enabledProviders, type DesktopConfig } from "./providers.ts";
 import type { RunFrame } from "./types.ts";
+import { loadSkills, type LoadedSkills } from "./skills.ts";
 
 /** The desktop's answer to an approval request. */
 export type ApprovalDecision = "allow" | "always" | "deny";
@@ -59,7 +61,7 @@ export type Mode = "chat" | "agent" | "plan";
 
 // request_write_access + ask_user are in every mode: both are safe (gated / just a
 // prompt) and useful regardless of whether the agent can also write or run things.
-const READ_ONLY = ["read_file", "ls", "grep", "web_search", "memory", "request_write_access", "ask_user"];
+const READ_ONLY = ["read_file", "ls", "grep", "web_search", "memory", "request_write_access", "ask_user", "skill"];
 const MODE_TOOLS: Record<Mode, "all" | string[]> = {
   agent: "all",
   chat: READ_ONLY,
@@ -145,6 +147,8 @@ export interface Runtime {
   /** Summarize a new conversation into a short title (production runtime sets this;
    *  when absent, runTurn falls back to the first user message). */
   makeTitle?: (messages: Message[]) => Promise<string>;
+  /** Discover local skills for a conversation workspace. */
+  loadSkills?: (workspace: string) => Promise<LoadedSkills>;
 }
 
 export interface RunOptions {
@@ -271,11 +275,13 @@ export async function runTurn(rt: Runtime, opts: RunOptions): Promise<void> {
   };
 
   const mode: Mode = opts.mode ?? "agent";
-  const tools = toolsForMode(rt.makeTools(permission, ask, ws), mode);
+  const skills = await rt.loadSkills?.(ws);
+  const skillTools = skills ? [new SkillTool(skills.provider)] : [];
+  const tools = toolsForMode([...rt.makeTools(permission, ask, ws), ...skillTools], mode);
   // Base prompt is rooted at THIS conversation's workspace; then a fresh environment
   // block (current time + the user's system) appended every run.
   const base = rt.systemFor ? rt.systemFor(ws) : rt.system;
-  const system = base + environmentContext() + modeGuidance(mode);
+  const system = base + (skills?.catalog ? "\n\n" + skills.catalog : "") + environmentContext() + modeGuidance(mode);
   // Per-run model override from the composer menus (falls back to the configured model).
   const override = opts.model || opts.effort || opts.thinking !== undefined;
   const model = override && rt.modelFor ? rt.modelFor(opts.model, opts.effort, opts.thinking) : rt.model;
@@ -470,6 +476,7 @@ export function productionRuntime(workspace = process.cwd()): Runtime {
 
   const rt = createRuntime({ workspace, model, makeTools, store: new SessionStore(sessionsDir()) });
   rt.systemFor = (ws) => defaultSystem(ws); // prompt rooted at the conversation's workspace
+  rt.loadSkills = (ws) => loadSkills(ws);
   rt.info = () => ({
     hasKey: enabledProviders(cfg).some((p) => p.apiKey.length > 0),
     model: defaultModel(cfg),
