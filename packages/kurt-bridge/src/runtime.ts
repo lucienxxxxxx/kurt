@@ -34,6 +34,9 @@ import {
   SkillTool,
   DuckDuckGoSearch,
   sessionsDir,
+  toolsForMode as toolsForModeShared,
+  modeGuidance as modeGuidanceShared,
+  type Mode,
   type Event,
   type Message,
   type ModelProvider,
@@ -56,33 +59,22 @@ import { loadSkills, type LoadedSkills } from "./skills.ts";
 /** The desktop's answer to an approval request. */
 export type ApprovalDecision = "allow" | "always" | "deny";
 
-/** Operating mode (mirrors kurt-tui): chat = read-only, plan = +planning, agent = full. */
-export type Mode = "chat" | "agent" | "plan";
+/** Operating mode (chat = read-only, plan = +planning, agent = full). Shared with
+ *  kurt-tui via kurt-agent's mode definitions. */
+export type { Mode };
 
-// request_write_access + ask_user are in every mode: both are safe (gated / just a
-// prompt) and useful regardless of whether the agent can also write or run things.
-const READ_ONLY = ["read_file", "ls", "grep", "web_search", "memory", "request_write_access", "ask_user", "skill"];
-const MODE_TOOLS: Record<Mode, "all" | string[]> = {
-  agent: "all",
-  chat: READ_ONLY,
-  plan: [...READ_ONLY, "update_plan"],
-};
-
+// Tool subset + per-mode guidance now come from kurt-agent's shared mode definitions
+// (single source of truth shared with kurt-tui). The local `toolsForMode`/
+// `modeGuidance` wrappers below keep this file's call sites unchanged; the shared
+// modeGuidance returns the body, so we prefix the blank line the prompt assembly
+// previously baked into each case.
 function toolsForMode(tools: Tool[], mode: Mode): Tool[] {
-  const allow = MODE_TOOLS[mode];
-  return allow === "all" ? tools : tools.filter((t) => allow.includes(t.spec.name));
+  return toolsForModeShared(tools, mode);
 }
 
-/** Per-mode guidance appended to the base system prompt. */
+/** Per-mode guidance appended to the base system prompt (leading blank line preserved). */
 function modeGuidance(mode: Mode): string {
-  switch (mode) {
-    case "chat":
-      return "\n\nMODE: chat — read and explain only. You can read/search (read_file/ls/grep/web_search) and use memory, but you CANNOT write files or run commands.";
-    case "plan":
-      return "\n\nMODE: plan — investigate, then produce a step-by-step plan with the update_plan tool. You CANNOT write files or run commands — you plan, you don't execute.";
-    case "agent":
-      return "\n\nMODE: agent — the full tool set is available; act directly to accomplish the task.";
-  }
+  return "\n\n" + modeGuidanceShared(mode);
 }
 
 interface PendingApproval {
