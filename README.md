@@ -105,6 +105,8 @@ practical route is a scoped package such as `@lucienxxxxxx/kurt`.
 
 ## Quick Start: macOS App
 
+![Kurt macOS desktop app showing the new conversation screen](./docs/assets/kurt-macos-app.png)
+
 The desktop app has its own dependency graph and lockfile by design:
 
 ```bash
