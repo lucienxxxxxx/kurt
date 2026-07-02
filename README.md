@@ -54,6 +54,8 @@ code. Public engine API exports live in
 
 ## Quick Start: Terminal UI
 
+![Kurt terminal UI showing slash commands and the status bar](./docs/assets/kurt-tui-help.png)
+
 Install the latest prebuilt CLI:
 
 ```bash
